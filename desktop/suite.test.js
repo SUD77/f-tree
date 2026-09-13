@@ -29,6 +29,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 const RUNNERS = ['test', 'test:package'];
 const TEST_DIRS = [
   { dir: '.', suffix: '.test.js' },
+  { dir: 'nearby', suffix: '.test.js' },
   { dir: 'renderer', suffix: '.test.js' },
   { dir: '../site/playground', suffix: '.test.mjs' },
 ];
