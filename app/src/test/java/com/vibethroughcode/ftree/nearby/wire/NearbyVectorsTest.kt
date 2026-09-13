@@ -228,6 +228,96 @@ class NearbyVectorsTest {
         }
         appendLine()
 
+        section("fingerprint")
+        run {
+            val deviceId = ByteArray(16) { (it + 1).toByte() }
+            for (exponent in listOf(2L, 0xB0BL)) {
+                val public = Dh.publicOf(BigInteger.valueOf(exponent))
+                line("fingerprint", "id=01..10 x=$exponent", Handshake.beaconFingerprint(deviceId, public).hex())
+            }
+        }
+        appendLine()
+
+        section("messages")
+        // The four handshake frames are hashed verbatim into the transcript, so their byte layout
+        // is as load-bearing as the crypto: a field written in a different order on one side gives
+        // two devices two different six-digit codes and no way to tell that from an attack.
+        run {
+            val deviceId = DeviceId(ByteArray(16) { (it + 1).toByte() })
+            line(
+                "messages.hello",
+                "android flags=1 name=ascii",
+                Hello(
+                    platform = NearbyPlatform.ANDROID,
+                    flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
+                    deviceId = deviceId,
+                    displayName = "Quiet Heron",
+                ).encode().hex(),
+            )
+            // An empty name is replaced by the generated one rather than sent empty, and both sides
+            // have to pick the same creature or the two screens disagree about who is who.
+            line(
+                "messages.hello",
+                "empty-name",
+                Hello(
+                    platform = NearbyPlatform.WINDOWS,
+                    flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
+                    deviceId = deviceId,
+                    displayName = "",
+                ).encode().hex(),
+            )
+            line(
+                "messages.hello-ack",
+                "v=1 flags=1",
+                HelloAck(
+                    chosenVersion = 1,
+                    platform = NearbyPlatform.LINUX,
+                    flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
+                    deviceId = deviceId,
+                    displayName = "Amber Otter",
+                ).encode().hex(),
+            )
+            line(
+                "messages.key",
+                "pub=03.. nonce=04..",
+                KeyMessage(
+                    publicKey = ByteArray(NearbyProtocol.DH_PUBLIC_BYTES) { 3 },
+                    nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { 4 },
+                ).encode().hex(),
+            )
+            line(
+                "messages.offer",
+                "people=12 rel=7 photos=3 bytes=2^53",
+                Offer(
+                    peopleCount = 12,
+                    relationshipCount = 7,
+                    photoCount = 3,
+                    // 2^53, where a JavaScript Number stops being exact. The desktop reads this
+                    // field with readBigUInt64BE; anything else passes every smaller case.
+                    totalBytes = 1L shl 53,
+                    sha256 = ByteArray(32) { (it + 1).toByte() },
+                    treeFormatVersion = 1,
+                    suggestedFileName = "family.ftree",
+                ).encode().hex(),
+            )
+            line(
+                "messages.end",
+                "bytes=4294967296",
+                End(bytesSent = 1L shl 32, sha256 = ByteArray(32) { (it * 5).toByte() }).encode().hex(),
+            )
+            line("messages.result", "accepted", Result(accepted = true, importProblem = null).encode().hex())
+            line(
+                "messages.result",
+                "refused-not-an-archive",
+                Result(
+                    accepted = false,
+                    importProblem = com.vibethroughcode.ftree.transfer.ImportProblem.NOT_AN_ARCHIVE,
+                ).encode().hex(),
+            )
+            line("messages.abort", "declined", Abort(NearbyProblem.DECLINED).encode().hex())
+        }
+        appendLine()
+
         section("names")
         for (pair in listOf(0 to 0, 1 to 2, 0xFF to 0x80, 0x7F to 0x10)) {
             val id = ByteArray(16).also { it[0] = pair.first.toByte(); it[1] = pair.second.toByte() }

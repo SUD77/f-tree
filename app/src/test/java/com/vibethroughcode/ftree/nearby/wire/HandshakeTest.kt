@@ -1,6 +1,7 @@
 package com.vibethroughcode.ftree.nearby.wire
 
 import java.math.BigInteger
+import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -150,6 +151,42 @@ class HandshakeTest {
         val framed = transcriptOf(encodeFrame(NearbyProtocol.TYPE_HELLO, payload))
         val bare = transcriptOf(payload)
         assertNotEquals(framed.toList(), bare.toList())
+    }
+
+    @Test
+    fun `the beacon fingerprint changes when either input does`() {
+        val deviceId = ByteArray(16) { (it + 1).toByte() }
+        val other = ByteArray(16) { (it + 2).toByte() }
+        val key = Dh.publicOf(BigInteger.valueOf(0xB0BL))
+        val otherKey = Dh.publicOf(BigInteger.valueOf(0xA11CEL))
+
+        val base = Handshake.beaconFingerprint(deviceId, key)
+        assertEquals(NearbyProtocol.KEY_FINGERPRINT_BYTES, base.size)
+        assertEquals(base.toList(), Handshake.beaconFingerprint(deviceId, key).toList())
+
+        // Both inputs are covered. A fingerprint over the key alone would be identical for two
+        // devices that happened to reuse one, and a fingerprint over the id alone would not change
+        // when a device generated a new key — which is exactly when a stale entry in somebody's
+        // peer list needs to stop matching.
+        assertNotEquals(base.toList(), Handshake.beaconFingerprint(other, key).toList())
+        assertNotEquals(base.toList(), Handshake.beaconFingerprint(deviceId, otherKey).toList())
+    }
+
+    @Test
+    fun `the beacon fingerprint is domain separated from the session keys`() {
+        // Same hash, same inputs, different label. Without the label a fingerprint — which is
+        // broadcast in clear, twice a second — would be a prefix of something derived from the
+        // same material for a different purpose.
+        val deviceId = ByteArray(16) { (it + 1).toByte() }
+        val key = Dh.publicOf(BigInteger.valueOf(0xB0BL))
+        val fingerprint = Handshake.beaconFingerprint(deviceId, key)
+
+        val plain = MessageDigest.getInstance("SHA-256").run {
+            update(deviceId)
+            update(Dh.to256(key))
+            digest().copyOf(NearbyProtocol.KEY_FINGERPRINT_BYTES)
+        }
+        assertNotEquals(plain.toList(), fingerprint.toList())
     }
 
     @Test

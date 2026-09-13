@@ -1,5 +1,7 @@
 package com.vibethroughcode.ftree.nearby.wire
 
+import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.KEY_FINGERPRINT_BYTES
+import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_BEACON_KEY
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_RECEIVER_TO_SENDER
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_SAS
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_SENDER_TO_RECEIVER
@@ -130,6 +132,25 @@ object Handshake {
         val reduced = java.lang.Long.remainderUnsigned(value, SAS_MODULUS)
         return reduced.toString().padStart(SAS_DIGITS, '0')
     }
+
+    /**
+     * What a receiver publishes in its beacon, so a sender can tie the device it tapped in a list
+     * to the device it ends up talking to.
+     *
+     * Eight bytes of a hash over the device id and the receiver's long-term public value. It is not
+     * a secret and it is not an authenticator — a beacon is unsigned and anybody can copy one. What
+     * it does is make a *mistake* impossible: two devices on one network with the same name are
+     * told apart by this, and a sender that connects to the wrong host discovers it before the
+     * handshake rather than after the transfer. Proving the receiver is who it claims is the SAS's
+     * job, or the QR token's.
+     */
+    fun beaconFingerprint(deviceId: ByteArray, publicKey: BigInteger): ByteArray =
+        MessageDigest.getInstance("SHA-256").run {
+            update(LABEL_BEACON_KEY.toByteArray(Charsets.US_ASCII))
+            update(deviceId)
+            update(Dh.to256(publicKey))
+            digest().copyOf(KEY_FINGERPRINT_BYTES)
+        }
 
     private fun hmac(key: ByteArray, message: ByteArray): ByteArray =
         Mac.getInstance("HmacSHA256").run {
