@@ -61,17 +61,22 @@ export function planImport({ document, tree }) {
    * go by; this machine's id names nobody in it. And indexed whatever the file claims to be,
    * because a file from elsewhere can still carry our people in its origins (#194).
    *
-   * Written last so that it wins: an origin recorded on somebody else can name one of our own
-   * people, and the person who actually has that id is who it means.
+   * Every person holding a key is kept, not the last one written: a copy left by an earlier import
+   * holds the origin of the person it copies, and the matcher has to see both to choose (#193).
    */
   const originIndex = new Map();
+  const index = (key, id) => {
+    const holders = originIndex.get(key);
+    if (!holders) originIndex.set(key, [id]);
+    else if (!holders.includes(id)) holders.push(id);
+  };
   for (const person of local) {
     for (const origin of person.origins ?? []) {
-      originIndex.set(originKey(origin.treeId, origin.personId), person.id);
+      index(originKey(origin.treeId, origin.personId), person.id);
     }
   }
   if (tree.sourceTreeId) {
-    for (const person of local) originIndex.set(originKey(tree.sourceTreeId, person.id), person.id);
+    for (const person of local) index(originKey(tree.sourceTreeId, person.id), person.id);
   }
 
   const importedGraph = graphOf((document.relationships ?? []).map((r) => [r.from, r.to]));

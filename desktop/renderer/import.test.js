@@ -157,6 +157,33 @@ test('one of my people, carried back in somebody else\'s file, is recognised as 
   assert.strictEqual(tree.people.length, 3);
 });
 
+test('a file holding a copy of somebody can be imported again and again without growing', () => {
+  // The shape of a real export (#193): `d` and `y` are copies left by an earlier import that did
+  // not recognise `a` and `x`, and each carries the origin of the person it copies. Nobody here
+  // can be told apart by name.
+  const doc = document({
+    people: [
+      person('a', 'Ankit'),
+      person('d', 'Ankit', { origins: [{ treeId: OTHER_TREE, personId: 'a' }] }),
+      person('x', null),
+      person('y', null, { origins: [{ treeId: OTHER_TREE, personId: 'x' }] }),
+    ],
+    relationships: [parentOf('a', 'x'), parentOf('d', 'y')],
+  });
+  const tree = treeWith([]);
+
+  importInto(tree, doc);
+  const afterFirst = tree.signature();
+  for (let again = 0; again < 3; again += 1) {
+    const { plan, result } = importInto(tree, doc);
+    assert.ok(plan.matches.every((m) => m.tier === MatchTier.CERTAIN),
+      'somebody was not recognised');
+    assert.strictEqual(result.peopleAdded, 0, `import ${again + 2} added people again`);
+  }
+  assert.strictEqual(tree.people.length, 4);
+  assert.strictEqual(tree.signature(), afterFirst);
+});
+
 test('a merge fills gaps and never overwrites', () => {
   const tree = treeWith([
     person('mine', 'Asha', { birthDate: '1970', notes: 'kept', deceased: false }),
