@@ -1,0 +1,313 @@
+/*
+ * The only file `main.js` requires.
+ *
+ * One entry point rather than a dozen, so that the question "what can the main process do on a
+ * network?" has one place to look. Everything below it is either pure or holds exactly one socket.
+ *
+ * Nothing here runs until `setVisible(true)`. Before that this module has no socket bound, joins no
+ * multicast group, and sends nothing -- which is what makes the macOS Local Network prompt and the
+ * Windows Firewall prompt arrive at the moment the person understands what they are being asked,
+ * rather than the first time they open the app.
+ */
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
+
+const protocol = require('./protocol');
+const { NearbyIdentity } = require('./identity');
+const { Discovery } = require('./discovery');
+const { NearbyServer } = require('./server');
+const { NearbySender } = require('./client');
+const { encodeQrLink, parseQrLink, isPrivateAddress, isTestableAddress } = require('./qrlink');
+const { PROBLEM, problemName } = require('./problems');
+const names = require('./names');
+
+/**
+ * Everything the app can do nearby, behind one object.
+ *
+ * The renderer never sees this. It reaches these methods through `preload.js`, the same way it
+ * reaches the updater, and `refuseTheNetwork()` in the viewer session is untouched: the page still
+ * cannot open a connection, nearby sharing or not.
+ */
+class Nearby extends EventEmitter {
+  constructor({ directory, displayName = null, downloadDirectory = null } = {}) {
+    super();
+    this.directory = directory;
+    this.identity = new NearbyIdentity(directory, displayName);
+    this.downloadDirectory = downloadDirectory ?? path.join(directory, 'nearby');
+    this.discovery = null;
+    this.server = null;
+    this.beaconKey = null;
+    this.incoming = null;
+    this.outgoing = null;
+    this.pairingToken = null;
+    this.pairingTokenAt = 0;
+  }
+
+  get visible() {
+    return this.server !== null;
+  }
+
+  get deviceName() {
+    return this.identity.displayName;
+  }
+
+  setDeviceName(name) {
+    // Committed when the field is done rather than per keystroke, because this string is broadcast
+    // and half a name announced twice a second is not a thing anybody meant to publish.
+    this.identity.chosenName = names.sanitise(name ?? '') ?? null;
+    return this.identity.displayName;
+  }
+
+  /**
+   * Switching visibility on binds a socket; switching it off gives it back.
+   *
+   * There is deliberately no "always visible". A device that announces itself while nobody is
+   * looking at it is a device somebody has forgotten they configured -- and tying visibility to an
+   * open screen is also why there is no background service, no notification to justify and no wake
+   * lock to ask for.
+   */
+  async setVisible(visible) {
+    if (visible === this.visible) return this.visible;
+    if (!visible) {
+      this.#teardown();
+      this.emit('visibility', false);
+      return false;
+    }
+
+    this.beaconKey = this.identity.startAdvertising();
+    fs.mkdirSync(this.downloadDirectory, { recursive: true });
+
+    this.server = new NearbyServer({
+      identity: this.identity,
+      beaconKey: this.beaconKey,
+      sink: null,
+      maxOfferBytes: protocol.MAX_OFFER_BYTES,
+    });
+    this.server.on('transfer', (transfer) => this.#onIncoming(transfer));
+
+    let port;
+    try {
+      port = await this.server.listen();
+    } catch (error) {
+      this.#teardown();
+      this.emit('problem', { problem: PROBLEM.NETWORK, detail: error.message });
+      return false;
+    }
+
+    this.discovery = new Discovery({ identity: this.identity });
+    this.discovery.on('appeared', (peer) => this.emit('peers', this.peers()));
+    this.discovery.on('changed', () => this.emit('peers', this.peers()));
+    this.discovery.on('vanished', () => this.emit('peers', this.peers()));
+
+    try {
+      await this.discovery.start();
+      this.discovery.advertise({ tcpPort: port, keyFingerprint: this.beaconKey.fingerprint });
+      this.discovery.query();
+    } catch (error) {
+      // A bound TCP port with no discovery is still usable through a QR code or a typed address,
+      // which is most of the value. Saying so beats refusing to start.
+      this.emit('problem', { problem: PROBLEM.NETWORK, detail: error.message });
+    }
+
+    this.emit('visibility', true);
+    return true;
+  }
+
+  peers() {
+    return this.discovery ? this.discovery.peers.list() : [];
+  }
+
+  /**
+   * The QR this device shows while it is visible.
+   *
+   * The token in it is sixteen random bytes that are **never transmitted**. Both ends mix it into
+   * the key derivation, so a device that did not see this screen derives a different key and its
+   * first sealed frame fails to open. That is what turns the code from a convenience into a shared
+   * secret, and it is why scanning one may skip the six-digit comparison.
+   */
+  qrLink() {
+    if (!this.visible) return null;
+    const now = Date.now();
+    if (!this.pairingToken || now - this.pairingTokenAt > protocol.PAIRING_TOKEN_LIFETIME_MS) {
+      this.pairingToken = crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES);
+      this.pairingTokenAt = now;
+    }
+    const address = localAddress();
+    if (!address) return null;
+    return {
+      text: encodeQrLink({
+        address,
+        port: this.server.port,
+        deviceId: this.identity.deviceId,
+        keyFingerprint: this.beaconKey.fingerprint,
+        token: this.pairingToken,
+        displayName: this.identity.displayName,
+      }),
+      address,
+      port: this.server.port,
+    };
+  }
+
+  /**
+   * Sends a `.ftree` that the caller has already written.
+   *
+   * Bytes on disk rather than a tree in memory, and written by the renderer's own `write.js` rather
+   * than by a second encoder here -- a second encoder would mean the page's verification was
+   * checking something other than what goes on the wire.
+   */
+  async send({ filePath, counts, suggestedFileName, peerKey = null, link = null }) {
+    let address;
+    let port;
+    let pairedByQr = false;
+    let pairingToken = null;
+    let expectedFingerprint = null;
+
+    if (link) {
+      const parsed = typeof link === 'string' ? parseQrLink(link) : link;
+      if (!parsed) throw new Error('that is not an f-tree nearby link');
+      ({ address, port } = parsed);
+      pairingToken = parsed.token;
+      pairedByQr = parsed.token !== null;
+      expectedFingerprint = parsed.keyFingerprint;
+    } else {
+      const peer = this.peers().find((candidate) => candidate.key === peerKey);
+      if (!peer) throw new Error('that device is no longer nearby');
+      address = peer.address;
+      port = peer.port;
+      expectedFingerprint = peer.keyFingerprint;
+    }
+
+    if (!isTestableAddress(address)) throw new Error(`refusing to connect to ${address}`);
+
+    this.outgoing = new NearbySender({
+      identity: this.identity,
+      filePath,
+      counts,
+      suggestedFileName,
+      pairedByQr,
+      pairingToken,
+      expectedFingerprint,
+    });
+    await this.outgoing.prepare();
+
+    this.outgoing.on('code', (sas) => this.emit('send-code', sas));
+    this.outgoing.on('progress', (p) => this.emit('send-progress', p));
+    this.outgoing.on('finished', (problem) => {
+      this.emit('send-finished', problem);
+      this.outgoing = null;
+    });
+    this.outgoing.connect(address, port);
+    return this.outgoing;
+  }
+
+  confirmSendCode(matched) {
+    this.outgoing?.confirmCode(matched);
+  }
+
+  cancelSend() {
+    this.outgoing?.cancel();
+  }
+
+  acceptIncoming() {
+    this.incoming?.transfer.accept();
+  }
+
+  declineIncoming() {
+    this.incoming?.transfer.decline();
+  }
+
+  #onIncoming(transfer) {
+    // One file per transfer, written to a `.part` and renamed only once it is whole -- the same
+    // pattern `UpdateClient.download` already uses, and for the same reason: a half-written file
+    // that looks finished is worse than no file.
+    const partPath = path.join(this.downloadDirectory, `nearby-${Date.now()}.ftree.part`);
+    const sink = fs.createWriteStream(partPath);
+    transfer.sink = sink;
+    if (this.pairingToken) transfer.pairingToken = this.pairingToken;
+
+    this.incoming = { transfer, partPath, sink };
+
+    transfer.on('code', (sas) => this.emit('receive-code', sas));
+    transfer.on('offer', (offer) => this.emit('receive-offer', describeOffer(offer)));
+    transfer.on('progress', (p) => this.emit('receive-progress', p));
+    transfer.on('complete', (summary) => {
+      sink.end(() => {
+        const finalPath = partPath.replace(/\.part$/, '');
+        fs.renameSync(partPath, finalPath);
+        // The exact shape `tree:chooseImport` already returns, so `planImport` and the review
+        // screen need no changes at all. A transfer ends where an import begins.
+        this.emit('receive-complete', {
+          name: summary.suggestedFileName,
+          path: finalPath,
+          bytes: Number(summary.bytes),
+        });
+      });
+    });
+    transfer.on('finished', (problem) => {
+      this.incoming = null;
+      if (!problem) return;
+      // The handle is closed *before* the file is removed, and the event waits for both. On
+      // Windows a delete over an open handle fails outright rather than deferring the way POSIX
+      // does, so destroying the stream and deleting in the same breath leaves the `.part` behind
+      // -- which is precisely the thing this is here to prevent. `receive-finished` therefore
+      // means "and there is nothing left on disk", which is what a caller needs it to mean.
+      const remove = () => fs.rm(partPath, { force: true }, () => {
+        this.emit('receive-finished', { ...problem, problemName: problemName(problem.problem) });
+      });
+      if (sink.destroyed || sink.closed) remove();
+      else sink.once('close', remove).destroy();
+    });
+  }
+
+  /** Called once the importer has read the file, so the sender learns whether it was readable. */
+  importFinished(importProblem = null) {
+    this.incoming?.transfer.verified(importProblem);
+  }
+
+  #teardown() {
+    if (this.discovery) {
+      this.discovery.close();
+      this.discovery = null;
+    }
+    if (this.server) {
+      this.server.close();
+      this.server = null;
+    }
+    this.identity.stopAdvertising();
+    this.beaconKey = null;
+    this.pairingToken = null;
+  }
+}
+
+/** The counts shown in the prompt, labelled as the sender's claim rather than as fact. */
+function describeOffer(offer) {
+  return {
+    peopleCount: offer.peopleCount,
+    relationshipCount: offer.relationshipCount,
+    photoCount: offer.photoCount,
+    totalBytes: Number(offer.totalBytes),
+    suggestedFileName: offer.suggestedFileName,
+  };
+}
+
+/**
+ * This machine's address on the local network, for the QR code.
+ *
+ * Filtered through the same private-range rule a scanned code is held to, so a machine with a
+ * public address on one interface cannot put it in a code somebody then points a phone at.
+ */
+function localAddress() {
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const entry of addresses ?? []) {
+      if (entry.family !== 'IPv4' || entry.internal) continue;
+      if (isPrivateAddress(entry.address)) return entry.address;
+    }
+  }
+  return null;
+}
+
+module.exports = { Nearby, localAddress };
