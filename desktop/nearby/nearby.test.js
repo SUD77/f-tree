@@ -15,7 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { Nearby, localAddress } = require('./index');
+const { Nearby, localAddress, parseTypedAddress } = require('./index');
 const { parseQrLink } = require('./qrlink');
 const protocol = require('./protocol');
 const { PROBLEM } = require('./problems');
@@ -264,7 +264,10 @@ test('a code that has been used is redrawn, and the new one is different', async
   assert.equal(problem, null, JSON.stringify(problem));
   // The receiver is told the sender scanned, so it does not ask anybody to compare digits that the
   // other screen never showed.
-  assert.deepEqual(await how, { pairedByQr: true });
+  const info = await how;
+  assert.equal(info.pairedByQr, true);
+  // And who it was, by the name the sender gave -- the receiver has no list entry to take it from.
+  assert.match(info.peerName ?? '', /^[A-Z][a-z]+ [A-Z][a-z]+$/);
   assert.equal(redraws, 1, 'the screen was not told its code had been spent');
   assert.equal(receiver.pairingToken, null);
   receiver.qrLink();
@@ -301,7 +304,7 @@ test('a list-picked sender is told the receiver said it compares, not that it sc
 
   const problem = await sendTo(receiver);
   assert.equal(problem, null, JSON.stringify(problem));
-  assert.deepEqual(await how, { pairedByQr: false });
+  assert.equal((await how).pairedByQr, false);
   await receiver.setVisible(false);
 });
 
@@ -336,6 +339,27 @@ test('sending to an address off this network is refused before a socket opens', 
     }),
     /refusing to connect/,
   );
+});
+
+test('a typed address is held to the same rule as a scanned one', () => {
+  // The fallback is not a way round "nothing here ever connects to the internet".
+  assert.deepEqual(parseTypedAddress('192.168.1.20:49813'), { address: '192.168.1.20', port: 49813 });
+  assert.deepEqual(parseTypedAddress(' 10.0.0.7:1 '), { address: '10.0.0.7', port: 1 });
+  assert.deepEqual(parseTypedAddress('169.254.3.4:65535'), { address: '169.254.3.4', port: 65535 });
+  for (const refused of [
+    '8.8.8.8:53', // public
+    '127.0.0.1:5000', // a harness's address, not a device in the room
+    '192.168.1.20', // no port
+    '192.168.1.20:0',
+    '192.168.1.20:70000',
+    '192.168.01.20:80', // a leading zero some parsers read as octal
+    'quiet-heron.local:80', // names are resolved by something else, somewhere else
+    '[fe80::1]:80',
+    '',
+    null,
+  ]) {
+    assert.equal(parseTypedAddress(refused), null, `accepted ${refused}`);
+  }
 });
 
 test('the device id is not the tree id', () => {

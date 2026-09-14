@@ -43,6 +43,7 @@ import {
 } from './person-draft.js';
 import { createAutosave, describeWriteFailure } from './autosave.js';
 import { relateIcon, prefsIcon } from './icons.js';
+import { createNearby } from './nearby.js';
 
 const { PARENT, SPOUSE, SIBLING } = RelationshipType;
 
@@ -104,6 +105,8 @@ let chart = null;
 
 function setState(value) {
   $('viewer').dataset.state = value;
+  // File › Send to a nearby device is greyed with nothing on screen to send.
+  shell?.nearby?.canSend(value === 'loaded');
 }
 
 let toastTimer = null;
@@ -673,7 +676,35 @@ function paintPrefs() {
 
   $('pref-updates-note').textContent = prefs.checkForUpdates
     ? `Last looked ${whenChecked(prefs.lastCheckedAt)}.`
-    : 'Off. The app makes no network request of any kind until this is on.';
+    // "No network request of any kind" stopped being true of the app once nearby sharing existed.
+    // What stays true, and is what this switch is about, is that GitHub is never asked anything.
+    : 'Off. Nothing is asked of GitHub until this is on.';
+
+  // The name can only be chosen once there is something to name. With sharing off there is no
+  // device id yet, so no generated name to show as the placeholder either -- and nothing to say it to.
+  $('pref-nearby').checked = prefs.nearbySharing;
+  const name = $('pref-nearby-name');
+  name.disabled = !prefs.nearbySharing;
+  if (document.activeElement !== name) name.value = prefs.nearbyName ?? '';
+  if (!prefs.nearbySharing) name.placeholder = 'Chosen once this is on';
+  else {
+    shell?.nearby?.identity().then((identity) => {
+      // The generated name, which is what is broadcast while the field is left empty.
+      if (identity && !prefs.nearbyName) name.placeholder = identity.name;
+      else if (identity) name.placeholder = '';
+    });
+  }
+}
+
+/**
+ * The device name, committed only when the field is done with -- Enter, leaving it, or the dialog
+ * closing. It is broadcast; a name sent one keystroke at a time would announce every half of it.
+ */
+function commitNearbyName() {
+  const field = $('pref-nearby-name');
+  if (!prefs || field.disabled) return;
+  const value = field.value.trim() || null;
+  if (value !== (prefs.nearbyName ?? null)) setPref('nearbyName', value);
 }
 
 /** When the updater last got an answer, in words rather than as a timestamp. */
@@ -730,6 +761,13 @@ function wirePrefs() {
   // The answer to this one can be no -- the main process asks first -- so the checkbox is repainted
   // from what came back rather than left showing what was clicked.
   $('pref-beta').addEventListener('change', (e) => setPref('betaReleases', e.target.checked));
+
+  $('pref-nearby').addEventListener('change', (e) => setPref('nearbySharing', e.target.checked));
+  // `change`, not `input`: it fires when the field is left or Enter is pressed, never per keystroke.
+  $('pref-nearby-name').addEventListener('change', commitNearbyName);
+  // Escape closes the dialog without the field losing focus first, so `change` never fires. The
+  // dialog closing is the last moment the field is "done".
+  dialog.addEventListener('close', commitNearbyName);
 }
 
 /* ------------------------------------------------------------------ how two people are related */
@@ -2099,24 +2137,55 @@ async function startNewTree() {
   addPerson();
 }
 
+/**
+ * A `.ftree`'s document and photographs, or an error that says which of the importer's refusals it
+ * was.
+ *
+ * The refusal is named in the words the nearby protocol carries back to a sender -- `notAnArchive`,
+ * `notATreeFile`, `fromANewerVersion`, `unreadable` -- so the device that sent a file is told why it
+ * could not be read in the same terms the Android importer uses. The message on the error is still
+ * the reader's own, and still what a person here is shown.
+ */
+async function readArchiveBytes(bytes) {
+  const buffer = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(
+    bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const refused = (error, importProblem) => Object.assign(error, { importProblem });
+
+  let archive;
+  try {
+    archive = await openArchive(buffer);
+  } catch (error) {
+    throw refused(error, 'notAnArchive');
+  }
+  if (!archive.has('tree.json')) {
+    throw refused(new ArchiveError('That ZIP has no tree.json, so it is not a .ftree export.'), 'notATreeFile');
+  }
+  let doc;
+  try {
+    doc = parseDocument(await archive.readText('tree.json'));
+  } catch (error) {
+    // The reader refuses in sentences, not codes. These two are the ones that mean something other
+    // than "damaged", matched on archive.js's own wording; anything else reads as unreadable.
+    const problem = /newer than this page understands/.test(error.message) ? 'fromANewerVersion'
+      : /format is|not an object/.test(error.message) ? 'notATreeFile' : 'unreadable';
+    throw refused(error, problem);
+  }
+
+  // Held in memory because saving rewrites the whole archive; there is no file to re-read from.
+  const photos = new Map();
+  for (const entry of archive.names()) {
+    if (entry.startsWith('photos/') && !entry.endsWith('/')) {
+      photos.set(entry, await archive.read(entry));
+    }
+  }
+  return { doc, photos };
+}
+
+/** @returns {Promise<string|null>} null once the tree is on screen, or the importer's reason. */
 async function openBytes(bytes, name, filePath) {
   $('busy').hidden = false;
   try {
-    const buffer = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(
-      bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    const archive = await openArchive(buffer);
-    if (!archive.has('tree.json')) {
-      throw new ArchiveError('That ZIP has no tree.json, so it is not a .ftree export.');
-    }
-    const doc = parseDocument(await archive.readText('tree.json'));
-
-    // Held in memory because saving rewrites the whole archive; there is no file to re-read from.
-    const photos = new Map();
-    for (const entry of archive.names()) {
-      if (entry.startsWith('photos/') && !entry.endsWith('/')) {
-        photos.set(entry, await archive.read(entry));
-      }
-    }
+    const { doc, photos } = await readArchiveBytes(bytes);
 
     state.tree = new Tree(doc, { ownTreeId: state.ownTreeId });
     state.tree.markSaved();
@@ -2132,12 +2201,14 @@ async function openBytes(bytes, name, filePath) {
     setState('loaded');
     chart.resize();
     rebuild({ refit: true });
+    return null;
   } catch (error) {
     const message = error instanceof ArchiveError ? error.message : `That file could not be read. ${error.message}`;
     const box = $('opener-error');
     box.textContent = message;
     box.hidden = false;
     toast(message, 'bad');
+    return error.importProblem ?? 'unreadable';
   } finally {
     $('busy').hidden = true;
   }
@@ -2161,30 +2232,71 @@ async function importTree() {
 
   const chosen = await shell.chooseImportTree();
   if (!chosen) return;
+  await reviewImport(chosen);
+}
 
+/**
+ * Reads somebody else's file and opens the review -- the one path, whoever supplied the file.
+ *
+ * File › Import hands it a file from a folder; nearby sharing hands it one that has just crossed a
+ * room. Both arrive as `{ name, bytes }` and neither is treated differently from here on: the same
+ * matching, the same questions, the same button that says exactly what it will do. A transfer ends
+ * where an import begins.
+ *
+ * @returns {Promise<string|null>} null when the review is open; otherwise the importer's reason, in
+ *   the terms a sender is told it (`notAnArchive`, `empty`, ...). Refusals are toasted either way.
+ */
+async function reviewImport(chosen) {
   $('busy').hidden = false;
   try {
-    const buffer = chosen.bytes instanceof ArrayBuffer ? chosen.bytes : chosen.bytes.buffer;
-    const archive = await openArchive(buffer);
-    if (!archive.has('tree.json')) {
-      throw new ArchiveError('That ZIP has no tree.json, so it is not a .ftree export.');
+    const { doc, photos: importedPhotos } = await readArchiveBytes(chosen.bytes);
+    let plan;
+    try {
+      plan = planImport({ document: doc, tree: state.tree, ownTreeId: state.ownTreeId });
+    } catch (error) {
+      if (error instanceof ImportRefused) error.importProblem = 'empty';
+      throw error;
     }
-    const doc = parseDocument(await archive.readText('tree.json'));
-
-    const importedPhotos = new Map();
-    for (const entry of archive.names()) {
-      if (entry.startsWith('photos/') && !entry.endsWith('/')) {
-        importedPhotos.set(entry, await archive.read(entry));
-      }
-    }
-
-    openReview(planImport({ document: doc, tree: state.tree, ownTreeId: state.ownTreeId }),
-      chosen.name, importedPhotos);
+    openReview(plan, chosen.name, importedPhotos);
+    return null;
   } catch (error) {
     const known = error instanceof ArchiveError || error instanceof ImportRefused;
     toast(known ? error.message : `That file could not be read. ${error.message}`, 'bad');
+    return error.importProblem ?? 'unreadable';
   } finally {
     $('busy').hidden = true;
+  }
+}
+
+/**
+ * A tree that arrived from a device nearby.
+ *
+ * Into the tree on screen, through the review -- never straight into it. With nothing open there is
+ * nothing to merge into and the review would ask no questions, so it is opened the way File › Import
+ * opens a file when nothing is open: as the tree itself, untitled, to be saved wherever its new
+ * owner chooses. Nothing already on this machine is changed either way.
+ */
+function importArrived(arrived) {
+  if (state.tree) return reviewImport(arrived);
+  return openBytes(arrived.bytes, arrived.name, null);
+}
+
+/** The open tree, written by the page's own writer for sending -- the same bytes Save would write. */
+async function prepareSending() {
+  if (!state.tree) throw new Error('There is no tree open to send.');
+  // A person half-edited in the panel is part of what somebody thinks they are sending.
+  if (!commitDraft()) throw new Error('Finish or discard the edit to this person first.');
+  try {
+    const photos = photosStillUsed();
+    const made = await bytesForTree(state.tree, photos);
+    return {
+      bytes: made.bytes,
+      counts: { people: made.people, relationships: made.relationships, photos: photos.size },
+      name: state.name?.endsWith('.ftree') ? state.name : `${state.name || 'family-tree'}.ftree`,
+    };
+  } catch (error) {
+    if (error instanceof SaveRefused) throw new Error(`${error.message} ${error.detail ?? ''}`.trim());
+    throw error;
   }
 }
 
@@ -2602,6 +2714,8 @@ function wireShell() {
   shell.onMenuCommand((command) => {
     if (command === 'file:new') { startNewTree(); return; }
     if (command === 'file:import') { importTree(); return; }
+    if (command === 'nearby:send') { if (state.tree) nearbyDialog?.open('send'); return; }
+    if (command === 'nearby:receive') { nearbyDialog?.open('receive'); return; }
     if (command === 'file:save') { save(); return; }
     if (command === 'file:flush') { flushForClose(); return; }
     if (command === 'file:saveForClose') {
@@ -2625,6 +2739,27 @@ function wireShell() {
       releaseTree().then((released) => { if (released) closeTree(); });
     }
   });
+}
+
+/*
+ * Nearby sharing's dialog, lent what it needs of this page and nothing more: the tree's name, the
+ * bytes Save would write, the import review, and the settings path. It decides nothing about a
+ * family itself -- see renderer/nearby.js.
+ */
+let nearbyDialog = null;
+
+function wireNearby() {
+  if (!shell?.nearby) return;
+  nearbyDialog = createNearby({
+    shell,
+    hooks: {
+      treeName: () => state.name || 'this tree',
+      prepareSending,
+      importArrived,
+      setSetting: setPref,
+    },
+  });
+  if (shell.smoke) window.__nearbyForTest = () => ({ open: nearbyDialog.isOpen, step: nearbyDialog.step });
 }
 
 function closeTree() {
@@ -2682,6 +2817,7 @@ async function boot() {
   wirePhotos();
   wireShell();
   wireKeys();
+  wireNearby();
 
   /*
    * Settings before the first draw.

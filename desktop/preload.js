@@ -97,4 +97,37 @@ contextBridge.exposeInMainWorld('ftreeDesktop', {
   /** The menu and the OS both open files; the page hears about it the same way either way. */
   onOpenTree: (handler) => ipcRenderer.on('tree:opened', (_e, tree) => handler(tree)),
   onMenuCommand: (handler) => ipcRenderer.on('menu:command', (_e, command) => handler(command)),
+
+  /**
+   * Nearby sharing, as one object rather than a dozen loose names.
+   *
+   * Everything here is a *request*. The page cannot open a socket -- the viewer session refuses the
+   * network outright, and nothing below hands it one. It asks the main process, which checks what
+   * it was asked (the address, the device, the counts, the import problem) before the facade in
+   * `nearby/` hears of it, and it is told what happened through `onEvent`.
+   *
+   * Bytes go one way only, and only the page's own: `send` takes what the page's writer produced and
+   * verified, as saving does. What arrives comes back as bytes for the import review, the same
+   * shape `chooseImportTree` returns, so the review needs nothing new.
+   */
+  nearby: {
+    /** 'send' or 'receive'. Receiving makes this machine visible until `close`. */
+    open: (mode) => ipcRenderer.invoke('nearby:open', mode),
+    close: () => ipcRenderer.invoke('nearby:close'),
+    /** The receive screen's code, asked for again whenever the last one is spent or expires. */
+    qr: () => ipcRenderer.invoke('nearby:qr'),
+    /** The generated device name, once nearby sharing is on; null while it is off. */
+    identity: () => ipcRenderer.invoke('nearby:identity'),
+    /** `{ bytes, counts, name }` and either `peerKey` from the list or a typed `address`. */
+    send: (request) => ipcRenderer.invoke('nearby:send', request),
+    confirmCode: (matched) => ipcRenderer.invoke('nearby:confirmCode', matched),
+    accept: () => ipcRenderer.invoke('nearby:accept'),
+    decline: () => ipcRenderer.invoke('nearby:decline'),
+    cancel: () => ipcRenderer.invoke('nearby:cancel'),
+    /** After the review has been opened or refused: `null`, or the importer's own reason. */
+    importFinished: (problem) => ipcRenderer.invoke('nearby:importFinished', problem),
+    /** Whether there is a tree to send, so the File menu can grey "Send" when there is not. */
+    canSend: (can) => ipcRenderer.send('nearby:canSend', can),
+    onEvent: (handler) => ipcRenderer.on('nearby:event', (_e, event) => handler(event)),
+  },
 });

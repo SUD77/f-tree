@@ -22,7 +22,7 @@ const { Discovery } = require('./discovery');
 const { NearbyServer } = require('./server');
 const { NearbySender } = require('./client');
 const { encodeQrLink, parseQrLink, isPrivateAddress, isTestableAddress } = require('./qrlink');
-const { PROBLEM, problemName } = require('./problems');
+const { PROBLEM, problemName, importProblemOf } = require('./problems');
 const names = require('./names');
 
 /**
@@ -231,7 +231,7 @@ class Nearby extends EventEmitter {
 
     if (!isTestableAddress(address)) throw new Error(`refusing to connect to ${address}`);
 
-    this.outgoing = new NearbySender({
+    const sender = new NearbySender({
       identity: this.identity,
       filePath,
       counts,
@@ -240,16 +240,26 @@ class Nearby extends EventEmitter {
       pairingToken,
       expectedFingerprint,
     });
-    await this.outgoing.prepare();
+    // Held only once it is ready to connect. A file that failed to read -- or was too large to
+    // offer -- left `outgoing` set with no connection to finish it, and every later send was then
+    // refused as if a transfer were already under way.
+    await sender.prepare();
+    this.outgoing = sender;
 
-    this.outgoing.on('code', (sas) => this.emit('send-code', sas));
-    this.outgoing.on('progress', (p) => this.emit('send-progress', p));
-    this.outgoing.on('finished', (problem) => {
-      this.emit('send-finished', problem);
-      this.outgoing = null;
+    // With the name the other end gave in HELLO_ACK -- already sanitised there -- because the screen
+    // asks "does <name> show the same code?", and for a typed address this is the first the sender
+    // hears of who answered. It is a claim, which is exactly what the comparison then checks.
+    sender.on('code', (sas) => {
+      this.emit('send-code', sas, { peerName: sender.peer?.displayName ?? null });
     });
-    this.outgoing.connect(address, port);
-    return this.outgoing;
+    sender.on('progress', (p) => this.emit('send-progress', p));
+    sender.on('finished', (problem) => {
+      // Cleared before the event, so a listener that starts the next transfer is not refused.
+      if (this.outgoing === sender) this.outgoing = null;
+      this.emit('send-finished', problem);
+    });
+    sender.connect(address, port);
+    return sender;
   }
 
   confirmSendCode(matched) {
@@ -305,9 +315,11 @@ class Nearby extends EventEmitter {
       // Whether the sender scanned travels with the code, because it changes what this screen says:
       // a scanning sender skips the comparison, so there is nobody on the other end to compare with.
       const pairedByQr = Boolean((transfer.peerHello?.flags ?? 0) & protocol.FLAG_PAIRED_BY_QR);
-      this.emit('receive-code', sas, { pairedByQr });
+      this.emit('receive-code', sas, { pairedByQr, peerName: transfer.peerHello?.displayName ?? null });
     });
-    transfer.on('offer', (offer) => this.emit('receive-offer', describeOffer(offer)));
+    transfer.on('offer', (offer) => {
+      this.emit('receive-offer', { ...describeOffer(offer), peerName: transfer.peerHello?.displayName ?? null });
+    });
     transfer.on('progress', (p) => this.emit('receive-progress', p));
     transfer.on('complete', (summary) => {
       sink.end(() => {
@@ -413,4 +425,34 @@ function localAddress() {
   return null;
 }
 
-module.exports = { Nearby, localAddress };
+/**
+ * An address somebody typed, as `{ address, port }`, or null.
+ *
+ * `a.b.c.d:port`, and only on a private or link-local network -- the same `isPrivateAddress` a
+ * scanned code is held to, so the typed fallback is not a way round the rule that nothing here ever
+ * connects to the internet. Loopback is refused too: it is a test harness's address, not a device
+ * in the room, and `send()` is where the harness is let through.
+ */
+function parseTypedAddress(text) {
+  const match = /^\s*([0-9.]+):([0-9]{1,5})\s*$/.exec(String(text ?? ''));
+  if (!match) return null;
+  const [, address, portText] = match;
+  const port = Number(portText);
+  if (!isPrivateAddress(address) || port < 1 || port > 65535) return null;
+  return { address, port };
+}
+
+/**
+ * The importer's own refusals, by the names `importFinished` accepts -- so the shell can refuse any
+ * other string the page sends rather than pass it on to be encoded as "unreadable".
+ */
+const IMPORT_PROBLEMS = Object.freeze([1, 2, 3, 4, 5].map(importProblemOf));
+
+module.exports = {
+  Nearby,
+  localAddress,
+  parseTypedAddress,
+  problemName,
+  IMPORT_PROBLEMS,
+  MAX_OFFER_BYTES: protocol.MAX_OFFER_BYTES,
+};
