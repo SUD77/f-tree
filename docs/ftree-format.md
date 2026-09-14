@@ -121,12 +121,12 @@ counted rather than cut — "+4 more" is true where a silently shortened chain i
 
 ### Or nearby, with no file manager at all
 
-A branch — or a whole export — can also go by [nearby sharing](nearby-protocol.md) instead of a
-share sheet: pick a device on the same Wi-Fi, confirm the six digits, and the same `.ftree` arrives
-without ever passing through a chat app or a downloads folder. Nothing about the format changes for
-this route; it is still this file. What is different is the trip: the file on disk is still a
-plain, unencrypted ZIP, as described above, but the connection carrying it there is encrypted end
-to end, which a chat upload never was.
+A whole tree can also go by [nearby sharing](nearby-protocol.md) instead of a share sheet: pick a
+device on the same Wi-Fi, confirm the six digits, and the same `.ftree` arrives without passing
+through a chat app or a downloads folder. Nothing about the format changes for this route; it is
+still this file, written out in full before it is offered, and on disk it is still the plain ZIP
+described above. Only the trip is different — a direct, encrypted connection between the two
+devices, with nothing in between.
 
 ## Joining a shared branch to your own tree
 
