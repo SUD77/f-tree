@@ -8,6 +8,24 @@ betas leading up to a stable release are folded into that release's entry here.
 
 ---
 
+## [Unreleased]
+
+**Send a tree to a device you can see, without a cable or a cloud.**
+
+- **Nearby sharing, on Android and desktop — a beta feature.** Two devices on the same Wi-Fi find
+  each other, show the same six-digit code, and a `.ftree` goes straight across — no account, no
+  server, and nothing in between. The receiver reviews what arrives in the same import screen a
+  shared file already went through: matching, conflicts, add-never-replace, all unchanged.
+- **QR quick-connect.** The receiving screen shows a code carrying a single-use, five-minute pairing
+  token; scanning it skips typing the six digits. Typing an address always works, and always
+  compares digits.
+- Two protocol fixes made in review, before anything shipped: the receiver now commits to its key
+  and nonce before the sender's are revealed, so a device in the middle cannot grind a matching
+  code; and a QR pairing is now claimed only by the side that actually scanned one, so the ordinary
+  six-digit path no longer broke while a QR happened to be on screen.
+- Credit to **SUD77**, who wrote the protocol, both language cores, and the cross-language test that
+  proves a Kotlin process and a Node process agree byte for byte.
+
 ## [0.8.0](https://github.com/thisisankit27/f-tree/releases/tag/v0.8.0) — 2026-09-09
 
 **See the photograph you saved, and get the whole screen back on a phone held sideways.**
