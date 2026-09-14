@@ -326,6 +326,87 @@ test('the receiver can stop a transfer while the codes are up, and the sender he
   await receiver.setVisible(false);
 });
 
+/*
+ * A transfer that ends while the bytes are still arriving, three ways.
+ *
+ * Found by hand, cancelling a 200 MB transfer in the real app: the `.part` stream was destroyed
+ * while writes to it were still in flight, and each of those writes then failed with an 'error'
+ * nobody listened for -- an uncaught exception in the main process, and a native error dialog over
+ * a frozen transfer. Every way a transfer can end mid-DATA reaches the same destroy, so all three are
+ * here, each large enough that the stream is still busy when the end arrives.
+ */
+async function endMidTransfer(label, stop) {
+  const senderDirectory = scratch(`${label}-send`);
+  const receiverDirectory = scratch(`${label}-receive`);
+  const total = 24 * 1024 * 1024;
+  const { file } = sampleFile(senderDirectory, total);
+  const receiver = new Nearby({ directory: receiverDirectory });
+  const sender = new Nearby({ directory: senderDirectory });
+  await receiver.setVisible(true);
+
+  // An unhandled 'error' anywhere would end this process; catching it here turns that into a
+  // failure this test can name.
+  const uncaught = [];
+  const onUncaught = (error) => uncaught.push(error.code ?? error.message);
+  process.on('uncaughtException', onUncaught);
+
+  let stoppedAt = null;
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-progress', ({ received }) => {
+    if (stoppedAt !== null) return;
+    stoppedAt = received;
+    stop({ receiver, sender });
+  });
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const receiverEnd = new Promise((resolve) => receiver.once('receive-finished', resolve));
+  const senderEnd = new Promise((resolve) => sender.once('send-finished', resolve));
+  sender.on('send-code', () => sender.confirmSendCode(true));
+  await sender.send({
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    link: { address: '127.0.0.1', port: receiver.server.port, deviceId: receiver.identity.deviceId, keyFingerprint: null, token: null },
+  });
+
+  const [receiverProblem, senderProblem] = await Promise.all([receiverEnd, senderEnd]);
+  // A beat for any write still in flight to come back and fail, which is the moment that crashed.
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  process.off('uncaughtException', onUncaught);
+  await receiver.setVisible(false);
+
+  const downloads = path.join(receiverDirectory, 'nearby');
+  return {
+    receiverProblem,
+    senderProblem,
+    uncaught,
+    stoppedEarly: stoppedAt !== null && stoppedAt < BigInt(total),
+    left: fs.existsSync(downloads) ? fs.readdirSync(downloads) : [],
+  };
+}
+
+test('the receiver can stop a transfer while the bytes are arriving, and nothing breaks', async () => {
+  const r = await endMidTransfer('cancel-bytes', ({ receiver }) => receiver.cancelIncoming());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.ok(r.stoppedEarly, 'the transfer finished before the Cancel landed');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CANCELLED);
+  assert.equal(r.senderProblem?.problem, PROBLEM.CANCELLED);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
+test('a sender that aborts while its bytes are arriving leaves nothing behind', async () => {
+  const r = await endMidTransfer('abort-bytes', ({ sender }) => sender.cancelSend());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CANCELLED);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
+test('a sender that simply vanishes mid-transfer leaves nothing behind', async () => {
+  // No ABORT, no goodbye: the connection just goes, the way a phone walking out of range does.
+  const r = await endMidTransfer('vanish-bytes', ({ sender }) => sender.outgoing?.socket.destroy());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CONNECTION_LOST);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
 test('sending to an address off this network is refused before a socket opens', async () => {
   const directory = scratch('refuse');
   const { file } = sampleFile(directory, 1024);

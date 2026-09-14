@@ -297,6 +297,20 @@ class Nearby extends EventEmitter {
     const partPath = path.join(this.downloadDirectory, `nearby-${Date.now()}.ftree.part`);
     const sink = fs.createWriteStream(partPath);
     transfer.sink = sink;
+    /*
+     * A stream with no 'error' listener throws its errors, and in the main process a thrown error
+     * is a native "A JavaScript error occurred" dialog over a frozen transfer. That is what a Cancel
+     * in the middle of a large file produced: the `.part` was destroyed to remove it while writes
+     * were still in flight, and each of those came back as ERR_STREAM_DESTROYED with nobody to hear.
+     *
+     * After the transfer has ended the file is being thrown away, so an error from it is expected
+     * and means nothing. During one it is real -- a full disk, a folder that went away -- and becomes
+     * a problem the sender is told about instead of a crash here.
+     */
+    sink.on('error', (error) => {
+      if (transfer.finished) return;
+      transfer.stopBecause(error.code === 'ENOSPC' || error.code === 'EDQUOT' ? PROBLEM.NO_SPACE : PROBLEM.CANCELLED);
+    });
     // Only a token that is still live. The timer below retires an expired one and redraws the
     // screen, but between the moment it lapses and the moment that fires, "five minutes" would
     // otherwise be five minutes and however long the event loop took.
@@ -321,9 +335,14 @@ class Nearby extends EventEmitter {
       this.emit('receive-offer', { ...describeOffer(offer), peerName: transfer.peerHello?.displayName ?? null });
     });
     transfer.on('progress', (p) => this.emit('receive-progress', p));
+    const finalPath = partPath.replace(/\.part$/, '');
+    // Set when the transfer fails. A failure can arrive after the last byte and before the file is
+    // renamed -- a sender that aborts between END and RESULT -- and a rename after that would leave a
+    // whole copy of somebody's family in this folder with nothing left to remove it.
+    let abandoned = false;
     transfer.on('complete', (summary) => {
       sink.end(() => {
-        const finalPath = partPath.replace(/\.part$/, '');
+        if (abandoned) return;
         fs.renameSync(partPath, finalPath);
         // The exact shape `tree:chooseImport` already returns, so `planImport` and the review
         // screen need no changes at all. A transfer ends where an import begins.
@@ -337,14 +356,16 @@ class Nearby extends EventEmitter {
     transfer.on('finished', (problem) => {
       this.incoming = null;
       if (!problem) return;
+      abandoned = true;
       // The handle is closed *before* the file is removed, and the event waits for both. On
       // Windows a delete over an open handle fails outright rather than deferring the way POSIX
       // does, so destroying the stream and deleting in the same breath leaves the `.part` behind
       // -- which is precisely the thing this is here to prevent. `receive-finished` therefore
-      // means "and there is nothing left on disk", which is what a caller needs it to mean.
-      const remove = () => fs.rm(partPath, { force: true }, () => {
+      // means "and there is nothing left on disk", which is what a caller needs it to mean -- under
+      // either name, since a failure can land just after the rename.
+      const remove = () => fs.rm(partPath, { force: true }, () => fs.rm(finalPath, { force: true }, () => {
         this.emit('receive-finished', { ...problem, problemName: problemName(problem.problem) });
-      });
+      }));
       if (sink.destroyed || sink.closed) remove();
       else sink.once('close', remove).destroy();
     });

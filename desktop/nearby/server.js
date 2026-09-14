@@ -167,6 +167,14 @@ class IncomingTransfer extends EventEmitter {
     this.#run(EVENT.userCancelled());
   }
 
+  /**
+   * This side cannot carry on for a reason of its own -- the disk it is writing to filled, say --
+   * and the sender is told which, rather than left to time out on a receiver that went quiet.
+   */
+  stopBecause(problem) {
+    if (!this.finished) this.#failWith(problem);
+  }
+
   #onData(chunk) {
     try {
       for (const frame of this.connection.feed(chunk, this.transcript)) {
@@ -276,7 +284,10 @@ class IncomingTransfer extends EventEmitter {
       case 'write-chunk':
         this.received += BigInt(action.bytes.length);
         this.digest.update(action.bytes);
-        this.sink.write(action.bytes);
+        // Never into a stream that is closing. Once a transfer has ended the caller destroys the
+        // `.part` to remove it, and a write handed to a destroyed stream fails asynchronously -- as
+        // an 'error' event, after this frame is long gone.
+        if (this.sink && !this.sink.destroyed && !this.sink.writableEnded) this.sink.write(action.bytes);
         this.emit('progress', { received: this.received, total: this.offer?.totalBytes ?? 0n });
         break;
       case 'verify-and-hand-over':
