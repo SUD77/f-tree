@@ -38,8 +38,8 @@ function treeWith(people, relationships = []) {
 }
 
 /** Plan and apply in one go, taking every default decision, as confirming without touching does. */
-function importInto(tree, doc, { ownTreeId = MY_TREE, decisions = null } = {}) {
-  const plan = planImport({ document: doc, tree, ownTreeId });
+function importInto(tree, doc, { decisions = null } = {}) {
+  const plan = planImport({ document: doc, tree });
   return {
     plan,
     result: applyImport({ tree, plan, decisions: decisions ?? plan.defaultDecisions }),
@@ -119,6 +119,44 @@ test('re-importing my own export is a no-op', () => {
   assert.strictEqual(tree.signature(), before);
 });
 
+test("the open file is recognised in itself when it was started on a phone, not here", () => {
+  // A tree opened from a phone keeps the phone's id, and its people keep the phone's ids -- so
+  // they are named under the tree's id, never under this installation's (#194). Nobody unnamed or
+  // sharing a name would otherwise have been matched at all.
+  const PHONE = 'tree-of-my-phone';
+  const people = [person('p1', 'Asha'), person('p2', null), person('p3', null),
+    person('p4', 'Ravi'), person('p5', 'Ravi')];
+  const relationships = [parentOf('p1', 'p2'), parentOf('p1', 'p3'), parentOf('p4', 'p5')];
+  const tree = new Tree({ sourceTreeId: PHONE, people, relationships }, { ownTreeId: MY_TREE });
+  tree.markSaved();
+
+  const { plan, result } = importInto(tree, document({ sourceTreeId: PHONE, people, relationships }));
+
+  assert.deepStrictEqual(plan.matches.map((m) => m.tier), people.map(() => MatchTier.CERTAIN));
+  assert.strictEqual(plan.reviewable.length, 0, 'an unchanged file was put to somebody as questions');
+  assert.strictEqual(result.peopleAdded, 0, 'importing the open file into itself added people');
+  assert.strictEqual(tree.isDirty, false);
+});
+
+test('one of my people, carried back in somebody else\'s file, is recognised as mine', () => {
+  // My export went into a cousin's tree, which gave everybody new ids and recorded where each came
+  // from; their export then came back. Its origins name my people by the ids they have here.
+  const tree = treeWith([person('p1', null), person('p2', 'Ravi'), person('p3', 'Ravi')]);
+  const doc = document({
+    people: [
+      person('c1', null, { origins: [{ treeId: MY_TREE, personId: 'p1' }] }),
+      person('c3', 'Ravi', { origins: [{ treeId: MY_TREE, personId: 'p3' }] }),
+    ],
+  });
+
+  const { plan, result } = importInto(tree, doc);
+
+  assert.deepStrictEqual(plan.matches.map((m) => [m.localId, m.tier]),
+    [['p1', MatchTier.CERTAIN], ['p3', MatchTier.CERTAIN]]);
+  assert.strictEqual(result.peopleAdded, 0);
+  assert.strictEqual(tree.people.length, 3);
+});
+
 test('a merge fills gaps and never overwrites', () => {
   const tree = treeWith([
     person('mine', 'Asha', { birthDate: '1970', notes: 'kept', deceased: false }),
@@ -150,7 +188,7 @@ test('a weak match is kept separate unless asked for', () => {
   const tree = treeWith([person('mine', 'Asha')]);
   const doc = document({ people: [person('theirs', 'Asha')] });
 
-  const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+  const plan = planImport({ document: doc, tree });
   const [match] = plan.matches;
   assert.strictEqual(match.tier, MatchTier.WEAK);
   assert.strictEqual(plan.defaultDecisions.get('theirs'), false, 'a weak match merged by default');
@@ -160,7 +198,7 @@ test('a weak match is kept separate unless asked for', () => {
 
   // ...and merged when it is asked for.
   const second = treeWith([person('mine', 'Asha')]);
-  const secondPlan = planImport({ document: doc, tree: second, ownTreeId: MY_TREE });
+  const secondPlan = planImport({ document: doc, tree: second });
   applyImport({ tree: second, plan: secondPlan, decisions: new Map([['theirs', true]]) });
   assert.strictEqual(second.people.length, 1);
 });
@@ -179,7 +217,7 @@ test("the wife's family joins mine through the person we share", () => {
     relationships: [parentOf('f', 'w'), parentOf('m', 'w'), spouseOf('f', 'm')],
   });
 
-  const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+  const plan = planImport({ document: doc, tree });
   // She is only a weak match on her own -- one name, nothing corroborating it -- so the merge is
   // a decision somebody makes. That is the point of the review screen.
   applyImport({ tree, plan, decisions: new Map([['w', true]]) });
@@ -280,7 +318,7 @@ test('unknown people arrive as real nodes, not placeholders', () => {
 test('a file with nobody in it is refused', () => {
   const tree = treeWith([person('mine', 'Asha')]);
   assert.throws(
-    () => planImport({ document: document({ people: [] }), tree, ownTreeId: MY_TREE }),
+    () => planImport({ document: document({ people: [] }), tree }),
     ImportRefused);
 });
 
@@ -291,7 +329,6 @@ test('planning changes nothing at all', () => {
   planImport({
     document: document({ people: [person('a', 'Asha'), person('b', 'Bhim')] }),
     tree,
-    ownTreeId: MY_TREE,
   });
 
   assert.strictEqual(tree.signature(), before, 'planning an import modified the tree');
@@ -337,7 +374,7 @@ test('origins are recorded for everybody, so the next import is a lookup', () =>
 
   // A second file from the same tree now matches her by provenance rather than by her name.
   const second = document({ people: [person('a', 'Asha Kumari')] });
-  const plan = planImport({ document: second, tree, ownTreeId: MY_TREE });
+  const plan = planImport({ document: second, tree });
   assert.strictEqual(plan.matches[0].tier, MatchTier.CERTAIN,
     'a person known by origin was not recognised on the next import');
 });
@@ -363,7 +400,7 @@ test('photos arrive under names that cannot overwrite one already held', () => {
   const photos = new Map([['photos/1.jpg', new Uint8Array([1, 1, 1])]]);
   const doc = document({ people: [person('x', 'Bhim', { photo: 'photos/1.jpg' })] });
 
-  const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+  const plan = planImport({ document: doc, tree });
   const result = applyImport({
     tree,
     plan,
@@ -383,7 +420,7 @@ test('the plan says what confirming would do before it is confirmed', () => {
   const tree = treeWith([person('mine', 'Asha')]);
   const doc = document({ people: [person('a', 'Asha'), person('b', 'Bhim')] });
 
-  const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+  const plan = planImport({ document: doc, tree });
 
   assert.deepStrictEqual(plan.outcomeUnder(plan.defaultDecisions), { added: 2, merged: 0 });
   assert.deepStrictEqual(plan.outcomeUnder(new Map([['a', true]])), { added: 1, merged: 1 });
