@@ -6,6 +6,11 @@ import com.vibethroughcode.ftree.data.FTreeDatabase
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.KinshipPreferences
 import com.vibethroughcode.ftree.data.PhotoStore
+import com.vibethroughcode.ftree.nearby.LanTransport
+import com.vibethroughcode.ftree.nearby.NearbyIdentity
+import com.vibethroughcode.ftree.nearby.NearbyPreferences
+import com.vibethroughcode.ftree.nearby.NearbyRepository
+import com.vibethroughcode.ftree.nearby.NearbyTransport
 import com.vibethroughcode.ftree.transfer.BranchShare
 import com.vibethroughcode.ftree.transfer.CardShare
 import com.vibethroughcode.ftree.transfer.TreeExporter
@@ -16,6 +21,10 @@ import com.vibethroughcode.ftree.update.UpdateClient
 import com.vibethroughcode.ftree.update.UpdateInstaller
 import com.vibethroughcode.ftree.update.UpdatePreferences
 import com.vibethroughcode.ftree.update.UpdateRepository
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Hand-rolled dependency wiring.
@@ -58,6 +67,31 @@ class AppContainer(context: Context) {
             client = UpdateClient(),
             guard = ApkGuard(context.applicationContext),
             installer = UpdateInstaller(context.applicationContext),
+        )
+    }
+
+    val nearbyPreferences: NearbyPreferences by lazy { NearbyPreferences(context) }
+    val nearbyIdentity: NearbyIdentity by lazy { NearbyIdentity(context) }
+
+    /**
+     * Built lazily like everything else, which here is load-bearing rather than tidy: in a session
+     * where nobody opens the nearby screen, none of these objects exist, no socket is constructed
+     * and no multicast lock is ever taken.
+     *
+     * The transport is a `var` so an instrumented test can substitute a fake before this is first
+     * touched. An emulator sits behind a user-mode NAT and cannot do multicast at all, so without
+     * that seam the receive flow could only ever be exercised by hand on two physical devices.
+     */
+    var nearbyTransport: NearbyTransport? = null
+
+    val nearbyRepository: NearbyRepository by lazy {
+        NearbyRepository(
+            preferences = nearbyPreferences,
+            identity = nearbyIdentity,
+            transport = nearbyTransport
+                ?: LanTransport(context.applicationContext, nearbyIdentity.deviceId),
+            downloadDirectory = File(context.applicationContext.filesDir, "nearby"),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
 }

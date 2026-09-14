@@ -2,16 +2,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        The only two permissions the app asks for, and both exist solely for the optional updater.
-        Nothing requests them until update checking is switched on in Settings, which is off until
-        somebody turns it on: UpdateRepository refuses to make a request while the preference is
-        false, so this is a property of the code rather than of the interface.
+        Every permission the app asks for, and what each one is for. All five are normal
+        permissions: none of them prompts, and none of them is in the location family.
 
-        The tree itself never goes near the network. There is no sync, no account and no backend to
-        have one with.
+        The first two exist solely for the optional updater, and nothing uses them until update
+        checking is switched on in Settings. The next three exist solely for nearby sharing, and
+        nothing uses them until somebody opens the nearby screen. Both are guarded the same way, in
+        the code rather than in the interface: UpdateRepository will not make a request while its
+        preference is false, and NearbyRepository will not bind a socket, join a group or send a
+        datagram while its preference is false.
+
+        There is still no sync, no account and no backend to have one with. What there is now is a
+        way to hand one file to one device you can see, on a network you are already on, while you
+        are looking at the screen that says so, and only after the other device says yes.
+
+        Deliberately NOT NEARBY_WIFI_DEVICES. Plain multicast and a TCP socket are not
+        location-deriving APIs, so choosing LAN over Wi-Fi Direct keeps this feature out of the
+        location permission family entirely — which is a user-facing fact and not an implementation
+        detail.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".FTreeApplication"
