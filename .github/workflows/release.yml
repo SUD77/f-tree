@@ -30,6 +30,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # CrossLanguageTransferTest runs the Kotlin against desktop/nearby/ in a real node process.
+      # It skips where node is missing, which on a laptop is right and here would be the test
+      # passing by not running -- so here a missing node is a failure (FTREE_REQUIRE_NODE below).
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
       # A tag that disagrees with the app's own version produces an APK whose file name lies about
       # what is inside it, and an update users cannot install over the previous one. Fail early.
       - name: Check the tag matches the app's version
@@ -44,6 +50,7 @@ jobs:
 
       # A release that fails its own tests should not be published.
       - name: Unit tests and lint
+        env: { FTREE_REQUIRE_NODE: '1' }
         run: ./gradlew testDebugUnitTest lintDebug
 
       - name: Restore the signing key

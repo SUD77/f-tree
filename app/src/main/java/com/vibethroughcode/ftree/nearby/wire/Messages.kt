@@ -59,7 +59,9 @@ data class Hello(
 
     companion object {
         fun decode(payload: ByteArray): Hello {
-            val g = readGreeting(payload)
+            val reader = ByteReader(payload)
+            val g = readGreeting(reader)
+            reader.ignoreRest()
             if (g.role != ROLE_SENDER) throw NearbyFailure(NearbyProblem.UNEXPECTED_MESSAGE)
             return Hello(
                 maxVersion = g.first,
@@ -81,6 +83,10 @@ data class Hello(
  * proposing them, and the sender then checks that what it was told is something it actually
  * offered — see [Negotiation.verifyChosen]. A receiver must not be able to name a version the
  * sender never put on the table.
+ *
+ * It also carries [keyCommitment], the receiver's promise of the key and nonce it will send in
+ * `KEY_ACK` — see [Handshake.keyCommitment] for why the six digits mean nothing without it. It sits
+ * after the name, at the end, so the greeting both messages share keeps one layout.
  */
 data class HelloAck(
     val chosenVersion: Int,
@@ -91,7 +97,14 @@ data class HelloAck(
     val treeFormatMin: Int = TreeDocument.VERSION,
     val treeFormatMax: Int = TreeDocument.VERSION,
     val displayName: String,
+    val keyCommitment: ByteArray,
 ) {
+    init {
+        require(keyCommitment.size == NearbyProtocol.KEY_COMMITMENT_BYTES) {
+            "key commitment must be ${NearbyProtocol.KEY_COMMITMENT_BYTES} bytes"
+        }
+    }
+
     fun encode(): ByteArray = writeGreeting(
         first = chosenVersion,
         second = 0,
@@ -102,12 +115,37 @@ data class HelloAck(
         treeFormatMin = treeFormatMin,
         treeFormatMax = treeFormatMax,
         displayName = displayName,
-    )
+    ) + keyCommitment
+
+    override fun equals(other: Any?): Boolean =
+        this === other || (
+            other is HelloAck &&
+                chosenVersion == other.chosenVersion &&
+                role == other.role &&
+                platform == other.platform &&
+                flags == other.flags &&
+                deviceId == other.deviceId &&
+                treeFormatMin == other.treeFormatMin &&
+                treeFormatMax == other.treeFormatMax &&
+                displayName == other.displayName &&
+                keyCommitment.contentEquals(other.keyCommitment)
+            )
+
+    override fun hashCode(): Int {
+        var result = chosenVersion
+        result = 31 * result + deviceId.hashCode()
+        result = 31 * result + displayName.hashCode()
+        return 31 * result + keyCommitment.contentHashCode()
+    }
 
     companion object {
         fun decode(payload: ByteArray): HelloAck {
-            val g = readGreeting(payload)
+            val reader = ByteReader(payload)
+            val g = readGreeting(reader)
+            // The role first: a HELLO sent back at a sender is the wrong message, not a short one.
             if (g.role != ROLE_RECEIVER) throw NearbyFailure(NearbyProblem.UNEXPECTED_MESSAGE)
+            val commitment = reader.bytes(NearbyProtocol.KEY_COMMITMENT_BYTES)
+            reader.ignoreRest()
             return HelloAck(
                 chosenVersion = g.first,
                 role = g.role,
@@ -117,6 +155,7 @@ data class HelloAck(
                 treeFormatMin = g.treeFormatMin,
                 treeFormatMax = g.treeFormatMax,
                 displayName = g.displayName,
+                keyCommitment = commitment,
             )
         }
     }
@@ -333,8 +372,11 @@ private fun writeGreeting(
         .toByteArray()
 }
 
-private fun readGreeting(payload: ByteArray): Greeting {
-    val reader = ByteReader(payload)
+/**
+ * Reads the shared greeting and stops, so each message decides what may follow it. Bytes past the
+ * end of what a message knows are ignored by the caller, which is what lets a later version append.
+ */
+private fun readGreeting(reader: ByteReader): Greeting {
     val magic = reader.bytes(MAGIC.size)
     if (!magic.contentEquals(MAGIC)) throw NearbyFailure(NearbyProblem.NOT_A_NEARBY_PEER)
 
@@ -347,7 +389,6 @@ private fun readGreeting(payload: ByteArray): Greeting {
     val treeFormatMin = reader.u8()
     val treeFormatMax = reader.u8()
     val nameBytes = reader.lengthPrefixed()
-    reader.ignoreRest()
 
     val raw = String(nameBytes, Charsets.UTF_8)
     return Greeting(

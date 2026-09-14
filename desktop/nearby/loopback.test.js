@@ -360,3 +360,88 @@ test('the receiver refuses an offer larger than it will take, before any bytes m
   assert.equal(sawOffer, false);
   assert.equal(fs.readFileSync(receivedPath).length, 0);
 });
+
+/**
+ * A receiver written by hand that answers KEY_ACK with `ackNonce` after promising `promisedNonce` in
+ * HELLO_ACK -- what a machine in the middle has to do to choose the six digits. Resolves with what
+ * the sender concluded and the code it showed, if any.
+ */
+async function againstScriptedReceiver(promisedNonce, ackNonce) {
+  const net = require('node:net');
+  const dh = require('./dh');
+  const messages = require('./messages');
+  const beacon = require('./beacon');
+  const { encodeFrame } = require('./frame');
+
+  const directory = scratch();
+  const { file } = sampleFile(directory, 1024);
+  const publicKey = dh.publicOf(dh.generatePrivate());
+
+  const server = net.createServer((socket) => {
+    socket.on('error', () => {});
+    let buffered = Buffer.alloc(0);
+    socket.on('data', (chunk) => {
+      buffered = Buffer.concat([buffered, chunk]);
+      while (buffered.length >= 4 && buffered.length >= 4 + buffered.readUInt32BE(0)) {
+        const length = buffered.readUInt32BE(0);
+        const type = buffered[4];
+        buffered = buffered.subarray(4 + length);
+        if (type === protocol.TYPE_HELLO) {
+          socket.write(encodeFrame(protocol.TYPE_HELLO_ACK, messages.HelloAck.encode({
+            chosenVersion: protocol.VERSION,
+            platform: beacon.PLATFORM.LINUX,
+            flags: protocol.SUPPORTED_FLAGS,
+            deviceId: Buffer.alloc(16, 2),
+            displayName: 'Amber Otter',
+            keyCommitment: handshake.keyCommitment(publicKey, promisedNonce),
+          })));
+        } else if (type === protocol.TYPE_KEY) {
+          socket.write(encodeFrame(protocol.TYPE_KEY_ACK, messages.KeyMessage.encode({
+            publicKey: dh.to256(publicKey),
+            nonce: ackNonce,
+          })));
+        }
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  const sender = new NearbySender({
+    identity: new NearbyIdentity(path.join(directory, 'sender')),
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    suggestedFileName: 'family.ftree',
+  });
+  await sender.prepare();
+
+  let code = null;
+  const finished = new Promise((resolve) => {
+    sender.on('code', (sas) => {
+      code = sas;
+      sender.confirmCode(false);
+    });
+    sender.on('finished', (problem) => resolve(problem));
+  });
+  sender.connect('127.0.0.1', server.address().port);
+  const problem = await finished;
+  server.close();
+  return { problem: problem?.problem ?? null, code };
+}
+
+test('a receiver that changes its nonce after the sender has spoken is refused before any code', async () => {
+  // Without the promise, a machine in the middle playing the receiver tries nonces until the code
+  // on this screen equals the one it already agreed with the real receiver. The refusal has to come
+  // before a code is shown, or it is too late.
+  const result = await againstScriptedReceiver(Buffer.alloc(32, 1), Buffer.alloc(32, 2));
+  assert.equal(result.problem, PROBLEM.KEY_NOT_AS_PROMISED);
+  assert.equal(result.code, null, 'a code was shown for a key that broke its promise');
+});
+
+test('the same scripted receiver keeping its promise does reach the code', async () => {
+  // The control: the script is a valid receiver in every other respect, so the refusal above is
+  // about the nonce and nothing else.
+  const nonce = Buffer.alloc(32, 1);
+  const result = await againstScriptedReceiver(nonce, nonce);
+  assert.notEqual(result.code, null, 'no code was shown');
+  assert.equal(result.problem, PROBLEM.CODES_DID_NOT_MATCH);
+});

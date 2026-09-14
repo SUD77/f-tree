@@ -183,6 +183,8 @@ class IncomingTransfer extends EventEmitter {
       flags: this.negotiatedFlags,
       deviceId: this.identity.deviceId,
       displayName: this.identity.displayName,
+      // The promise of what KEY_ACK will carry, made before the sender's key has been seen.
+      keyCommitment: handshake.keyCommitment(this.beaconKey.publicKey, this.nonce),
     });
   }
 

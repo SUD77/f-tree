@@ -211,6 +211,19 @@ test('the beacon fingerprint agrees', () => {
   }
 });
 
+test('the key commitment agrees', () => {
+  // If the two sides hashed the receiver's promise differently, every honest conversation between
+  // them would end in KEY_NOT_AS_PROMISED -- which reads, correctly, as an attack.
+  const nonce = Buffer.from(Array.from({ length: 32 }, (_, i) => i + 0x20));
+  for (const x of [2n, 0xb0bn]) {
+    assert.equal(
+      hex(handshake.keyCommitment(dh.publicOf(x), nonce)),
+      expected('commitment', `x=${x} nonce=20..3f`),
+      `x=${x}`,
+    );
+  }
+});
+
 test('the beacon is the same bytes on both sides', () => {
   const deviceId = Buffer.from(Array.from({ length: 16 }, (_, i) => i + 1));
   const keyFingerprint = Buffer.from(Array.from({ length: 8 }, (_, i) => (i * 3) & 0xff));
@@ -272,6 +285,7 @@ test('the handshake messages are the same bytes on both sides', () => {
       flags: protocol.FLAG_ACCEPTS_TREE,
       deviceId,
       displayName: 'Amber Otter',
+      keyCommitment: Buffer.alloc(protocol.KEY_COMMITMENT_BYTES, 5),
     })),
     expected('messages.hello-ack', 'v=1 flags=1'),
   );
@@ -368,6 +382,13 @@ test('the problem codes agree', () => {
   // readability cannot silently change what the other device is told.
   for (const [name, code] of Object.entries(PROBLEM)) {
     assert.equal(`0x${code.toString(16).padStart(2, '0')}`, expected('problems', name), name);
+  }
+  // And the other way: a reason the Kotlin can send that this side has never heard of would be
+  // shown as "the other device stopped" when it has a sentence of its own.
+  for (const key of vectors.keys()) {
+    if (!key.startsWith('problems | ')) continue;
+    const name = key.slice('problems | '.length);
+    assert.ok(name in PROBLEM, `the Kotlin knows ${name} and this side does not`);
   }
   const importProblems = {
     NOT_AN_ARCHIVE: 'notAnArchive',

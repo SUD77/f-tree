@@ -32,8 +32,27 @@ class MessagesTest {
             flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
             deviceId = deviceId,
             displayName = "Amber Swift",
+            keyCommitment = ByteArray(NearbyProtocol.KEY_COMMITMENT_BYTES) { it.toByte() },
         )
         assertEquals(ack, HelloAck.decode(ack.encode()))
+    }
+
+    @Test
+    fun `a hello ack without its commitment is malformed rather than accepted`() {
+        // A receiver that left the promise out would otherwise be a receiver free to choose its
+        // nonce after the sender's, which is the one thing the promise exists to stop.
+        val full = HelloAck(
+            chosenVersion = 1,
+            platform = NearbyPlatform.LINUX,
+            flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
+            deviceId = deviceId,
+            displayName = "Amber Swift",
+            keyCommitment = ByteArray(NearbyProtocol.KEY_COMMITMENT_BYTES),
+        ).encode()
+        val failure = assertThrows(NearbyFailure::class.java) {
+            HelloAck.decode(full.copyOf(full.size - 1))
+        }
+        assertEquals(NearbyProblem.MALFORMED_FRAME, failure.problem)
     }
 
     @Test

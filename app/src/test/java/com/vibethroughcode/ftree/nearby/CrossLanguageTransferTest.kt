@@ -48,7 +48,8 @@ import org.junit.rules.TemporaryFolder
  *
  * Skipped, not failed, where `node` is not on the path: a machine that cannot run half the test has
  * nothing to say about it, and a red build on a developer's laptop for a missing toolchain teaches
- * people to ignore red builds.
+ * people to ignore red builds. **Except in CI**, which sets `FTREE_REQUIRE_NODE=1`: there a skip
+ * would be this test passing by not running, on the one machine whose green everybody trusts.
  */
 class CrossLanguageTransferTest {
 
@@ -145,6 +146,14 @@ class CrossLanguageTransferTest {
         "node"
     }
 
+    private fun requireNode() {
+        if (System.getenv("FTREE_REQUIRE_NODE") == "1") {
+            assertTrue("FTREE_REQUIRE_NODE is set and node is not on the path", nodeIsAvailable())
+        } else {
+            assumeTrue("node is not on the path", nodeIsAvailable())
+        }
+    }
+
     private fun nodeIsAvailable(): Boolean = try {
         ProcessBuilder(nodeCommand(), "--version")
             .redirectErrorStream(true)
@@ -158,7 +167,7 @@ class CrossLanguageTransferTest {
 
     @Test
     fun `a Kotlin sender and a JavaScript receiver exchange a real family`() {
-        assumeTrue("node is not on the path", nodeIsAvailable())
+        requireNode()
 
         val arrived = folder.newFile("arrived.ftree")
         val peer = node("nearby/peer.js", "receive", "--auto", "--out", arrived.absolutePath)
@@ -219,7 +228,7 @@ class CrossLanguageTransferTest {
 
     @Test
     fun `a JavaScript sender and a Kotlin receiver exchange a real family`() {
-        assumeTrue("node is not on the path", nodeIsAvailable())
+        requireNode()
 
         // The other direction, which is a different code path on both sides and not a symmetry that
         // can be assumed: the receiver holds the long-lived key and answers, the sender opens the

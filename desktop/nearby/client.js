@@ -179,6 +179,14 @@ class NearbySender extends EventEmitter {
   #onKeyAck(ack) {
     const peerPublic = dh.fromBytes(ack.publicKey);
 
+    // Before anything else, and before any code exists to show: the key and nonce must be the ones
+    // promised in HELLO_ACK, fixed before this side's nonce was sent. A receiver that could choose
+    // them afterwards could choose the six digits. See `handshake.keyCommitment`.
+    const promised = handshake.keyCommitment(peerPublic, ack.nonce);
+    if (!crypto.timingSafeEqual(promised, this.peer.keyCommitment)) {
+      throw new NearbyFailure(PROBLEM.KEY_NOT_AS_PROMISED);
+    }
+
     // The device that was tapped in the list against the device that actually answered. Not an
     // authenticator -- a beacon is unsigned and anybody can copy one -- but it turns "I connected
     // to the wrong host" into a refusal here rather than a transfer that completes to a stranger.

@@ -312,6 +312,14 @@ class NearbySendTransfer(
     private fun onKeyAck(ack: KeyMessage, link: NearbyConnection): String {
         val peerPublic = BigInteger(1, ack.publicKey)
 
+        // Before anything else, and before any code exists to show: the key and nonce must be the
+        // ones promised in HELLO_ACK, fixed before this side's nonce was sent. A receiver that
+        // could choose them afterwards could choose the six digits. See Handshake.keyCommitment.
+        val promised = Handshake.keyCommitment(peerPublic, ack.nonce)
+        if (!MessageDigest.isEqual(promised, peer!!.keyCommitment)) {
+            throw NearbyFailure(NearbyProblem.KEY_NOT_AS_PROMISED)
+        }
+
         // The device that was tapped in the list against the device that actually answered. Not an
         // authenticator — a beacon is unsigned and anybody can copy one — but it turns "I reached
         // the wrong host" into a refusal here rather than a transfer that completes to a stranger.
@@ -546,6 +554,8 @@ class NearbyReceiveTransfer(
             flags = Negotiation.negotiateFlags(hello.flags, NearbyProtocol.SUPPORTED_FLAGS),
             deviceId = identity.deviceId,
             displayName = identity.displayName,
+            // The promise of what KEY_ACK will carry, made before the sender's key has been seen.
+            keyCommitment = Handshake.keyCommitment(beaconPublicKey, nonce),
         ).encode()
     }
 

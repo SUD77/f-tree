@@ -238,6 +238,18 @@ class NearbyVectorsTest {
         }
         appendLine()
 
+        section("commitment")
+        // The receiver's promise in HELLO_ACK. If the two sides hashed it differently every honest
+        // conversation would end in KEY_NOT_AS_PROMISED, which reads as an attack.
+        run {
+            for (exponent in listOf(2L, 0xB0BL)) {
+                val public = Dh.publicOf(BigInteger.valueOf(exponent))
+                val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { (it + 0x20).toByte() }
+                line("commitment", "x=$exponent nonce=20..3f", Handshake.keyCommitment(public, nonce).hex())
+            }
+        }
+        appendLine()
+
         section("messages")
         // The four handshake frames are hashed verbatim into the transcript, so their byte layout
         // is as load-bearing as the crypto: a field written in a different order on one side gives
@@ -275,6 +287,7 @@ class NearbyVectorsTest {
                     flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
                     deviceId = deviceId,
                     displayName = "Amber Otter",
+                    keyCommitment = ByteArray(NearbyProtocol.KEY_COMMITMENT_BYTES) { 5 },
                 ).encode().hex(),
             )
             line(

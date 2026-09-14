@@ -190,6 +190,34 @@ class HandshakeTest {
     }
 
     @Test
+    fun `the key commitment binds both the key and the nonce`() {
+        val key = Dh.publicOf(BigInteger.valueOf(0xB0BL))
+        val otherKey = Dh.publicOf(BigInteger.valueOf(0xA11CEL))
+        val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { 7 }
+        val otherNonce = nonce.copyOf().also { it[31] = 8 }
+
+        val base = Handshake.keyCommitment(key, nonce)
+        assertEquals(NearbyProtocol.KEY_COMMITMENT_BYTES, base.size)
+        assertEquals(base.toList(), Handshake.keyCommitment(key, nonce).toList())
+        // The nonce is the part a machine in the middle would want to change: the receiver's key is
+        // already fixed for the whole session, so a commitment to the key alone would stop nothing.
+        assertNotEquals(base.toList(), Handshake.keyCommitment(key, otherNonce).toList())
+        assertNotEquals(base.toList(), Handshake.keyCommitment(otherKey, nonce).toList())
+    }
+
+    @Test
+    fun `the key commitment is domain separated from the fingerprint`() {
+        val key = Dh.publicOf(BigInteger.valueOf(0xB0BL))
+        val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES)
+        val plain = MessageDigest.getInstance("SHA-256").run {
+            update(Dh.to256(key))
+            update(nonce)
+            digest()
+        }
+        assertNotEquals(plain.toList(), Handshake.keyCommitment(key, nonce).toList())
+    }
+
+    @Test
     fun `expand refuses more than one block`() {
         val prk = ByteArray(32)
         assertEquals(32, Handshake.expand(prk, "x", 32).size)

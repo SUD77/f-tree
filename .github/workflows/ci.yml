@@ -27,7 +27,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # CrossLanguageTransferTest runs the Kotlin against desktop/nearby/ in a real node process.
+      # It skips where node is missing, which on a laptop is right and here would be the test
+      # passing by not running -- so here a missing node is a failure (FTREE_REQUIRE_NODE below).
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
       - name: Unit tests
+        env: { FTREE_REQUIRE_NODE: '1' }
         run: ./gradlew testDebugUnitTest
 
       - name: Lint

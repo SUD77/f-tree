@@ -212,10 +212,29 @@ test('a greeting claiming the wrong role is refused', () => {
     flags: 1,
     deviceId: Buffer.alloc(16, 1),
     displayName: 'Amber Otter',
+    keyCommitment: Buffer.alloc(protocol.KEY_COMMITMENT_BYTES),
   });
   assert.throws(
     () => messages.Hello.decode(asReceiver),
     (error) => error.problem === PROBLEM.UNEXPECTED_MESSAGE,
+  );
+});
+
+test('a hello ack without its commitment is malformed rather than accepted', () => {
+  // A receiver that left the promise out would be free to choose its nonce after the sender's,
+  // which is the one thing the promise exists to stop.
+  const whole = messages.HelloAck.encode({
+    chosenVersion: 1,
+    platform: beacon.PLATFORM.LINUX,
+    flags: 1,
+    deviceId: Buffer.alloc(16, 1),
+    displayName: 'Amber Otter',
+    keyCommitment: Buffer.alloc(protocol.KEY_COMMITMENT_BYTES, 9),
+  });
+  assert.deepEqual(messages.HelloAck.decode(whole).keyCommitment, Buffer.alloc(32, 9));
+  assert.throws(
+    () => messages.HelloAck.decode(whole.subarray(0, whole.length - 1)),
+    (error) => error instanceof NearbyFailure && error.problem === PROBLEM.MALFORMED_FRAME,
   );
 });
 
