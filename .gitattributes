@@ -1,0 +1,14 @@
+# Every text file is stored with LF line endings, whatever the platform it was written on.
+#
+# Without this, a checkout on Windows with core.autocrlf off commits CRLF, and a file that changed
+# three lines shows as rewritten in full: the nearby-sharing work arrived with fifteen such files,
+# including app/build.gradle.kts, where a 17-line change read as 315. It also keeps the Kotlin and
+# JavaScript test vectors byte-identical on every machine, which the cross-language test relies on.
+* text=auto eol=lf
+
+# Batch files are the one thing Windows needs in its own convention.
+*.bat text eol=crlf
+
+# Binary, whatever a heuristic might guess.
+*.ftree binary
+*.jks binary
