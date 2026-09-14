@@ -862,6 +862,41 @@ export function peopleToDraw(graph, fromId, path) {
 }
 
 /**
+ * One person, everyone below them, and whoever each of them married.
+ *
+ * Ports `FamilyGraph.branchFrom` (`graph/FamilyGraph.kt:43`) rather than reinventing it: this is
+ * what "share Sandeep's family" means on both shells, and `branch-cases.json` is the table that
+ * proves the two implementations still agree, so the walk here has to match the Kotlin exactly,
+ * not merely a plausible reading of the same sentence.
+ *
+ * It walks down only, through `children`, and adds a spouse for every bloodline member it visits -
+ * a couple is how a family is read, and a child arriving without the parent they married is a hole
+ * in the story. It does not walk back *out* through those spouses: a spouse's own parents are the
+ * doorway back into another whole family, and a spouse's children by somebody else are that
+ * family's business, not this one - unless a `PARENT` edge joins them to the bloodline directly, in
+ * which case they were never merely "somebody else's".
+ *
+ * Returns a `Set` of ids, matching `FamilyGraph.branchFrom`'s `Set<String>` - pass the result to
+ * `restrictedGraph` for an actual subgraph.
+ */
+export function branchFrom(graph, personId) {
+  const bloodline = new Set([personId]);
+  const queue = graph.children(personId).map((c) => c.id);
+  while (queue.length) {
+    const id = queue.shift();
+    if (bloodline.has(id)) continue;
+    bloodline.add(id);
+    for (const child of graph.children(id)) queue.push(child.id);
+  }
+
+  const everyone = new Set(bloodline);
+  for (const id of bloodline) {
+    for (const spouse of graph.spouses(id)) everyone.add(spouse.id);
+  }
+  return everyone;
+}
+
+/**
  * The same archive cut down to a set of people, keeping only the edges with both ends still in it.
  *
  * Rebuilt from a filtered document rather than by trimming the graph in place, so everything
