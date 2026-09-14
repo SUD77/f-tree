@@ -111,6 +111,19 @@ class NearbyRepository(
      */
     private val engaged = AtomicBoolean(false)
 
+    /**
+     * The code the receive screen is showing, or null when it shows none.
+     *
+     * The token in it is single use and short-lived: spent by the first connection that says it
+     * scanned it, and replaced after [NearbyProtocol.PAIRING_TOKEN_LIFETIME_MS] whatever happens,
+     * so a photograph of somebody's screen is worth nothing five minutes later.
+     */
+    private val _pairing = MutableStateFlow<QrLink?>(null)
+    val pairing: StateFlow<QrLink?> = _pairing.asStateFlow()
+    private var showingPairing = false
+    @Volatile private var pairingToken: ByteArray? = null
+    private var pairingMintedAt = 0L
+
     /** Who is sending to us, from their HELLO; remembered once what they sent proves readable. */
     private var incomingFrom: Pair<String, String>? = null
 
@@ -177,6 +190,7 @@ class NearbyRepository(
         sweeper = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 kotlinx.coroutines.delay(NearbyProtocol.PEER_SWEEP_INTERVAL_MS)
+                if (showingPairing) publishPairing()
                 if (peerTable.sweep(clock()).isNotEmpty()) {
                     _peers.value = peerTable.list()
                     publishBrowsing()
@@ -198,6 +212,9 @@ class NearbyRepository(
         peerTable.clear()
         _peers.value = emptyList()
         _listening.value = null
+        showingPairing = false
+        pairingToken = null
+        _pairing.value = null
         beaconPrivate = null
         beaconPublic = null
         visible = false
@@ -270,6 +287,67 @@ class NearbyRepository(
             outgoing = outgoing,
             pairingToken = pairingToken,
             onSent = { preferences.remember(peer.key, peer.displayName) },
+        )
+    }
+
+    /** Starts or stops showing a code for another device to scan. Only the receive screen does. */
+    fun showPairing(show: Boolean) {
+        showingPairing = show
+        if (show) publishPairing() else _pairing.value = null
+    }
+
+    /**
+     * Mints a token when there is none or it has expired, and publishes the link that carries it.
+     * No address, no code: a QR pointing nowhere reachable would only fail after somebody scanned it.
+     */
+    private fun publishPairing() {
+        val listening = _listening.value
+        val address = listening?.address
+        val public = beaconPublic
+        if (!showingPairing || listening == null || address == null || public == null) {
+            _pairing.value = null
+            return
+        }
+        val now = clock()
+        val current = pairingToken
+        val token = if (current == null || now - pairingMintedAt >= NearbyProtocol.PAIRING_TOKEN_LIFETIME_MS) {
+            ByteArray(NearbyProtocol.PAIRING_TOKEN_BYTES).also { java.security.SecureRandom().nextBytes(it) }
+                .also {
+                    pairingToken = it
+                    pairingMintedAt = now
+                }
+        } else {
+            current
+        }
+        val link = QrLink(
+            address = address,
+            port = listening.port,
+            deviceId = identity.deviceId,
+            keyFingerprint = Handshake.beaconFingerprint(identity.deviceId.bytes, public),
+            token = token,
+            displayName = identity.displayName,
+        )
+        if (_pairing.value != link) _pairing.value = link
+    }
+
+    /**
+     * Sends to a device whose code was scanned.
+     *
+     * The token in the code never goes on the wire; both ends mix it into the key, which is what
+     * lets this path skip the six digits — a device that did not see the screen cannot derive the
+     * key, and its first sealed frame does not open. A code without a token still connects, and
+     * then compares digits like any other.
+     */
+    fun sendByLink(link: QrLink, outgoing: OutgoingFile) {
+        val name = link.displayName ?: link.address
+        startSending(
+            address = link.address,
+            port = link.port,
+            name = name,
+            expectedFingerprint = link.keyFingerprint,
+            outgoing = outgoing,
+            pairingToken = link.token ?: Handshake.NO_TOKEN,
+            onSent = { preferences.remember(link.deviceId.hex(), name) },
         )
     }
 
@@ -398,6 +476,12 @@ class NearbyRepository(
                         beaconPrivateKey = beaconPrivate ?: return@use,
                         beaconPublicKey = beaconPublic ?: return@use,
                         sink = sink,
+                        pairingToken = pairingToken ?: Handshake.NO_TOKEN,
+                        // Spent by the first connection that presents it; the screen gets a new one.
+                        onTokenUsed = {
+                            pairingToken = null
+                            publishPairing()
+                        },
                         listener = object : NearbyTransferListener {
                             override fun onCode(sas: String) {
                                 // A sender that scanned this screen never sees digits, so showing

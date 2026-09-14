@@ -7,6 +7,7 @@ import com.vibethroughcode.ftree.nearby.NearbyPeer
 import com.vibethroughcode.ftree.nearby.NearbyRepository
 import com.vibethroughcode.ftree.nearby.NearbyState
 import com.vibethroughcode.ftree.nearby.OutgoingFile
+import com.vibethroughcode.ftree.nearby.wire.QrLink
 import com.vibethroughcode.ftree.transfer.ImportProblem
 import com.vibethroughcode.ftree.transfer.TreeExporter
 import com.vibethroughcode.ftree.ui.transfer.defaultExportName
@@ -41,6 +42,7 @@ class NearbyViewModel(
     val state: StateFlow<NearbyState> = repository.state
     val peers: StateFlow<List<NearbyPeer>> = repository.peers
     val listening: StateFlow<NearbyRepository.Listening?> = repository.listening
+    val pairing: StateFlow<QrLink?> = repository.pairing
 
     /** Set while the export is being written, before any socket exists. */
     private val _preparing = MutableStateFlow(false)
@@ -51,6 +53,8 @@ class NearbyViewModel(
     fun open(mode: NearbyMode) {
         _mode.value = mode
         repository.setVisible(true)
+        // Only the receive screen shows a code; the send screen scans one.
+        repository.showPairing(mode == NearbyMode.RECEIVE)
     }
 
     fun close() {
@@ -62,6 +66,8 @@ class NearbyViewModel(
     fun send(peer: NearbyPeer) = withOutgoing { repository.send(peer, it) }
 
     fun sendTo(address: String, port: Int) = withOutgoing { repository.sendTo(address, port, it) }
+
+    fun sendByLink(link: QrLink) = withOutgoing { repository.sendByLink(link, it) }
 
     fun confirmCode(matched: Boolean) = repository.confirmCode(matched)
 

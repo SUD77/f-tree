@@ -359,7 +359,7 @@
     <string name="settings_beta_dialog_confirm">Offer me betas</string>
     <string name="settings_beta_dialog_cancel">Not now</string>
     <string name="settings_permissions_title">Permissions</string>
-    <string name="settings_permissions_body">Five, none of which asks you anything. Two are for the updater: internet access to ask GitHub about releases, and permission to install an update. Three are for nearby sharing: to see the Wi-Fi network, to hear other devices on it, and to check a connection exists. Nothing leaves the device except when you deliberately send it, to a device you can see, on a network you are already on, with no account and nothing in between.</string>
+    <string name="settings_permissions_body">Five that never ask, and one that does. Two are for the updater: internet access to ask GitHub about releases, and permission to install an update. Three are for nearby sharing: to see the Wi-Fi network, to hear other devices on it, and to check a connection exists. The camera is asked for only if you choose to scan a code, and you can always type instead. Nothing leaves the device except when you deliberately send it, to a device you can see, on a network you are already on, with no account and nothing in between.</string>
 
     <!-- Nearby sharing -->
     <string name="settings_section_nearby">Nearby sharing</string>
@@ -402,6 +402,19 @@
     <string name="nearby_ready">Ready to receive</string>
     <string name="nearby_ready_body">On the other device, open Send to a nearby device and choose %1$s.</string>
     <string name="nearby_ready_address">Or type this address there:</string>
+    <string name="nearby_qr_title">Or scan this code with the other device:</string>
+    <string name="nearby_qr_description">Code for the other device to scan</string>
+    <string name="nearby_qr_changes">The code changes once it has been used, and every five minutes. Scanning it skips the six digits, because only a device that can see this screen can read it.</string>
+    <string name="nearby_scan">Scan the other screen\'s code</string>
+    <string name="nearby_scan_stop">Stop scanning</string>
+    <string name="nearby_scan_hint">Point the camera at the code on the other device. Nothing is recorded or saved.</string>
+    <string name="nearby_camera_title">Use the camera to read the code?</string>
+    <string name="nearby_camera_body">f-tree only looks for the code on the other screen. Nothing is recorded or saved, and the camera is used for nothing else.</string>
+    <string name="nearby_camera_allow">Allow camera</string>
+    <string name="nearby_camera_type_instead">Type the code instead</string>
+    <string name="nearby_camera_blocked_title">Camera access is off</string>
+    <string name="nearby_camera_blocked_body">Android is set to refuse f-tree the camera. You can change that in the app\'s settings, or pick the device from the list or type its address instead.</string>
+    <string name="nearby_camera_open_settings">Open settings</string>
     <string name="nearby_no_address">This device isn\'t on a Wi-Fi network, so nothing nearby can reach it.</string>
     <string name="nearby_connecting">Connecting to %1$s…</string>
     <string name="nearby_code_title">Check the other screen</string>

@@ -2,8 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        Every permission the app asks for, and what each one is for. All five are normal
-        permissions: none of them prompts, and none of them is in the location family.
+        Every permission the app asks for, and what each one is for. The first five are normal
+        permissions: none of them prompts, and none of them is in the location family. The sixth,
+        CAMERA, is the app's only runtime permission and is optional; see its own comment below.
 
         The first two exist solely for the optional updater, and nothing uses them until update
         checking is switched on in Settings. The next three exist solely for nearby sharing, and
@@ -27,6 +28,16 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        The app's only runtime permission, and optional. Asked for when somebody taps "Scan the
+        other screen's code" and at no other time, behind a rationale whose way out is "Type the
+        code instead". Refusing it costs nothing: the list and the typed address both still work,
+        and compare six digits. Not required as hardware, so a device without a camera still
+        installs and simply does not show the button.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:name=".FTreeApplication"

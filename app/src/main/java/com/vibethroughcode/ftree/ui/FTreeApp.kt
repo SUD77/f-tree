@@ -54,6 +54,8 @@ import com.vibethroughcode.ftree.transfer.sendBranchIntent
 import com.vibethroughcode.ftree.ui.common.LocalKinshipLanguage
 import com.vibethroughcode.ftree.ui.common.isShortWindow
 import com.vibethroughcode.ftree.ui.nearby.NearbyScreen
+import com.vibethroughcode.ftree.ui.nearby.QrPanel
+import com.vibethroughcode.ftree.ui.nearby.ScanAction
 import com.vibethroughcode.ftree.ui.nearby.NearbyViewModel
 import com.vibethroughcode.ftree.ui.people.PeopleScreen
 import com.vibethroughcode.ftree.ui.person.PersonDetailScreen
@@ -333,6 +335,7 @@ fun FTreeApp(
             val peers by nearbyViewModel.peers.collectAsStateWithLifecycle()
             val listening by nearbyViewModel.listening.collectAsStateWithLifecycle()
             val preparing by nearbyViewModel.preparing.collectAsStateWithLifecycle()
+            val pairing by nearbyViewModel.pairing.collectAsStateWithLifecycle()
             Dialog(
                 onDismissRequest = nearbyViewModel::close,
                 properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -352,6 +355,8 @@ fun FTreeApp(
                     onCancel = nearbyViewModel::cancel,
                     onDismiss = nearbyViewModel::dismiss,
                     onClose = nearbyViewModel::close,
+                    qrPanel = { pairing?.let { QrPanel(it) } },
+                    scanAction = { ScanAction(onScanned = nearbyViewModel::sendByLink) },
                 )
             }
         }
