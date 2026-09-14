@@ -1,0 +1,291 @@
+{
+  "format": 1,
+  "notes": [
+    "policy x request -> decision, read by both site/book/policy.test.mjs and the Kotlin",
+    "PolicyCasesTest.kt, the same way sample-family.ftree is read by both a Node test and a",
+    "Kotlin JVM test today. `policy: \"shipped\"` means the real site/book/policy.json; every",
+    "other case inlines its own small, self-contained hypothetical policy so a reviewer never has",
+    "to hold more than one rule in their head to check one case."
+  ],
+  "cases": [
+    {
+      "name": "shipped policy: book export is allowed, free plan",
+      "policy": "shipped",
+      "request": { "feature": "book.export", "generations": 6, "people": 140 },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "shipped policy: book template is allowed, free plan",
+      "policy": "shipped",
+      "request": { "feature": "book.template", "templateId": "heirloom", "templateTier": "evergreen" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "shipped policy: a feature it has never heard of is Locked, not Allowed by omission",
+      "policy": "shipped",
+      "request": { "feature": "book.something-not-invented-yet" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "unknown-feature" }
+    },
+    {
+      "name": "a known feature with no rule for the caller's plan is treated the same as unknown",
+      "policy": {
+        "format": 1,
+        "rules": [{ "feature": "book.export", "plan": "patron", "grant": "full" }]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "unknown-feature" }
+    },
+
+    {
+      "name": "quota: nothing used yet is Limited with the whole allowance remaining",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "quota": { "count": 2 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": { "book.export": 0 } },
+      "expect": { "kind": "limited", "allowance": { "remaining": 2 }, "reason": "quota-used" }
+    },
+    {
+      "name": "quota: missing usage key counts as zero, not as locked",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "quota": { "count": 2 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "limited", "allowance": { "remaining": 2 }, "reason": "quota-used" }
+    },
+    {
+      "name": "quota: one used of two is Limited with one remaining",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "quota": { "count": 2 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": { "book.export": 1 } },
+      "expect": { "kind": "limited", "allowance": { "remaining": 1 }, "reason": "quota-used" }
+    },
+    {
+      "name": "quota: exactly used up is Locked, not Limited with zero remaining",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "quota": { "count": 2 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": { "book.export": 2 } },
+      "expect": { "kind": "locked", "reason": "quota-used" }
+    },
+    {
+      "name": "quota: used past the count is still Locked, not a negative allowance",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "quota": { "count": 2 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": { "book.export": 5 } },
+      "expect": { "kind": "locked", "reason": "quota-used" }
+    },
+
+    {
+      "name": "scope: fewer generations than the limit is fully Allowed",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "scope": { "maxGenerations": 3 } } }
+        ]
+      },
+      "request": { "feature": "book.export", "generations": 2 },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "scope: exactly the limit is fully Allowed, not Limited",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "scope": { "maxGenerations": 3 } } }
+        ]
+      },
+      "request": { "feature": "book.export", "generations": 3 },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "scope: one more generation than the limit is Limited to the limit",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "scope": { "maxGenerations": 3 } } }
+        ]
+      },
+      "request": { "feature": "book.export", "generations": 4 },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "limited", "allowance": { "maxGenerations": 3 }, "reason": "generation-scope" }
+    },
+    {
+      "name": "scope: a missing generations count defaults to zero, which is always within any limit",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.export", "plan": "free", "grant": { "scope": { "maxGenerations": 1 } } }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+
+    {
+      "name": "none: a feature with no free access at all is Locked with the honest default reason",
+      "policy": {
+        "format": 1,
+        "rules": [{ "feature": "book.export", "plan": "free", "grant": "none" }]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "not-included" }
+    },
+    {
+      "name": "none: a rule's own reason overrides the grant kind's default",
+      "policy": {
+        "format": 1,
+        "rules": [
+          {
+            "feature": "book.export",
+            "plan": "free",
+            "grant": "none",
+            "reason": "book-export-retired"
+          }
+        ]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "book-export-retired" }
+    },
+
+    {
+      "name": "tier condition: a premium template is Locked for the free plan",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.template", "plan": "free", "grant": "full" },
+          {
+            "feature": "book.template",
+            "plan": "free",
+            "when": { "templateTier": "premium" },
+            "grant": "none",
+            "reason": "premium-template"
+          }
+        ]
+      },
+      "request": { "feature": "book.template", "templateId": "gilded-diwali", "templateTier": "premium" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "premium-template" }
+    },
+    {
+      "name": "tier condition: a non-premium template falls through to the blanket rule and is Allowed",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.template", "plan": "free", "grant": "full" },
+          {
+            "feature": "book.template",
+            "plan": "free",
+            "when": { "templateTier": "premium" },
+            "grant": "none",
+            "reason": "premium-template"
+          }
+        ]
+      },
+      "request": { "feature": "book.template", "templateId": "diwali", "templateTier": "evergreen" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "tier condition: no tier at all also falls through to the blanket rule and is Allowed",
+      "policy": {
+        "format": 1,
+        "rules": [
+          { "feature": "book.template", "plan": "free", "grant": "full" },
+          {
+            "feature": "book.template",
+            "plan": "free",
+            "when": { "templateTier": "premium" },
+            "grant": "none",
+            "reason": "premium-template"
+          }
+        ]
+      },
+      "request": { "feature": "book.template", "templateId": "heirloom" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "tier condition: rule specificity does not depend on array order",
+      "policy": {
+        "format": 1,
+        "rules": [
+          {
+            "feature": "book.template",
+            "plan": "free",
+            "when": { "templateTier": "premium" },
+            "grant": "none",
+            "reason": "premium-template"
+          },
+          { "feature": "book.template", "plan": "free", "grant": "full" }
+        ]
+      },
+      "request": { "feature": "book.template", "templateId": "gilded-diwali", "templateTier": "premium" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "premium-template" }
+    },
+
+    {
+      "name": "an unreadable policy -- newer format than this build understands -- fails open, not closed",
+      "policy": { "format": 2, "rules": [{ "feature": "book.export", "plan": "free", "grant": "none" }] },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "an unreadable policy -- missing the rules array entirely -- also fails open",
+      "policy": { "format": 1 },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+    {
+      "name": "an unreadable policy -- not an object at all -- also fails open",
+      "policy": "not even json",
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "allowed" }
+    },
+
+    {
+      "name": "a rule whose grant this evaluator does not recognise is Locked, not silently granted",
+      "policy": {
+        "format": 1,
+        "rules": [{ "feature": "book.export", "plan": "free", "grant": { "someFutureKind": true } }]
+      },
+      "request": { "feature": "book.export" },
+      "context": { "plan": "free", "usage": {} },
+      "expect": { "kind": "locked", "reason": "malformed-rule" }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "rules": [
+    { "feature": "book.export", "plan": "free", "grant": "full" },
+    { "feature": "book.template", "plan": "free", "grant": "full" }
+  ]
+}
