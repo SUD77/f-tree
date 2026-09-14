@@ -106,15 +106,9 @@ class Nearby extends EventEmitter {
       return false;
     }
 
-    this.discovery = new Discovery({ identity: this.identity });
-    this.discovery.on('appeared', (peer) => this.emit('peers', this.peers()));
-    this.discovery.on('changed', () => this.emit('peers', this.peers()));
-    this.discovery.on('vanished', () => this.emit('peers', this.peers()));
-
     try {
-      await this.discovery.start();
+      if (!this.discovery) await this.#startDiscovery();
       this.discovery.advertise({ tcpPort: port, keyFingerprint: this.beaconKey.fingerprint });
-      this.discovery.query();
     } catch (error) {
       // A bound TCP port with no discovery is still usable through a QR code or a typed address,
       // which is most of the value. Saying so beats refusing to start.
@@ -123,6 +117,56 @@ class Nearby extends EventEmitter {
 
     this.emit('visibility', true);
     return true;
+  }
+
+  get browsing() {
+    return this.discovery !== null;
+  }
+
+  /**
+   * Looking for receivers without becoming one.
+   *
+   * What a sender needs is the list, and nothing else `setVisible` does: no TCP port, no beacon, no
+   * key. Before this the only way to see the list was to be visible, so a desktop that was only
+   * trying to *send* announced itself as a receiver while it did -- it appeared in every other
+   * device's list, and a person there could pick it and connect to a screen that was not asking to
+   * be sent anything. The protocol gives the two roles to two different devices for exactly this
+   * reason: "who may see me" belongs to the one that has agreed to receive.
+   *
+   * Binds the discovery socket only. Nothing is announced, and a QUERY from here says nothing about
+   * who is asking. Turning it off while visible changes nothing, because visibility owns the
+   * socket then.
+   */
+  async setBrowsing(browsing) {
+    if (!browsing) {
+      if (!this.visible) this.#closeDiscovery();
+      return this.browsing;
+    }
+    if (!this.discovery) {
+      try {
+        await this.#startDiscovery();
+      } catch (error) {
+        this.#closeDiscovery();
+        this.emit('problem', { problem: PROBLEM.NETWORK, detail: error.message });
+      }
+    }
+    return this.browsing;
+  }
+
+  async #startDiscovery() {
+    this.discovery = new Discovery({ identity: this.identity });
+    this.discovery.on('appeared', () => this.emit('peers', this.peers()));
+    this.discovery.on('changed', () => this.emit('peers', this.peers()));
+    this.discovery.on('vanished', () => this.emit('peers', this.peers()));
+    await this.discovery.start();
+    this.discovery.query();
+  }
+
+  #closeDiscovery() {
+    if (!this.discovery) return;
+    this.discovery.close();
+    this.discovery = null;
+    this.emit('peers', []);
   }
 
   peers() {
@@ -300,10 +344,7 @@ class Nearby extends EventEmitter {
   }
 
   #teardown() {
-    if (this.discovery) {
-      this.discovery.close();
-      this.discovery = null;
-    }
+    this.#closeDiscovery();
     if (this.server) {
       this.server.close();
       this.server = null;

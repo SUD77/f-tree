@@ -59,6 +59,34 @@ test('switching visibility off gives the socket back', async () => {
   assert.equal(nearby.beaconKey, null);
 });
 
+test('a sender can look for receivers without becoming one', async () => {
+  // The list without the rest of visibility: no port, no key, no beacon. A desktop that is only
+  // trying to send must not appear in anybody else's list while it does.
+  const receiver = new Nearby({ directory: scratch('browse-receiver') });
+  const sender = new Nearby({ directory: scratch('browse-sender') });
+  await receiver.setVisible(true);
+  await sender.setBrowsing(true);
+
+  assert.equal(sender.visible, false);
+  assert.equal(sender.server, null);
+  assert.equal(sender.beaconKey, null);
+  assert.equal(sender.discovery.announcement, null, 'a browsing sender announced itself');
+
+  // Two copies on one machine see each other (discovery.test.js); give the start burst its moment.
+  const until = Date.now() + 4000;
+  while (Date.now() < until && !sender.peers().some((p) => p.key === receiver.identity.deviceId.toString('hex'))) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(sender.peers().some((p) => p.key === receiver.identity.deviceId.toString('hex')),
+    'the browsing sender never saw the receiver');
+  assert.ok(!receiver.peers().some((p) => p.key === sender.identity.deviceId.toString('hex')),
+    'the receiver can see a device that is only browsing');
+
+  await sender.setBrowsing(false);
+  assert.equal(sender.discovery, null);
+  await receiver.setVisible(false);
+});
+
 test('a device has a name it did not take from the machine', () => {
   // Never the hostname. A default of "priya-macbook" would broadcast a real person's name to every
   // stranger on a shared network, twice a second, without ever saying that is what it did.
