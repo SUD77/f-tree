@@ -7,9 +7,12 @@ import com.vibethroughcode.ftree.nearby.wire.NearbyPlatform
 import com.vibethroughcode.ftree.nearby.wire.NearbyProblem
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol
 import com.vibethroughcode.ftree.nearby.wire.Offer
+import com.vibethroughcode.ftree.nearby.wire.QrLink
 import com.vibethroughcode.ftree.transfer.ImportProblem
 import java.io.File
+import java.io.OutputStream
 import java.math.BigInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,13 +35,21 @@ sealed interface NearbyState {
     /** Visible and looking, with nothing in progress. */
     data class Browsing(val peers: List<NearbyPeer>) : NearbyState
 
-    data class Connecting(val peer: NearbyPeer) : NearbyState
+    /** [name] is the peer's announced name, or the typed address when there is no announcement. */
+    data class Connecting(val name: String) : NearbyState
 
     /** Both devices should be showing [sas]; somebody has to say whether they match. */
     data class ConfirmingCode(val sas: String, val sending: Boolean) : NearbyState
 
-    /** Something has arrived and is waiting to be accepted. The counts are the sender's claim. */
-    data class Reviewing(val offer: Offer, val fromName: String) : NearbyState
+    /**
+     * Something has arrived and is waiting to be accepted. The counts are the sender's claim.
+     *
+     * [code] is the six digits this side showed, repeated at the moment of accepting — carried in
+     * the state rather than remembered by the screen, because the sender can confirm faster than a
+     * screen observes the state in between. Null when the sender scanned this device's code, in
+     * which case no digits were ever compared.
+     */
+    data class Reviewing(val offer: Offer, val fromName: String, val code: String?) : NearbyState
 
     data class Sending(val done: Long, val total: Long) : NearbyState
     data class Receiving(val done: Long, val total: Long) : NearbyState
@@ -46,6 +57,7 @@ sealed interface NearbyState {
     /** The bytes are whole and written; the caller now runs the existing import. */
     data class Arrived(val file: File, val suggestedFileName: String) : NearbyState
 
+    /** The last byte left and the receiver could read it; it is now in the other device's review. */
     data object Sent : NearbyState
 
     data class Failed(
@@ -84,14 +96,32 @@ class NearbyRepository(
     private val _peers = MutableStateFlow<List<NearbyPeer>>(emptyList())
     val peers: StateFlow<List<NearbyPeer>> = _peers.asStateFlow()
 
+    /** Where this device can be reached while it is visible, for the other device to type. */
+    data class Listening(val address: String?, val port: Int)
+
+    private val _listening = MutableStateFlow<Listening?>(null)
+    val listening: StateFlow<Listening?> = _listening.asStateFlow()
+
+    /**
+     * One transfer at a time, in either direction, claimed atomically.
+     *
+     * Two connections arriving together must not both see "nobody is busy". The one that loses is
+     * told BUSY — and nothing it does may touch the transfer that won: not its state, not its file,
+     * not the reference the accept button reaches it through.
+     */
+    private val engaged = AtomicBoolean(false)
+
+    /** Who is sending to us, from their HELLO; remembered once what they sent proves readable. */
+    private var incomingFrom: Pair<String, String>? = null
+
     private var visible = false
     private var beaconPrivate: BigInteger? = null
     private var beaconPublic: BigInteger? = null
     private var sweeper: Job? = null
 
-    private var sending: NearbySendTransfer? = null
-    private var receiving: NearbyReceiveTransfer? = null
-    private var partFile: File? = null
+    @Volatile private var sending: NearbySendTransfer? = null
+    @Volatile private var receiving: NearbyReceiveTransfer? = null
+    @Volatile private var partFile: File? = null
 
     /**
      * Becomes visible, or stops.
@@ -120,6 +150,7 @@ class NearbyRepository(
         beaconPublic = public
 
         val port = transport.startReceiving { channel -> onIncoming(channel) }
+        _listening.value = Listening(transport.localAddress(), port)
 
         transport.startDiscovery { beacon, address ->
             if (beacon.messageType == NearbyProtocol.BEACON_GOODBYE) {
@@ -166,6 +197,7 @@ class NearbyRepository(
         transport.stopReceiving()
         peerTable.clear()
         _peers.value = emptyList()
+        _listening.value = null
         beaconPrivate = null
         beaconPublic = null
         visible = false
@@ -173,6 +205,10 @@ class NearbyRepository(
         receiving?.cancel()
         sending = null
         receiving = null
+        incomingFrom = null
+        partFile?.takeIf { it.name.endsWith(".part") }?.delete()
+        partFile = null
+        engaged.set(false)
         _state.value = if (preferences.enabled.value) {
             NearbyState.Browsing(emptyList())
         } else {
@@ -204,18 +240,78 @@ class NearbyRepository(
     }
 
     /**
-     * Sends a `.ftree` the caller has already exported to a file.
+     * Back to the list after a transfer has ended, well or badly. Only a finished state can be
+     * dismissed: a transfer in progress is stopped with [cancel], which says so to the other side.
+     */
+    fun dismiss() {
+        val current = _state.value
+        if (current is NearbyState.Sent || current is NearbyState.Failed) {
+            _state.value = if (preferences.enabled.value) {
+                NearbyState.Browsing(_peers.value)
+            } else {
+                NearbyState.Disabled
+            }
+        }
+    }
+
+    /**
+     * Sends a `.ftree` the caller has already exported to a file, to a device picked from the list.
      *
      * A file rather than a live export, so the size and the digest are known before anything is
      * offered — and, the reason that actually matters, so no database transaction is held open
      * across a network for minutes.
      */
     fun send(peer: NearbyPeer, outgoing: OutgoingFile, pairingToken: ByteArray = Handshake.NO_TOKEN) {
+        startSending(
+            address = peer.address,
+            port = peer.port,
+            name = peer.displayName,
+            expectedFingerprint = peer.keyFingerprint,
+            outgoing = outgoing,
+            pairingToken = pairingToken,
+            onSent = { preferences.remember(peer.key, peer.displayName) },
+        )
+    }
+
+    /**
+     * Sends to an address somebody typed, for a network that drops discovery.
+     *
+     * There is no beacon, so there is no fingerprint to hold the other end to; the six digits are
+     * the only check, which is why this path can never skip them. Only a private address is taken,
+     * the same rule a scanned code is held to: a public one is either a mistake or an attempt to
+     * make this phone post somebody's family to the internet.
+     */
+    fun sendTo(address: String, port: Int, outgoing: OutgoingFile) {
+        if (!QrLink.isPrivateAddress(address) || port !in 1..65535) {
+            _state.value = NearbyState.Failed(NearbyProblem.NETWORK)
+            return
+        }
+        startSending(
+            address = address,
+            port = port,
+            name = "$address:$port",
+            expectedFingerprint = null,
+            outgoing = outgoing,
+            pairingToken = Handshake.NO_TOKEN,
+            onSent = {},
+        )
+    }
+
+    private fun startSending(
+        address: String,
+        port: Int,
+        name: String,
+        expectedFingerprint: ByteArray?,
+        outgoing: OutgoingFile,
+        pairingToken: ByteArray,
+        onSent: () -> Unit,
+    ) {
         if (!preferences.enabled.value) {
             _state.value = NearbyState.Disabled
             return
         }
-        _state.value = NearbyState.Connecting(peer)
+        if (!engaged.compareAndSet(false, true)) return
+        _state.value = NearbyState.Connecting(name)
 
         scope.launch(Dispatchers.IO) {
             val transfer = NearbySendTransfer(
@@ -223,7 +319,7 @@ class NearbyRepository(
                 outgoing = outgoing,
                 pairedByQr = !pairingToken.contentEquals(Handshake.NO_TOKEN),
                 pairingToken = pairingToken,
-                expectedFingerprint = peer.keyFingerprint,
+                expectedFingerprint = expectedFingerprint,
                 listener = object : NearbyTransferListener {
                     override fun onCode(sas: String) {
                         _state.value = NearbyState.ConfirmingCode(sas, sending = true)
@@ -240,32 +336,50 @@ class NearbyRepository(
             )
             sending = transfer
 
-            val channel = try {
-                transport.connect(peer.address, peer.port, NearbyProtocol.CONNECT_TIMEOUT_MS)
-            } catch (_: Exception) {
-                _state.value = NearbyState.Failed(NearbyProblem.NETWORK)
-                sending = null
-                return@launch
-            }
+            try {
+                val channel = try {
+                    transport.connect(address, port, NearbyProtocol.CONNECT_TIMEOUT_MS)
+                } catch (_: Exception) {
+                    _state.value = NearbyState.Failed(NearbyProblem.NETWORK)
+                    return@launch
+                }
 
-            val problem = transfer.run(channel)
-            if (problem == null) {
-                preferences.remember(peer.key)
-                _state.value = NearbyState.Sent
+                val problem = transfer.run(channel)
+                if (problem == null) {
+                    onSent()
+                    _state.value = NearbyState.Sent
+                }
+            } finally {
+                sending = null
+                engaged.set(false)
             }
-            sending = null
         }
     }
 
     /** Called once the importer has read what arrived, so the sender learns whether it was readable. */
     fun importFinished(problem: ImportProblem?) {
-        receiving?.finish(problem)
+        val transfer = receiving
+        val file = partFile
+        if (problem == null) incomingFrom?.let { (id, name) -> preferences.remember(id, name) }
         receiving = null
         partFile = null
+        incomingFrom = null
+        // Off the main thread: RESULT is a socket write, and the caller is a screen. On the main
+        // thread Android refuses it, the refusal is swallowed as a failed courtesy, and the sender
+        // — whose file arrived perfectly — is told the connection dropped.
+        scope.launch(Dispatchers.IO) {
+            transfer?.finish(problem)
+            file?.delete()
+            engaged.set(false)
+        }
     }
 
     private fun onIncoming(channel: NearbyChannel) {
         scope.launch(Dispatchers.IO) {
+            if (!engaged.compareAndSet(false, true)) {
+                refuseAsBusy(channel)
+                return@launch
+            }
             // `.part` until it is whole, then renamed — the same pattern `UpdateClient.download`
             // uses, and for the same reason: a half-written file that looks finished is worse than
             // no file at all.
@@ -273,50 +387,61 @@ class NearbyRepository(
             val part = File(downloadDirectory, "nearby-${clock()}.ftree.part")
             partFile = part
 
-            val busy = receiving != null || sending != null
             var failed = false
+            var transfer: NearbyReceiveTransfer? = null
+            var shownCode: String? = null
+            fun scanned() = (receiving?.sender?.flags ?: 0) and NearbyProtocol.FLAG_PAIRED_BY_QR != 0
+            try {
+                part.outputStream().use { sink ->
+                    val t = NearbyReceiveTransfer(
+                        identity = identity,
+                        beaconPrivateKey = beaconPrivate ?: return@use,
+                        beaconPublicKey = beaconPublic ?: return@use,
+                        sink = sink,
+                        listener = object : NearbyTransferListener {
+                            override fun onCode(sas: String) {
+                                // A sender that scanned this screen never sees digits, so showing
+                                // them here would ask somebody to compare against nothing.
+                                if (scanned()) return
+                                shownCode = sas
+                                _state.value = NearbyState.ConfirmingCode(sas, sending = false)
+                            }
 
-            val transfer = part.outputStream().use { sink ->
-                val t = NearbyReceiveTransfer(
-                    identity = identity,
-                    beaconPrivateKey = beaconPrivate ?: return@use null,
-                    beaconPublicKey = beaconPublic ?: return@use null,
-                    sink = sink,
-                    busy = busy,
-                    listener = object : NearbyTransferListener {
-                        override fun onCode(sas: String) {
-                            _state.value = NearbyState.ConfirmingCode(sas, sending = false)
-                        }
+                            override fun onOffer(offer: Offer) {
+                                // The name the sender gave in its HELLO, which is on the
+                                // connection itself — not a guess from an address the peer list
+                                // may never have seen, as it would not for a typed address.
+                                val name = receiving?.sender?.displayName.orEmpty()
+                                _state.value = NearbyState.Reviewing(offer, name, shownCode.takeUnless { scanned() })
+                            }
 
-                        override fun onOffer(offer: Offer) {
-                            val name = peerTable.list()
-                                .firstOrNull { it.address == channel.remoteAddress }
-                                ?.displayName
-                                ?: ""
-                            _state.value = NearbyState.Reviewing(offer, name)
-                        }
+                            override fun onProgress(done: Long, total: Long) {
+                                _state.value = NearbyState.Receiving(done, total)
+                            }
 
-                        override fun onProgress(done: Long, total: Long) {
-                            _state.value = NearbyState.Receiving(done, total)
-                        }
-
-                        override fun onFailed(problem: NearbyProblem, importProblem: ImportProblem?) {
-                            failed = true
-                            _state.value = NearbyState.Failed(problem, importProblem)
-                        }
-                    },
-                )
-                receiving = t
-                val problem = t.run(channel)
-                failed = failed || problem != null
-                t
+                            override fun onFailed(problem: NearbyProblem, importProblem: ImportProblem?) {
+                                failed = true
+                                _state.value = NearbyState.Failed(problem, importProblem)
+                            }
+                        },
+                    )
+                    receiving = t
+                    transfer = t
+                    val problem = t.run(channel)
+                    failed = failed || problem != null
+                }
+            } catch (_: Exception) {
+                failed = true
+                _state.value = NearbyState.Failed(NearbyProblem.NO_SPACE)
             }
 
-            if (transfer == null || failed) {
+            val done = transfer
+            if (done == null || failed) {
                 // Nothing partial is left for somebody to find later and try to open.
                 part.delete()
                 partFile = null
                 receiving = null
+                engaged.set(false)
                 runCatching { channel.close() }
                 return@launch
             }
@@ -326,14 +451,45 @@ class NearbyRepository(
                 part.delete()
                 _state.value = NearbyState.Failed(NearbyProblem.NO_SPACE)
                 receiving = null
+                partFile = null
+                engaged.set(false)
                 return@launch
             }
             partFile = whole
+            incomingFrom = done.sender?.let { it.deviceId.hex() to it.displayName }
             _state.value = NearbyState.Arrived(
                 file = whole,
-                suggestedFileName = transfer.incomingOffer?.suggestedFileName ?: whole.name,
+                suggestedFileName = done.incomingOffer?.suggestedFileName ?: whole.name,
             )
         }
+    }
+
+    /**
+     * Says BUSY and closes, touching nothing that belongs to the transfer in progress.
+     *
+     * A refusal somebody can read beats a hang they cannot, so the second connection is answered
+     * rather than dropped — by a throwaway transfer whose sink discards and whose listener is
+     * deaf, because its failure is not the story the screen is telling.
+     */
+    private fun refuseAsBusy(channel: NearbyChannel) {
+        val private = beaconPrivate
+        val public = beaconPublic
+        if (private != null && public != null) {
+            val discard = object : OutputStream() {
+                override fun write(b: Int) = Unit
+            }
+            runCatching {
+                NearbyReceiveTransfer(
+                    identity = identity,
+                    beaconPrivateKey = private,
+                    beaconPublicKey = public,
+                    sink = discard,
+                    busy = true,
+                    listener = object : NearbyTransferListener {},
+                ).run(channel)
+            }
+        }
+        runCatching { channel.close() }
     }
 
     /**

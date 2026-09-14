@@ -1,13 +1,16 @@
 package com.vibethroughcode.ftree.nearby
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import com.vibethroughcode.ftree.nearby.wire.Beacon
 import com.vibethroughcode.ftree.nearby.wire.DeviceId
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol
+import com.vibethroughcode.ftree.nearby.wire.QrLink
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.DatagramPacket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
@@ -38,6 +41,9 @@ class LanTransport(
 
     private val wifi = context.applicationContext
         .getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+    private val connectivity = context.applicationContext
+        .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     private var multicastLock: WifiManager.MulticastLock? = null
     private var serverSocket: ServerSocket? = null
@@ -188,6 +194,20 @@ class LanTransport(
         runCatching { socket.tcpNoDelay = true }
         return SocketChannel(socket)
     }
+
+    /**
+     * Read from the active network's link properties — ACCESS_NETWORK_STATE, which the app already
+     * declares — rather than from `WifiManager.connectionInfo`, which is deprecated and on recent
+     * releases answers 0.0.0.0 without a location permission this feature deliberately never asks for.
+     */
+    override fun localAddress(): String? = runCatching {
+        val network = connectivity.activeNetwork ?: return null
+        connectivity.getLinkProperties(network)?.linkAddresses
+            ?.map { it.address }
+            ?.filterIsInstance<Inet4Address>()
+            ?.mapNotNull { it.hostAddress }
+            ?.firstOrNull { QrLink.isPrivateAddress(it) }
+    }.getOrNull()
 
     override fun close() {
         stopAnnouncing()

@@ -107,8 +107,14 @@ class TransferViewModel(
 
     fun clearOutcome() { _outcome.value = null }
 
-    /** Reads a chosen file and works out what importing it would do. Writes nothing. */
-    fun prepareImport(source: Uri) {
+    /**
+     * Reads a chosen file and works out what importing it would do. Writes nothing.
+     *
+     * [onPrepared] hears whether the file could be read — null when the review is now open. Nearby
+     * sharing uses it to tell the sender, which is the only thing it adds: a file that arrived over
+     * the network is read by exactly the same call as one picked from a folder.
+     */
+    fun prepareImport(source: Uri, onPrepared: (ImportProblem?) -> Unit = {}) {
         viewModelScope.launch {
             _busy.value = true
             runCatching {
@@ -117,10 +123,11 @@ class TransferViewModel(
             }.onSuccess { prepared ->
                 _decisions.value = prepared.defaultDecisions
                 _plan.value = prepared
+                onPrepared(null)
             }.onFailure { failure ->
-                _outcome.value = TransferOutcome.ImportFailed(
-                    (failure as? ImportFailure)?.problem ?: ImportProblem.UNREADABLE
-                )
+                val problem = (failure as? ImportFailure)?.problem ?: ImportProblem.UNREADABLE
+                _outcome.value = TransferOutcome.ImportFailed(problem)
+                onPrepared(problem)
             }
             _busy.value = false
         }

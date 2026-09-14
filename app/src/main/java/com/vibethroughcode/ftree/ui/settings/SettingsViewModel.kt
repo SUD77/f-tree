@@ -5,12 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.vibethroughcode.ftree.data.ChartPreferences
 import com.vibethroughcode.ftree.data.KinshipLanguage
 import com.vibethroughcode.ftree.data.KinshipPreferences
+import com.vibethroughcode.ftree.nearby.NearbyIdentity
+import com.vibethroughcode.ftree.nearby.NearbyPreferences
+import com.vibethroughcode.ftree.nearby.NearbyRepository
+import com.vibethroughcode.ftree.nearby.wire.NearbyNames
 import com.vibethroughcode.ftree.update.AvailableUpdate
 import com.vibethroughcode.ftree.update.UpdatePreferences
 import com.vibethroughcode.ftree.update.UpdateRepository
 import com.vibethroughcode.ftree.update.UpdateState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -19,7 +25,44 @@ class SettingsViewModel(
     private val chart: ChartPreferences,
     private val kinship: KinshipPreferences,
     private val updates: UpdateRepository,
+    private val nearbyPreferences: NearbyPreferences,
+    private val nearbyIdentity: NearbyIdentity,
+    private val nearbyRepository: NearbyRepository,
 ) : ViewModel() {
+
+    val nearbyEnabled: StateFlow<Boolean> = nearbyPreferences.enabled
+
+    /**
+     * Turning it off also stops anything in progress. It does not clear the devices remembered:
+     * those are something somebody built, not a cache, and forgetting them is its own button.
+     */
+    fun setNearbyEnabled(enabled: Boolean) {
+        nearbyPreferences.setEnabled(enabled)
+        nearbyRepository.onEnabledChanged(enabled)
+    }
+
+    private val _deviceName = MutableStateFlow(nearbyIdentity.displayName)
+    val deviceName: StateFlow<String> = _deviceName.asStateFlow()
+
+    /** The name this device is generated, for the hint in the rename dialog. */
+    val generatedDeviceName: String
+        get() = NearbyNames.friendlyName(nearbyIdentity.deviceId.bytes)
+
+    /** Committed once, on Done: the name is broadcast, and half of one should never be. */
+    fun renameDevice(name: String) {
+        nearbyIdentity.chosenName = name.ifBlank { null }
+        _deviceName.value = nearbyIdentity.displayName
+    }
+
+    val trustedOnly: StateFlow<Boolean> = nearbyPreferences.trustedOnly
+
+    fun setTrustedOnly(value: Boolean) = nearbyPreferences.setTrustedOnly(value)
+
+    val trustedDevices: StateFlow<Map<String, String>> = nearbyPreferences.trusted
+
+    fun forgetDevice(deviceId: String) = nearbyPreferences.forget(deviceId)
+
+    fun forgetAllDevices() = nearbyPreferences.forgetAll()
 
     val updatesEnabled: StateFlow<Boolean> = preferences.enabled
     val updateState: StateFlow<UpdateState> = updates.state

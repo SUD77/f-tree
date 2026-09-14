@@ -304,7 +304,7 @@
     <string name="settings_section_about">About</string>
 
     <string name="settings_updates_toggle">Check for updates</string>
-    <string name="settings_updates_explainer">Off unless you turn it on. This is the only thing in f-tree that uses the network — it asks GitHub whether a newer release exists. Your tree is never sent anywhere.</string>
+    <string name="settings_updates_explainer">Off unless you turn it on. It asks GitHub whether a newer release exists, and sends nothing about you or your tree.</string>
     <string name="settings_updates_keeps_data">Updating installs over this copy, so your family stays exactly as it is. Nothing to export first.</string>
     <string name="settings_updates_check_now">Check now</string>
     <string name="settings_updates_checking">Looking for a newer version…</string>
@@ -359,7 +359,113 @@
     <string name="settings_beta_dialog_confirm">Offer me betas</string>
     <string name="settings_beta_dialog_cancel">Not now</string>
     <string name="settings_permissions_title">Permissions</string>
-    <string name="settings_permissions_body">Two, both only for the updater above: internet access to ask GitHub about releases, and permission to install an update. Nothing else in the app touches the network.</string>
+    <string name="settings_permissions_body">Five, none of which asks you anything. Two are for the updater: internet access to ask GitHub about releases, and permission to install an update. Three are for nearby sharing: to see the Wi-Fi network, to hear other devices on it, and to check a connection exists. Nothing leaves the device except when you deliberately send it, to a device you can see, on a network you are already on, with no account and nothing in between.</string>
+
+    <!-- Nearby sharing -->
+    <string name="settings_section_nearby">Nearby sharing</string>
+    <string name="settings_nearby_toggle">Share with nearby devices</string>
+    <string name="settings_nearby_explainer">Off unless you turn it on. Sends your tree straight to a phone or computer on the same Wi-Fi — no account, nothing in between — and only after the other device says yes. Nothing can see this device until you open one of the screens below.</string>
+    <string name="settings_nearby_send">Send to a nearby device</string>
+    <string name="settings_nearby_send_body">Pick a device on this Wi-Fi and check the same six digits appear on both screens.</string>
+    <string name="settings_nearby_receive">Receive from a nearby device</string>
+    <string name="settings_nearby_receive_body">What arrives goes through the same review as an imported file. Nothing is added until you confirm.</string>
+    <string name="settings_nearby_name_title">This device appears as</string>
+    <string name="settings_nearby_name_edit">Rename</string>
+    <string name="settings_nearby_name_body">Seen by other devices on the Wi-Fi while a nearby screen is open. The name is made up on purpose, so it doesn\'t announce yours.</string>
+    <string name="settings_nearby_name_dialog_title">Name this device</string>
+    <string name="settings_nearby_name_dialog_hint">Leave empty for %1$s</string>
+    <string name="settings_nearby_name_dialog_done">Done</string>
+    <string name="settings_nearby_name_dialog_cancel">Cancel</string>
+    <string name="settings_nearby_trusted_only">Only list devices I\'ve used</string>
+    <string name="settings_nearby_trusted_only_body">Hides devices this one has never exchanged a tree with. Other devices can still see this one.</string>
+    <string name="settings_nearby_trusted_title">Devices you\'ve used</string>
+    <string name="settings_nearby_trusted_none">None yet. A device is added after a transfer completes.</string>
+    <string name="settings_nearby_forget">Forget</string>
+    <string name="settings_nearby_forget_named">Forget %1$s</string>
+    <string name="settings_nearby_forget_all">Forget all</string>
+
+    <string name="nearby_send_title">Send to a nearby device</string>
+    <string name="nearby_receive_title">Receive from a nearby device</string>
+    <string name="nearby_close">Close</string>
+    <string name="nearby_off">Nearby sharing is off. Turn it on in Settings.</string>
+    <string name="nearby_appears_as">This device appears as %1$s</string>
+    <string name="nearby_looking">Looking for devices on this Wi-Fi…</string>
+    <plurals name="nearby_found_count">
+        <item quantity="one">%d device nearby</item>
+        <item quantity="other">%d devices nearby</item>
+    </plurals>
+    <string name="nearby_none_yet">On the other device, open Receive from a nearby device. It appears here when it is ready.</string>
+    <string name="nearby_type_address">Can\'t see it? Type its address</string>
+    <string name="nearby_address_label">Address shown on the other device</string>
+    <string name="nearby_address_invalid">That doesn\'t look like a local address and port, like 192.168.1.20:43121.</string>
+    <string name="nearby_address_send">Send</string>
+    <string name="nearby_ready">Ready to receive</string>
+    <string name="nearby_ready_body">On the other device, open Send to a nearby device and choose %1$s.</string>
+    <string name="nearby_ready_address">Or type this address there:</string>
+    <string name="nearby_no_address">This device isn\'t on a Wi-Fi network, so nothing nearby can reach it.</string>
+    <string name="nearby_connecting">Connecting to %1$s…</string>
+    <string name="nearby_code_title">Check the other screen</string>
+    <string name="nearby_code_sender">Does the other device show exactly these six digits?</string>
+    <string name="nearby_code_receiver">The other device should show exactly these six digits. The sender will say whether they match.</string>
+    <string name="nearby_code_match">They match</string>
+    <string name="nearby_code_differ">They\'re different</string>
+    <string name="nearby_code_warning">If they\'re different, stop. Another device may be in the middle.</string>
+    <string name="nearby_code_digits_description">Code %1$s</string>
+    <string name="nearby_offer_title">%1$s wants to send you a family tree</string>
+    <string name="nearby_offer_title_unnamed">A nearby device wants to send you a family tree</string>
+    <string name="nearby_offer_counts">%1$s · %2$s · %3$s · %4$s</string>
+    <plurals name="nearby_offer_people">
+        <item quantity="one">%d person</item>
+        <item quantity="other">%d people</item>
+    </plurals>
+    <plurals name="nearby_offer_relationships">
+        <item quantity="one">%d relationship</item>
+        <item quantity="other">%d relationships</item>
+    </plurals>
+    <plurals name="nearby_offer_photos">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
+    <string name="nearby_offer_claim">These are the sender\'s figures. You\'ll see every person before anything is added to your tree.</string>
+    <string name="nearby_offer_code">Only accept if both screens showed %1$s.</string>
+    <string name="nearby_offer_accept">Receive</string>
+    <string name="nearby_offer_decline">Decline</string>
+    <string name="nearby_sending">Sending… %1$d%%</string>
+    <string name="nearby_receiving">Receiving… %1$d%%</string>
+    <string name="nearby_cancel">Cancel</string>
+    <string name="nearby_arrived">Received. Opening the review…</string>
+    <string name="nearby_sent_title">Sent</string>
+    <string name="nearby_sent_body">The other device is reviewing it now. Nothing is added to their tree until they confirm.</string>
+    <string name="nearby_done">Done</string>
+    <string name="nearby_back">Back</string>
+    <string name="nearby_failed_title">It didn\'t go</string>
+    <string name="nearby_failed_alarm_title">Stopped for your safety</string>
+
+    <string name="nearby_problem_protocol_too_new">The other device has a newer f-tree. Update this one to exchange trees with it.</string>
+    <string name="nearby_problem_protocol_too_old">The other device has an older f-tree. Update it to exchange trees with this one.</string>
+    <string name="nearby_problem_not_a_peer">Something answered at that address, but it isn\'t f-tree.</string>
+    <string name="nearby_problem_malformed">The other device sent something this one couldn\'t read.</string>
+    <string name="nearby_problem_unexpected">The other device said something out of turn, so the transfer stopped.</string>
+    <string name="nearby_problem_bad_key">The other device sent a key that isn\'t safe to use, so the transfer stopped.</string>
+    <string name="nearby_problem_wrong_device">A different device answered from that address than the one you picked. Nothing was sent.</string>
+    <string name="nearby_problem_bad_pairing">The code that was scanned doesn\'t match this screen any more. Scan the current one, or pick the device from the list.</string>
+    <string name="nearby_problem_decrypt">A message didn\'t pass its check on arrival, so the transfer stopped. Someone may have tampered with it.</string>
+    <string name="nearby_problem_codes_differ">The six digits didn\'t match, so nothing was sent. Another device may have been in the middle — don\'t retry on this network.</string>
+    <string name="nearby_problem_key_not_promised">The other device changed its key partway through the handshake, which only happens when another device is in the middle. Nothing was sent.</string>
+    <string name="nearby_problem_declined">The other device said no.</string>
+    <string name="nearby_problem_timed_out">Nobody answered in time.</string>
+    <string name="nearby_problem_cancelled">The transfer was cancelled.</string>
+    <string name="nearby_problem_connection_lost">The connection dropped. Check both devices are still on the same Wi-Fi.</string>
+    <string name="nearby_problem_too_large">The tree is too large for the other device to accept.</string>
+    <string name="nearby_problem_no_space">There isn\'t room on this device for that tree.</string>
+    <string name="nearby_problem_incomplete">The transfer ended before all of the tree arrived.</string>
+    <string name="nearby_problem_mismatch">What arrived isn\'t what was sent, so it was thrown away.</string>
+    <string name="nearby_problem_tree_too_new">The other device has an older f-tree that can\'t read this tree. Update it first.</string>
+    <string name="nearby_problem_import_refused">The other device couldn\'t read what was sent.</string>
+    <string name="nearby_problem_network">Couldn\'t reach the other device. Check both are on the same Wi-Fi — guest networks often keep devices apart.</string>
+    <string name="nearby_problem_permission">Android didn\'t allow the connection.</string>
+    <string name="nearby_problem_busy">The other device is busy with another transfer. Try again in a moment.</string>
+    <string name="nearby_problem_unknown">The other device stopped.</string>
 
     <!-- Person detail -->
     <string name="person_show_on_tree">Show on the tree</string>
