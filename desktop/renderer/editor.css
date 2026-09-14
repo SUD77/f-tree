@@ -1273,6 +1273,32 @@
 .editor .prefs-row:has(.prefs-check:disabled) .prefs-label { color: var(--ink-faint); }
 
 /*
+ * Two columns wherever there is room for them: how the app reads on the left, and the three things
+ * that reach a network -- updates and nearby sharing -- together on the right.
+ *
+ * Measured, not assumed. The harness's budget is for the 900px window the app opens at, and a
+ * 1080p laptop at the scaling Windows and GNOME default to cannot give it one: on this project's own
+ * test laptop the window is about 754px tall, the dialog's body 457px, and one column of three
+ * sections is 547px. What scrolled out of sight was the Nearby section -- a setting that reaches a
+ * network, hidden at the bottom of the screen a reader opens to check exactly that. Side by side, the
+ * taller column is about 340px. Below 960px there is no room, and it goes back to one column.
+ */
+@media (min-width: 960px) {
+  .editor .prefs[open] { width: min(880px, calc(100vw - 48px)); }
+  .editor .prefs-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+  .editor .prefs-group:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
+  .editor .prefs-group:nth-child(2),
+  .editor .prefs-group:nth-child(3) { grid-column: 2; border-left: 1px solid var(--rule); }
+  .editor .prefs-group:nth-child(2) { grid-row: 1; border-top: 0; }
+  .editor .prefs-group:nth-child(3) { grid-row: 2; align-self: stretch; }
+}
+
+/*
  * The nearby row carries a second control under its note: the device name, which only means
  * something while the switch above it is on. A sub-label rather than a row of its own, so it reads
  * as part of that setting. (It is also why the dialog is 540px rather than 500: with a third
