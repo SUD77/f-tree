@@ -123,6 +123,16 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.exifinterface)
 
+    // QR quick-connect for nearby sharing (#172). ZXing core is pure Java with no transitive
+    // dependencies and no network; the app uses its QR reader and encoder and R8 discards the rest.
+    // CameraX is AndroidX, from the same family as everything above. Both buy convenience, not
+    // capability: a device with no camera, or with the permission refused, types the address and
+    // compares six digits instead.
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
