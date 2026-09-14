@@ -505,3 +505,41 @@ test('to256 is always 256 bytes, including when the value is short', () => {
   assert.equal(dh.to256(1n << 2039n)[0], 0);
   assert.throws(() => dh.to256(1n << 2048n), /wider than the group/);
 });
+
+// Frames, one at a time ----------------------------------------------------------------------
+
+test('a sealed frame that arrives in the same read as the keys is opened under them', () => {
+  // KEY_ACK is plaintext and carries what the keys are derived from, so the caller installs them
+  // only after reading it. A receiver that cancels as the digits appear sends a sealed ABORT
+  // straight after, and one TCP read can hold both. Opened eagerly, the ABORT was taken for
+  // plaintext and the sender reported a byte of ciphertext as the reason it stopped.
+  const { Connection } = require('./connection');
+  const framecrypto = require('./framecrypto');
+  const keys = { senderKey: Buffer.alloc(32, 7), receiverKey: Buffer.alloc(32, 9) };
+
+  const sealed = framecrypto.seal(
+    keys.receiverKey,
+    protocol.DIRECTION_RECEIVER_TO_SENDER,
+    0n,
+    protocol.TYPE_ABORT,
+    messages.Abort.encode({ problem: PROBLEM.CANCELLED }),
+  );
+  const oneRead = Buffer.concat([
+    encodeFrame(protocol.TYPE_KEY_ACK, Buffer.alloc(protocol.DH_PUBLIC_BYTES + 32, 1)),
+    encodeFrame(protocol.TYPE_ABORT, sealed),
+  ]);
+
+  const connection = new Connection({ write() {}, end() {}, destroy() {} }, {
+    sendDirection: protocol.DIRECTION_SENDER_TO_RECEIVER,
+    receiveDirection: protocol.DIRECTION_RECEIVER_TO_SENDER,
+  });
+  const seen = [];
+  for (const frame of connection.feed(oneRead)) {
+    seen.push(frame);
+    // What the sender does on KEY_ACK, between one frame and the next.
+    if (frame.type === protocol.TYPE_KEY_ACK) connection.secure(keys, Buffer.alloc(32));
+  }
+
+  assert.deepEqual(seen.map((frame) => frame.type), [protocol.TYPE_KEY_ACK, protocol.TYPE_ABORT]);
+  assert.equal(messages.Abort.decode(seen[1].payload).problem, PROBLEM.CANCELLED);
+});

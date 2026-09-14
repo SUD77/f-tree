@@ -79,16 +79,23 @@ class Connection {
   /**
    * Frames in, from one chunk of whatever size the network felt like.
    *
-   * Returns `{ type, payload }` objects with the payload already opened. A frame that will not open
+   * Yields `{ type, payload }` objects with the payload already opened. A frame that will not open
    * is fatal and throws: either the key is wrong -- a stale code, or somebody in between -- or the
    * bytes were altered, and there is nothing a retry could fix in either case.
+   *
+   * A generator, one frame at a time, and that is load-bearing. The keys arrive *inside* this
+   * stream: the caller handles KEY_ACK and only then calls `secure()`. Opened all at once, a chunk
+   * holding KEY_ACK and the sealed frame after it -- a receiver that cancels the moment the digits
+   * appear sends exactly that, and TCP may deliver both in one read -- read the second as plaintext,
+   * and the sender reported a random byte of ciphertext as its reason: "the other device stopped",
+   * instead of "they cancelled". Pulled lazily, each frame is judged under the keys the caller has
+   * installed by the time it is reached.
    */
-  feed(chunk, transcriptHash = null) {
-    const out = [];
+  *feed(chunk, transcriptHash = null) {
     for (const frame of this.reader.feed(chunk)) {
       if (!this.secured) {
         if (transcriptHash) transcriptHash.add(encodeFrame(frame.type, frame.payload));
-        out.push(frame);
+        yield frame;
         continue;
       }
       // The first sealed frame is the one that tells a stale pairing from a broken connection, and
@@ -111,9 +118,8 @@ class Connection {
       }
       this.openedOne = true;
       this.receiveSequence += 1n;
-      out.push({ type: frame.type, payload });
+      yield { type: frame.type, payload };
     }
-    return out;
   }
 
   close() {
