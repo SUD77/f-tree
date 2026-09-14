@@ -238,11 +238,21 @@ export function applyImport({ tree, plan, decisions, photos = new Map(),
       }
     }
 
-    // Photos first, and under names that cannot collide with ones already held.
+    /*
+     * Photos first, and under names that cannot collide with ones already held.
+     *
+     * Only saved for a record that can actually use one: somebody arriving new, or somebody
+     * merging into a local person who has no photo of their own. `filledFrom` never overwrites a
+     * photo that is already set, so saving one for anybody else would just sit in the tree's photo
+     * map unreferenced until the tree is closed.
+     */
     const photoFor = new Map();
     for (const record of document.people) {
       const entry = record.photo;
       if (!entry || !importedPhotos.has(entry)) continue;
+      const localId = merging.get(record.id);
+      const needsPhoto = localId == null || isBlank(byId.get(localId)?.photo);
+      if (!needsPhoto) continue;
       const name = freePhotoName(photos, entry);
       photos.set(name, importedPhotos.get(entry));
       photoFor.set(record.id, name);
