@@ -1107,7 +1107,7 @@ const publicQr = (link) => (link ? { text: link.text, address: link.address, por
 function arrivedName(raw) {
   const cleaned = String(raw ?? '')
     .replace(/[\\/]/g, ' ')
-    .replace(/[ --‪-‮⁦-⁩]/g, '')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 96);

@@ -191,7 +191,8 @@ test('the device name is the generated one until somebody chooses one', () => {
 test('a stored name is cleaned on the way back in, not only on the way out', () => {
   // The settings file is in a folder the reader can edit. A bidirectional override is the one
   // character that lets a device draw itself as another device, so it is stripped here too.
-  assert.strictEqual(normalise({ nearbyName: 'Ankit‮s phone' }).nearbyName, 'Ankits phone');
+  const override = String.fromCodePoint(0x202e); // written out: the character itself is invisible
+  assert.strictEqual(normalise({ nearbyName: `Ankit${override}s phone` }).nearbyName, 'Ankits phone');
   assert.strictEqual(normalise({ nearbyName: '  Study   desk ' }).nearbyName, 'Study desk');
   assert.ok(Buffer.byteLength(normalise({ nearbyName: 'ह'.repeat(40) }).nearbyName) <= 64);
 });
