@@ -196,10 +196,23 @@ class TreeImporterTest {
         )
         val archive = exportOf(theirs)
 
-        importInto(mine, archive)
+        // This tree as the first import of that file leaves it, with ids chosen so the copy is read
+        // back after the original. The old index kept whichever holder of the shared origin it
+        // read last, so an import from scratch passed or failed on the order of two random ids.
+        val mineOriginal = Person(id = "local-1-original", name = "Ankit")
+        val mineCopy = Person(id = "local-2-copy", name = "Ankit")
+        listOf(mineOriginal, mineCopy).forEach { mine.repository.addPerson(it) }
+        mine.db.personOriginDao().insertAll(
+            listOf(
+                PersonOrigin(mineOriginal.id, theirs.identity.treeId, original.id),
+                PersonOrigin(mineCopy.id, theirs.identity.treeId, copy.id),
+                PersonOrigin(mineCopy.id, theirs.identity.treeId, original.id),
+            ),
+        )
+
         repeat(3) { again ->
             val result = importInto(mine, archive)
-            assertEquals("import ${again + 2} added people again", 0, result.peopleAdded)
+            assertEquals("import ${again + 1} added people again", 0, result.peopleAdded)
         }
         assertEquals(2, mine.repository.allPeople().size)
     }
