@@ -18,6 +18,7 @@ family tree is modelled once you accept that families are not trees.
 - [Turned sideways](#turned-sideways)
 - [Accessibility](#accessibility)
 - [Updating in place](#updating-in-place)
+- [Nearby sharing](#nearby-sharing)
 - [Design decisions worth knowing](#design-decisions-worth-knowing)
 
 ---
@@ -28,7 +29,8 @@ family tree is modelled once you accept that families are not trees.
 data/       Room entities, DAOs, the repository, photo storage
 graph/      pure graph logic: traversal, relationship rules, chart layout
 transfer/   the .ftree format, export, import, duplicate matching
-update/     the optional updater — the only code that touches the network
+update/     the optional updater
+nearby/     nearby sharing: discovery, handshake, transfer — see docs/nearby-protocol.md
 ui/         Compose screens, one package per area
 ```
 
@@ -271,10 +273,11 @@ in words; Compact is the route *between* people that the charts could not offer.
 
 ## Updating in place
 
-`update/` is the only code in the app that opens a socket, and it is deliberately kept in one
-package so that claim is checkable by reading rather than by trust. It is off until switched on in
-Settings: `UpdateRepository` refuses to make a request while the preference is false, so "no network
-unless you ask for it" is a property of the code and not of the interface.
+`update/` is one of two packages in the app that open a socket — the other is `nearby/`, below —
+and each is deliberately kept in its own package so that claim is checkable by reading rather than
+by trust. The updater is off until switched on in Settings: `UpdateRepository` refuses to make a
+request while the preference is false, so "no network unless you ask for it" is a property of the
+code and not of the interface.
 
 **Why it exists.** Sideloading a new APK over the old one keeps the app's data directory — that is
 ordinary Android behaviour, and it is the whole point. Without an updater, moving to a new version
@@ -291,10 +294,24 @@ one — Android refuses it — and the only way to install it would be to uninst
 family with it. Checking here means that is refused by this app with an explanation, rather than
 discovered at the end of a download.
 
-The two permissions the app declares, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, exist only for
-this. The tree itself never goes near the network; there is no sync, no account, and no backend to
-have one with.
+`INTERNET` and `REQUEST_INSTALL_PACKAGES` exist only for this. They are two of the six permissions
+the app now declares — the other four belong to nearby sharing, below — and there is still no sync,
+no account, and no backend for either feature to answer to.
 
+## Nearby sharing
+
+`nearby/` is the app's other networked package, and the only other code that opens a socket. It is
+off until one of the two nearby screens is open: nothing is announced and nothing is listened for
+otherwise, and the receiver has to accept a transfer explicitly, by name, before a single byte of
+family data moves. What arrives is handed to the same importer that a file shared through a chat
+app already goes through — see [merge behaviour](ftree-format.md#merge-behaviour) — matching,
+conflicts, add-never-replace, so a transfer decides nothing about a family that file-based import
+did not already decide.
+
+The protocol itself — the beacon, the Diffie-Hellman handshake, the six-digit code, the frame
+layout — is written down in full in [nearby-protocol.md](nearby-protocol.md), because two
+independent implementations, this app's Kotlin and the desktop app's JavaScript, have to agree on
+it byte for byte rather than merely close enough.
 
 ---
 

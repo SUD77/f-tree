@@ -95,7 +95,8 @@ Full detail in [docs/building.md](docs/building.md).
 data/       Room entities, DAOs, the repository, photo storage
 graph/      pure graph logic: traversal, relationship rules, chart layout
 transfer/   the .ftree format, export, import, duplicate matching
-update/     the optional updater — the only code that touches the network
+update/     the optional updater
+nearby/     nearby sharing: discovery, handshake, transfer — see docs/nearby-protocol.md
 ui/         Compose screens, one package per area
 ```
 
