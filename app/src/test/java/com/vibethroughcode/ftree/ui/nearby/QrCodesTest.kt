@@ -51,6 +51,27 @@ class QrCodesTest {
     }
 
     @Test
+    fun `the desktop code is read by this scanner as the link it carries`() {
+        // desktop/renderer/vendor/qr.js (qrcode-generator) and ZXing are two unrelated encoders; a
+        // phone scanning a laptop is the pairing this exists for, so the desktop's golden matrix
+        // must decode here to exactly the link it was made from.
+        val lines = goldenFile().readLines().filter { it.isNotBlank() }
+        val link = lines.first()
+        val modules = lines.drop(1).map { row -> BooleanArray(row.length) { row[it] == '1' } }.toTypedArray()
+        val (pixels, width, height) = render(modules)
+        assertEquals(link, QrCodes.decode(pixels, width, height))
+        assertEquals(link, QrLink.parse(link)?.encode())
+    }
+
+    private fun goldenFile(): java.io.File {
+        var directory: java.io.File? = java.io.File(System.getProperty("user.dir"))
+        while (directory != null && !java.io.File(directory, "settings.gradle.kts").exists()) {
+            directory = directory.parentFile
+        }
+        return java.io.File(directory, "docs/nearby/qr-golden.txt")
+    }
+
+    @Test
     fun `a frame with no code in it is simply nothing`() {
         val blank = ByteArray(200 * 200) { 0xFF.toByte() }
         assertNull(QrCodes.decode(blank, 200, 200))
