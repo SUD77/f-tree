@@ -1,7 +1,9 @@
 package com.vibethroughcode.ftree.nearby.wire
 
+import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.HANDSHAKE_NONCE_BYTES
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.KEY_FINGERPRINT_BYTES
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_BEACON_KEY
+import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_KEY_COMMITMENT
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_RECEIVER_TO_SENDER
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_SAS
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol.LABEL_SENDER_TO_RECEIVER
@@ -115,9 +117,10 @@ object Handshake {
      *
      * The number depends on the transcript *and* the shared secret, so a machine in the middle —
      * which is running two separate conversations with two different secrets — cannot make the two
-     * screens agree. That is the entire security argument for the feature, which is why the copy
-     * for a mismatch has to alarm rather than reassure: it means somebody is there, not that the
-     * user should try again.
+     * screens agree — provided it cannot choose its own inputs after seeing the other side's, which
+     * is what [keyCommitment] prevents. That is the entire security argument for the feature, which
+     * is why the copy for a mismatch has to alarm rather than reassure: it means somebody is there,
+     * not that the user should try again.
      */
     fun sasDigits(raw: ByteArray): String {
         require(raw.size == SAS_RAW_BYTES) { "sas needs $SAS_RAW_BYTES bytes" }
@@ -131,6 +134,29 @@ object Handshake {
         // plain `value % SAS_MODULUS` yields a negative code for half of all handshakes.
         val reduced = java.lang.Long.remainderUnsigned(value, SAS_MODULUS)
         return reduced.toString().padStart(SAS_DIGITS, '0')
+    }
+
+    /**
+     * The receiver's promise, made in `HELLO_ACK`, of the key and nonce it will send in `KEY_ACK`.
+     *
+     * Without it the six digits can be forced. The receiver speaks last, so a machine in the middle
+     * playing the receiver would see the sender's key and nonce, and could then try nonces of its
+     * own — each attempt one hash, no exponentiation — until the code on the sender's screen equals
+     * the code it has already agreed with the real receiver. A million tries is under a second.
+     *
+     * Committing first takes that choice away. Whoever plays the receiver fixes its contribution
+     * before it sees the sender's fresh nonce, and whoever plays the sender fixes its own before the
+     * receiver reveals; either way the code is decided by a value the machine in the middle could
+     * not choose, and a forced match is one chance in a million rather than a certainty.
+     */
+    fun keyCommitment(publicKey: BigInteger, nonce: ByteArray): ByteArray {
+        require(nonce.size == HANDSHAKE_NONCE_BYTES) { "nonce must be $HANDSHAKE_NONCE_BYTES bytes" }
+        return MessageDigest.getInstance("SHA-256").run {
+            update(LABEL_KEY_COMMITMENT.toByteArray(Charsets.US_ASCII))
+            update(Dh.to256(publicKey))
+            update(nonce)
+            digest()
+        }
     }
 
     /**

@@ -3,6 +3,9 @@ package com.vibethroughcode.ftree.nearby
 import com.vibethroughcode.ftree.nearby.wire.DeviceId
 import com.vibethroughcode.ftree.nearby.wire.Dh
 import com.vibethroughcode.ftree.nearby.wire.Handshake
+import com.vibethroughcode.ftree.nearby.wire.HelloAck
+import com.vibethroughcode.ftree.nearby.wire.KeyMessage
+import com.vibethroughcode.ftree.nearby.wire.NearbyPlatform
 import com.vibethroughcode.ftree.nearby.wire.NearbyProblem
 import com.vibethroughcode.ftree.nearby.wire.NearbyProtocol
 import com.vibethroughcode.ftree.nearby.wire.Offer
@@ -318,6 +321,35 @@ class NearbyTransferTest {
     }
 
     @Test
+    fun `a device picked from the list still connects while a code is on the other screen`() {
+        // The token is for connections that say they scanned it. Applied to every connection, the
+        // ordinary path — pick a device, compare six digits — would fail whenever a QR happened
+        // to be showing, and fail as if the sender were an impostor.
+        val result = transfer(
+            fileBytes = 4096,
+            senderToken = Handshake.NO_TOKEN,
+            receiverToken = ByteArray(NearbyProtocol.PAIRING_TOKEN_BYTES) { 0x33 },
+            pairedByQr = false,
+        )
+        assertNull("sender: ${result.sendProblem}", result.sendProblem)
+        assertNotNull("the list path must still compare codes", result.senderSaw.sas)
+        assertArrayEquals(result.sent, result.received)
+    }
+
+    @Test
+    fun `a sender claiming a scan is refused when no code is showing`() {
+        val result = transfer(
+            fileBytes = 4096,
+            senderToken = ByteArray(NearbyProtocol.PAIRING_TOKEN_BYTES) { 0x44 },
+            receiverToken = Handshake.NO_TOKEN,
+            pairedByQr = true,
+        )
+        assertNotNull("a scan of nothing was accepted", result.sendProblem)
+        assertNull("a code was shown", result.senderSaw.sas)
+        assertEquals(0, result.received.size)
+    }
+
+    @Test
     fun `a wrong pairing token fails on the first sealed frame`() {
         // The token never goes on the wire; both ends mix it into the salt. A sender that did not
         // see the screen derives a different key, and the failure's shape is the point: it is not
@@ -337,6 +369,89 @@ class NearbyTransferTest {
                 result.sendProblem == NearbyProblem.DECRYPT_FAILED,
         )
         assertEquals(0, result.received.size)
+    }
+
+    /**
+     * A receiver written by hand, frame by frame, that answers KEY_ACK with [ackNonce] after having
+     * promised [promisedNonce] in HELLO_ACK — which is what a machine in the middle has to do to
+     * choose the six digits. Returns what the sender concluded and whether it ever showed a code.
+     */
+    private fun againstScriptedReceiver(
+        promisedNonce: ByteArray,
+        ackNonce: ByteArray,
+    ): Pair<NearbyProblem?, String?> {
+        val (senderSide, receiverSide) = pair()
+        val (file, _) = sampleFile(1024)
+        val recorder = Recorder()
+        val beaconPrivate = Dh.generatePrivate()
+        val beaconPublic = Dh.publicOf(beaconPrivate)
+        val receiverId = DeviceId(ByteArray(16) { 2 })
+
+        val sender = NearbySendTransfer(
+            identity = identity(1),
+            outgoing = OutgoingFile(file, 1, 0, 0, "family.ftree"),
+            expectedFingerprint = Handshake.beaconFingerprint(receiverId.bytes, beaconPublic),
+            listener = recorder,
+        )
+        // If a code is ever shown, answer "no" — so the control case ends rather than waits.
+        sender.confirmCode(false)
+
+        val script = thread {
+            val link = NearbyConnection(
+                input = receiverSide.input,
+                output = receiverSide.output,
+                sendDirection = NearbyProtocol.DIRECTION_RECEIVER_TO_SENDER,
+                receiveDirection = NearbyProtocol.DIRECTION_SENDER_TO_RECEIVER,
+            )
+            runCatching {
+                link.read()
+                link.send(
+                    NearbyProtocol.TYPE_HELLO_ACK,
+                    HelloAck(
+                        chosenVersion = NearbyProtocol.VERSION,
+                        platform = NearbyPlatform.LINUX,
+                        flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
+                        deviceId = receiverId,
+                        displayName = "Amber Otter",
+                        keyCommitment = Handshake.keyCommitment(beaconPublic, promisedNonce),
+                    ).encode(),
+                )
+                link.read()
+                link.send(
+                    NearbyProtocol.TYPE_KEY_ACK,
+                    KeyMessage(publicKey = Dh.to256(beaconPublic), nonce = ackNonce).encode(),
+                )
+                while (link.read() != null) Unit
+            }
+            receiverSide.close()
+        }
+
+        val problem = sender.run(senderSide)
+        script.join(TIMEOUT_MS)
+        return problem to recorder.sas
+    }
+
+    @Test
+    fun `a receiver that changes its nonce after the sender has spoken is refused before any code`() {
+        // The attack the promise exists for: without it, a machine in the middle playing the
+        // receiver tries nonces until the code on this screen equals the one it already agreed with
+        // the real receiver. The refusal has to come before a code is shown, or it is too late.
+        val (problem, sas) = againstScriptedReceiver(
+            promisedNonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { 1 },
+            ackNonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { 2 },
+        )
+        assertEquals(NearbyProblem.KEY_NOT_AS_PROMISED, problem)
+        assertNull("a code was shown for a key that broke its promise", sas)
+    }
+
+    @Test
+    fun `the same scripted receiver keeping its promise does reach the code`() {
+        // The control: proves the script above is a valid receiver in every other respect, so the
+        // refusal is about the nonce and nothing else.
+        val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES) { 1 }
+        val (problem, sas) = againstScriptedReceiver(promisedNonce = nonce, ackNonce = nonce)
+        assertNotNull("no code was shown", sas)
+        assertEquals(NearbyProblem.CODES_DID_NOT_MATCH, problem)
     }
 
     private companion object {

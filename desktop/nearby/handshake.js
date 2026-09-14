@@ -102,6 +102,26 @@ function sasDigits(raw) {
 }
 
 /**
+ * The receiver's promise, made in `HELLO_ACK`, of the key and nonce it will send in `KEY_ACK`.
+ *
+ * Without it the six digits can be forced: the receiver speaks last, so a machine in the middle
+ * playing the receiver could try nonces -- one hash each -- until the sender's code equals the one
+ * it already agreed with the real receiver. Committing first fixes whoever plays the receiver to
+ * its contribution before it sees the sender's fresh nonce. See `Handshake.keyCommitment`.
+ */
+function keyCommitment(publicKey, nonce) {
+  if (nonce.length !== protocol.HANDSHAKE_NONCE_BYTES) {
+    throw new Error(`nonce must be ${protocol.HANDSHAKE_NONCE_BYTES} bytes`);
+  }
+  return crypto
+    .createHash('sha256')
+    .update(Buffer.from(protocol.LABEL_KEY_COMMITMENT, 'ascii'))
+    .update(dh.to256(publicKey))
+    .update(nonce)
+    .digest();
+}
+
+/**
  * What a receiver publishes in its beacon, so a sender can tie the device it tapped in a list to
  * the device it ends up talking to.
  */
@@ -123,4 +143,5 @@ module.exports = {
   deriveKeys,
   sasDigits,
   beaconFingerprint,
+  keyCommitment,
 };

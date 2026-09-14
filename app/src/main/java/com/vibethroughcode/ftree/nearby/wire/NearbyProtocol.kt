@@ -152,6 +152,10 @@ object NearbyProtocol {
     const val LABEL_SENDER_TO_RECEIVER = "f-tree/nearby/1/s2r"
     const val LABEL_RECEIVER_TO_SENDER = "f-tree/nearby/1/r2s"
     const val LABEL_SAS = "f-tree/nearby/1/sas"
+    const val LABEL_KEY_COMMITMENT = "f-tree/nearby/1/key-commitment"
+
+    /** A whole SHA-256: this is a binding promise, not a label, so none of it is thrown away. */
+    const val KEY_COMMITMENT_BYTES = 32
 
     const val SESSION_KEY_BYTES = 32
     const val SAS_RAW_BYTES = 8

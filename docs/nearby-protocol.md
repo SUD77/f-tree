@@ -265,6 +265,12 @@ how a downgrade gets smuggled past a version check.
 
 Four plaintext frames, then everything is encrypted.
 
+The order matters as much as the contents. The receiver **promises** its key and nonce in
+`HELLO_ACK`, before it has seen anything of the sender's; the sender sends its own in `KEY`; the
+receiver then **reveals** them in `KEY_ACK`, and the sender checks the reveal against the promise
+before it derives anything. Without that promise the six digits could be chosen by a machine in the
+middle — see [Why the receiver promises first](#why-the-receiver-promises-first).
+
 ```
 HELLO (0x01)                       HELLO_ACK (0x02)
 off size field                     off size field
@@ -279,7 +285,17 @@ off size field                     off size field
  27   1  treeFormatMax              27   1  treeFormatMax
  28   1  nameLength N (1..64)       28   1  nameLength N (1..64)
  29   N  displayName                29   N  displayName
+                                  29+N  32  keyCommitment
 ```
+
+`keyCommitment` is the receiver's promise of what `KEY_ACK` will carry:
+
+```
+keyCommitment = SHA-256("f-tree/nearby/1/key-commitment" || to256(Yreceiver) || nonceReceiver)
+```
+
+It comes after the name so that the greeting both messages share keeps one layout. A `HELLO_ACK`
+that ends before it is `MALFORMED_FRAME`; bytes after it are ignored, as they are after a `HELLO`.
 
 ### Two version numbers, and they are not the same number
 
@@ -330,6 +346,14 @@ neither is ever sent.
 **The private exponent is 256 bits, not 2048.** Discrete log in this group is worth about 110 bits,
 so a longer exponent buys nothing and costs roughly eight times the work — on a mid-range phone,
 the difference between fifteen milliseconds and a hesitation somebody can feel.
+
+Before anything else, the sender checks `KEY_ACK` against the promise it was given:
+
+```
+reject unless SHA-256(label || to256(Y) || nonce) == helloAck.keyCommitment    KEY_NOT_AS_PROMISED
+```
+
+The comparison is constant-time, and it happens before a single digit exists to be shown.
 
 Both ends must validate the other's public value **before** exponentiating:
 
@@ -388,9 +412,39 @@ carries a bias of roughly one in half a million, and four more bytes remove it f
 
 The number is a function of both the transcript and the shared secret. A machine in the middle is
 running two separate conversations with two different secrets, so the two screens show two different
-numbers. **That is the whole security argument**, and it is why the wording when they disagree has
-to be alarming rather than helpful: a mismatch means somebody is in the middle, not that the user
-should try again.
+numbers — **provided it cannot choose its own inputs after seeing the other side's.** That is the
+whole security argument, and it is why the wording when they disagree has to be alarming rather than
+helpful: a mismatch means somebody is in the middle, not that the user should try again.
+
+### Why the receiver promises first
+
+Six digits are twenty bits. They are only a defence if nobody gets to *try* for a match.
+
+Without the promise in `HELLO_ACK`, the receiver speaks last. A machine in the middle — one that has
+forged the beacon, or simply sits on the path of a typed address — would first finish its
+conversation with the real receiver, so the code on the receiver's screen is known to it. It then
+plays the receiver towards the sender: the sender's `KEY` arrives, the shared secret with the sender
+is fixed, and the only thing left that feeds the code is the nonce the machine is about to send. It
+tries nonces. Each attempt is one SHA-256 and one HMAC, no exponentiation, and a million of them —
+enough to hit any six digits — take well under a second. Both screens then show the same number,
+and the one check the people holding them were asked to make passes.
+
+The promise takes the choice away:
+
+- **Playing the receiver**, the machine must commit to its key and nonce in `HELLO_ACK`, before the
+  sender's `KEY` — and so before the sender's fresh nonce — exists. The code is then decided by a
+  value it could not see when it had to choose.
+- **Playing the sender**, it must send `KEY` before the real receiver reveals, and the receiver's
+  nonce is fixed behind a promise it cannot open. The same again.
+
+Either way a forced match is one chance in a million per attempt, not a certainty, and each attempt
+puts a code on somebody's screen. The receiver's key being fixed for the whole advertising session
+does not help the attacker: the promise covers the *nonce*, which is fresh for every connection.
+The beacon fingerprint could not have done this job — it is published by a beacon anybody can
+forge, and it covers the key but not the nonce.
+
+This is the same arrangement as Bluetooth's numeric comparison and ZRTP, where one side commits
+before the exchange that decides the code.
 
 ---
 
@@ -507,8 +561,8 @@ sender
   CONNECTING          connected     -> send HELLO                       AWAITING_HELLO_ACK
   AWAITING_HELLO_ACK  HELLO_ACK     -> negotiate, check id and format,
                                        send KEY                         AWAITING_KEY_ACK
-  AWAITING_KEY_ACK    KEY_ACK       -> validate, check fingerprint,
-                                       derive keys                      CONFIRMING_CODE
+  AWAITING_KEY_ACK    KEY_ACK       -> check the promise, validate,
+                                       check fingerprint, derive keys   CONFIRMING_CODE
                                        (scanned a QR: skip)             AWAITING_ACCEPT
   CONFIRMING_CODE     yes           -> send OFFER                       AWAITING_ACCEPT
                       no            -> ABORT CODES_DID_NOT_MATCH        FAILED
@@ -521,7 +575,8 @@ sender
 receiver
   LISTENING           busy          -> ABORT BUSY, close
                       connection                                        AWAITING_HELLO
-  AWAITING_HELLO      HELLO         -> negotiate, send HELLO_ACK        AWAITING_KEY
+  AWAITING_HELLO      HELLO         -> negotiate, send HELLO_ACK
+                                       with the promise                 AWAITING_KEY
   AWAITING_KEY        KEY           -> validate, send KEY_ACK,
                                        derive keys, show the digits     AWAITING_OFFER
   AWAITING_OFFER      OFFER         -> check size and free space        AWAITING_USER
@@ -584,6 +639,7 @@ declared, and reordering a list should not break a protocol.
                            0x16 NETWORK
                            0x17 PERMISSION
                            0x18 BUSY
+                           0x19 KEY_NOT_AS_PROMISED
                            0xFF UNKNOWN
 ```
 
@@ -660,4 +716,6 @@ automatically, because an unknown type is fatal by rule.
                          that disappears mid-transfer, an unexpected frame in every state
 14  reason codes         every name against every number, both tables
 15  QR modules           a golden matrix for one fixed link
+16  commitment           the receiver's promise for two fixed keys and one fixed nonce, and a
+                         HELLO_ACK carrying one
 ```

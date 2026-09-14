@@ -113,6 +113,10 @@ const LABEL_TRANSCRIPT = 'f-tree/nearby/1/transcript';
 const LABEL_SENDER_TO_RECEIVER = 'f-tree/nearby/1/s2r';
 const LABEL_RECEIVER_TO_SENDER = 'f-tree/nearby/1/r2s';
 const LABEL_SAS = 'f-tree/nearby/1/sas';
+const LABEL_KEY_COMMITMENT = 'f-tree/nearby/1/key-commitment';
+
+/** A whole SHA-256: this is a binding promise, not a label, so none of it is thrown away. */
+const KEY_COMMITMENT_BYTES = 32;
 
 const SESSION_KEY_BYTES = 32;
 const SAS_RAW_BYTES = 8;
@@ -214,6 +218,8 @@ module.exports = {
   LABEL_SENDER_TO_RECEIVER,
   LABEL_RECEIVER_TO_SENDER,
   LABEL_SAS,
+  LABEL_KEY_COMMITMENT,
+  KEY_COMMITMENT_BYTES,
   SESSION_KEY_BYTES,
   SAS_RAW_BYTES,
   SAS_MODULUS,

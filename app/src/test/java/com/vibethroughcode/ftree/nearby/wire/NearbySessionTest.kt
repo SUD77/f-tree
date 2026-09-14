@@ -64,6 +64,7 @@ class NearbySessionTest {
         flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
         deviceId = deviceId,
         displayName = "Amber Swift",
+        keyCommitment = ByteArray(NearbyProtocol.KEY_COMMITMENT_BYTES),
     ).encode()
 
     private fun keyPayload() =

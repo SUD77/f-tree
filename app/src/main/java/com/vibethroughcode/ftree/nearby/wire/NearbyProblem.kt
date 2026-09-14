@@ -61,6 +61,15 @@ enum class NearbyProblem(val code: Int) {
     BUSY(0x18),
 
     /**
+     * The key the receiver sent is not the one it promised in `HELLO_ACK`.
+     *
+     * An honest receiver cannot produce this; it is what a machine in the middle looks like when it
+     * tries to choose its nonce after seeing the sender's, which is the only way it could make two
+     * screens show the same six digits. Shown with the same alarm as [CODES_DID_NOT_MATCH].
+     */
+    KEY_NOT_AS_PROMISED(0x19),
+
+    /**
      * A code this build does not recognise.
      *
      * Never shown as a number. A device running a later release may abort for a reason that did not

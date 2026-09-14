@@ -60,6 +60,12 @@ class NearbySender extends EventEmitter {
     this.privateKey = dh.generatePrivate();
     this.publicKey = dh.publicOf(this.privateKey);
     this.nonce = crypto.randomBytes(protocol.HANDSHAKE_NONCE_BYTES);
+    // PAIRED_BY_QR means "this connection presents a pairing token", so only a sender that scanned
+    // one claims it. A receiver showing a code uses its token for exactly the connections that say
+    // so; a sender that picked the device from a list and claimed it would fail as an impostor.
+    this.helloFlags = this.pairedByQr
+      ? protocol.SUPPORTED_FLAGS
+      : protocol.SUPPORTED_FLAGS & ~protocol.FLAG_PAIRED_BY_QR;
 
     this.transcript = new handshake.TranscriptHash();
     this.socket = null;
@@ -146,7 +152,7 @@ class NearbySender extends EventEmitter {
   #hello() {
     return messages.Hello.encode({
       platform: beacon.thisPlatform(),
-      flags: protocol.SUPPORTED_FLAGS,
+      flags: this.helloFlags,
       deviceId: this.identity.deviceId,
       displayName: this.identity.displayName,
     });
@@ -169,7 +175,7 @@ class NearbySender extends EventEmitter {
       ack.flags,
       protocol.VERSION,
       protocol.MIN_VERSION,
-      protocol.SUPPORTED_FLAGS,
+      this.helloFlags,
       protocol.SUPPORTED_FLAGS,
     );
     negotiation.verifyTreeFormat(messages.TREE_FORMAT_VERSION, ack.treeFormatMax);
@@ -178,6 +184,14 @@ class NearbySender extends EventEmitter {
 
   #onKeyAck(ack) {
     const peerPublic = dh.fromBytes(ack.publicKey);
+
+    // Before anything else, and before any code exists to show: the key and nonce must be the ones
+    // promised in HELLO_ACK, fixed before this side's nonce was sent. A receiver that could choose
+    // them afterwards could choose the six digits. See `handshake.keyCommitment`.
+    const promised = handshake.keyCommitment(peerPublic, ack.nonce);
+    if (!crypto.timingSafeEqual(promised, this.peer.keyCommitment)) {
+      throw new NearbyFailure(PROBLEM.KEY_NOT_AS_PROMISED);
+    }
 
     // The device that was tapped in the list against the device that actually answered. Not an
     // authenticator -- a beacon is unsigned and anybody can copy one -- but it turns "I connected

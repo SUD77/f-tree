@@ -49,8 +49,8 @@ function writeGreeting({
     .toBuffer();
 }
 
-function readGreeting(payload) {
-  const reader = new ByteReader(payload);
+// Reads the shared greeting and stops, so each message decides what may follow it.
+function readGreeting(reader) {
   const magic = reader.bytes(protocol.MAGIC.length);
   if (!magic.equals(protocol.MAGIC)) throw new NearbyFailure(PROBLEM.NOT_A_NEARBY_PEER);
 
@@ -63,7 +63,6 @@ function readGreeting(payload) {
   const treeFormatMin = reader.u8();
   const treeFormatMax = reader.u8();
   const rawName = reader.lengthPrefixed().toString('utf8');
-  reader.ignoreRest();
 
   return {
     first,
@@ -112,7 +111,9 @@ const Hello = {
   },
 
   decode(payload) {
-    const g = readGreeting(payload);
+    const reader = new ByteReader(payload);
+    const g = readGreeting(reader);
+    reader.ignoreRest();
     if (g.role !== protocol.ROLE_SENDER) throw new NearbyFailure(PROBLEM.UNEXPECTED_MESSAGE);
     return {
       maxVersion: g.first,
@@ -133,6 +134,10 @@ const Hello = {
  * proposing them, and the sender then checks that what it was told is something it actually
  * offered -- see `negotiation.verifyChosen`. A receiver must not be able to name a version the
  * sender never put on the table.
+ *
+ * It also carries `keyCommitment`, the receiver's promise of the key and nonce it will send in
+ * `KEY_ACK` -- see `handshake.keyCommitment`. It sits after the name, so the greeting both messages
+ * share keeps one layout.
  */
 const HelloAck = {
   encode({
@@ -143,8 +148,12 @@ const HelloAck = {
     treeFormatMin = TREE_FORMAT_VERSION,
     treeFormatMax = TREE_FORMAT_VERSION,
     displayName,
+    keyCommitment,
   }) {
-    return writeGreeting({
+    if (!keyCommitment || keyCommitment.length !== protocol.KEY_COMMITMENT_BYTES) {
+      throw new Error(`key commitment must be ${protocol.KEY_COMMITMENT_BYTES} bytes`);
+    }
+    const greeting = writeGreeting({
       first: chosenVersion,
       second: 0,
       role: protocol.ROLE_RECEIVER,
@@ -155,11 +164,16 @@ const HelloAck = {
       treeFormatMax,
       displayName,
     });
+    return Buffer.concat([greeting, keyCommitment]);
   },
 
   decode(payload) {
-    const g = readGreeting(payload);
+    const reader = new ByteReader(payload);
+    const g = readGreeting(reader);
+    // The role first: a HELLO sent back at a sender is the wrong message, not a short one.
     if (g.role !== protocol.ROLE_RECEIVER) throw new NearbyFailure(PROBLEM.UNEXPECTED_MESSAGE);
+    const keyCommitment = reader.bytes(protocol.KEY_COMMITMENT_BYTES);
+    reader.ignoreRest();
     return {
       chosenVersion: g.first,
       role: g.role,
@@ -169,6 +183,7 @@ const HelloAck = {
       treeFormatMin: g.treeFormatMin,
       treeFormatMax: g.treeFormatMax,
       displayName: g.displayName,
+      keyCommitment,
     };
   },
 };
