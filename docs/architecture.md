@@ -319,6 +319,13 @@ have one with.
 | A tap in Compact walks rather than opens | Walking is the thing a family tree is *for*; opening a page is a step you take once you have arrived |
 | No history behind the walk | The graph is symmetric, so every walk is already undone by one tap in the band it came from |
 | Compact still shows photographs when the chart's are off | That switch buys back the cost of decoding faces while panning a canvas, which is a cost this view does not have |
+| Nearby sharing carries a file, and stops | Everything that decides what happens to a family — matching, conflicts, add-never-replace — is the importer that was already there. A transport that also merged would be a second answer to a question already answered |
+| A custom UDP beacon rather than mDNS | About eighty lines each side and the same logic in both languages, against a responder that has to share port 5353 with Avahi and Bonjour and behaves differently on three operating systems |
+| Diffie-Hellman over a fixed MODP group, not X25519 | Built-in X25519 needs API 33; the floor is 26. `BigInteger` and `node:crypto` reach every supported device with no dependency |
+| Counter nonces, never random | A repeated GCM nonce does not leak a message, it leaks the authentication key. A counter cannot repeat, and it is testable because it is deterministic |
+| The nearby `deviceId` is not `sourceTreeId` | Broadcasting the id stamped into every exported file would turn file provenance into a device tracker that follows somebody between networks |
+| A generated display name, not the device name | Consumer device names are somebody's real name, and the default would announce it to a café twice a second |
+| Visibility only while the screen is open | A device advertising itself while nobody is looking is one somebody has forgotten they configured |
 
 
 ---
@@ -326,6 +333,7 @@ have one with.
 ## Where to go next
 
 - [The `.ftree` format and merge behaviour](ftree-format.md)
+- [Nearby sharing: the protocol](nearby-protocol.md)
 - [The data model, field by field](data-model.md)
 - [Hindi kinship terms](kinship-hindi.md)
 - [Building, testing and releasing](building.md)
