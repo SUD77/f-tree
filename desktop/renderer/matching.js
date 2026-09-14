@@ -117,7 +117,8 @@ function score(record, candidate, importedGraph, localGraph, settled) {
  * @param {Map<string, Set<string>>} args.importedGraph  id to everyone directly connected
  * @param {Array} args.local      people already here
  * @param {Map<string, Set<string>>} args.localGraph
- * @param {Map<string, string>} args.originIndex  "treeId\\u0000personId" to the local person id
+ * @param {Map<string, string[]>} args.originIndex  "treeId\\u0000personId" to every local person
+ *   holding that origin -- more than one when an earlier import left a copy of somebody
  * @param {string} args.sourceTreeId  the origin the file claims
  * @returns {Array<{importedId, localId, tier, evidence}>} one entry per imported person
  */
@@ -140,21 +141,58 @@ export function matchPeople({ imported, importedGraph, local, localGraph, origin
    *
    * The file records where each person came from, so this is a lookup rather than a judgement --
    * the only kind of match trusted enough to merge without asking anybody.
+   *
+   * A lookup that can answer with more than one person, though. A stale copy -- somebody added
+   * again by an import that failed to recognise them -- carries the origin of the person it copies,
+   * so after it has been imported two people here hold that origin, and a file can even hold both
+   * of them. Taking the first key that answers let the copy and the original compete for one person
+   * here, and whichever lost was added as new, with the same origin, on every import (#193).
+   *
+   * So every pairing that shares a key is ranked and settled best first, each person on either
+   * side used once. A record's own key -- its id, in the tree the file comes from -- outranks an
+   * origin it only carries: that one is exactly who it is, the others are history. Then more keys
+   * in common. Then the person here with fewer keys, who is the more specific match: the original
+   * holds only its own origin, a copy holds that and the one it copied.
    */
-  for (const record of imported) {
-    const keys = [originKey(sourceTreeId, record.id)];
-    for (const origin of record.origins ?? []) keys.push(originKey(origin.treeId, origin.personId));
+  const localOrder = new Map(local.map((p, at) => [p.id, at]));
+  const keysHeld = new Map();
+  for (const ids of originIndex.values()) {
+    for (const id of ids) keysHeld.set(id, (keysHeld.get(id) ?? 0) + 1);
+  }
 
-    const localId = keys.map((k) => originIndex.get(k)).find((v) => v != null);
-    if (localId != null && localById.has(localId) && !claimed.has(localId)) {
-      claimed.add(localId);
-      settled.set(record.id, {
-        importedId: record.id,
-        localId,
-        tier: MatchTier.CERTAIN,
-        evidence: evidence({ fromSameTree: true }),
-      });
+  const pairings = [];
+  imported.forEach((record, order) => {
+    const own = originKey(sourceTreeId, record.id);
+    const keys = new Set([own]);
+    for (const origin of record.origins ?? []) keys.add(originKey(origin.treeId, origin.personId));
+
+    const shared = new Map();
+    for (const key of keys) {
+      for (const localId of originIndex.get(key) ?? []) {
+        if (localById.has(localId)) shared.set(localId, (shared.get(localId) ?? 0) + 1);
+      }
     }
+    const byOwnKey = new Set(originIndex.get(own) ?? []);
+    for (const [localId, count] of shared) {
+      pairings.push({ record, order, localId, ownKey: byOwnKey.has(localId), count });
+    }
+  });
+
+  pairings.sort((a, b) => (Number(b.ownKey) - Number(a.ownKey))
+    || (b.count - a.count)
+    || (keysHeld.get(a.localId) - keysHeld.get(b.localId))
+    || (a.order - b.order)
+    || (localOrder.get(a.localId) - localOrder.get(b.localId)));
+
+  for (const { record, localId } of pairings) {
+    if (settled.has(record.id) || claimed.has(localId)) continue;
+    claimed.add(localId);
+    settled.set(record.id, {
+      importedId: record.id,
+      localId,
+      tier: MatchTier.CERTAIN,
+      evidence: evidence({ fromSameTree: true }),
+    });
   }
 
   // Later passes: name plus corroboration, with confirmed matches feeding the next round.

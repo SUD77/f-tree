@@ -64,13 +64,27 @@ object DuplicateMatcher {
 
     private const val MAX_PASSES = 5
 
+    /** An imported person and a person here who share at least one origin key. */
+    private data class Pairing(
+        val importedId: String,
+        /** Position in the file, so equal pairings settle the same way every time. */
+        val order: Int,
+        val localId: String,
+        /** Whether the key they share includes the imported person's own. */
+        val ownKey: Boolean,
+        val count: Int,
+    )
+
     fun match(
         imported: List<PersonRecord>,
         importedGraph: MatchGraph,
         local: List<Person>,
         localGraph: MatchGraph,
-        /** `(treeId, personId)` of an already-known origin, to the local person holding it. */
-        originIndex: Map<Pair<String, String>, String>,
+        /**
+         * `(treeId, personId)` of an already-known origin, to every local person holding it — more
+         * than one when an earlier import left a copy of somebody.
+         */
+        originIndex: Map<Pair<String, String>, List<String>>,
         sourceTreeId: String,
     ): List<PersonMatch> {
         val localById = local.associateBy { it.id }
@@ -81,21 +95,58 @@ object DuplicateMatcher {
 
         // Pass 0: provable identity. The file records where each person came from, so this is a
         // lookup rather than a judgement.
-        imported.forEach { record ->
-            val keys = buildList {
-                add(sourceTreeId to record.id)
+        //
+        // A lookup that can answer with more than one person, though. A stale copy — somebody
+        // added again by an import that failed to recognise them — carries the origin of the
+        // person it copies, so after it has been imported two people here hold that origin, and a
+        // file can even hold both of them. Taking the first key that answers let the copy and the
+        // original compete for one person here, and whichever lost was added as new, with the same
+        // origin, on every import (#193).
+        //
+        // So every pairing that shares a key is ranked and settled best first, each person on
+        // either side used once. A record's own key — its id, in the tree the file comes from —
+        // outranks an origin it only carries: that one is exactly who it is, the others are
+        // history. Then more keys in common. Then the person here with fewer keys, who is the more
+        // specific match: the original holds only its own origin, a copy holds that and the one
+        // it copied.
+        val localOrder = local.withIndex().associate { (at, person) -> person.id to at }
+        val keysHeld = originIndex.values.flatten().groupingBy { it }.eachCount()
+
+        val pairings = imported.withIndex().flatMap { (order, record) ->
+            val own = sourceTreeId to record.id
+            val keys = buildSet {
+                add(own)
                 record.origins.forEach { add(it.treeId to it.personId) }
             }
-            val localId = keys.firstNotNullOfOrNull { originIndex[it] }
-            if (localId != null && localId in localById && claimedLocals.add(localId)) {
-                settled[record.id] = PersonMatch(
-                    importedId = record.id,
-                    localId = localId,
+            val byOwnKey = originIndex[own].orEmpty().toSet()
+            keys.flatMap { originIndex[it].orEmpty() }
+                .filter { it in localById }
+                .groupingBy { it }
+                .eachCount()
+                .map { (localId, count) ->
+                    Pairing(record.id, order, localId, localId in byOwnKey, count)
+                }
+        }
+
+        pairings
+            .sortedWith(
+                compareByDescending<Pairing> { it.ownKey }
+                    .thenByDescending { it.count }
+                    .thenBy { keysHeld.getValue(it.localId) }
+                    .thenBy { it.order }
+                    .thenBy { localOrder.getValue(it.localId) },
+            )
+            .forEach { pairing ->
+                if (pairing.importedId in settled) return@forEach
+                if (pairing.localId in claimedLocals) return@forEach
+                claimedLocals += pairing.localId
+                settled[pairing.importedId] = PersonMatch(
+                    importedId = pairing.importedId,
+                    localId = pairing.localId,
                     tier = MatchTier.CERTAIN,
                     evidence = MatchEvidence(fromSameTree = true),
                 )
             }
-        }
 
         // Later passes: name plus corroboration, with confirmed matches feeding the next round.
         var pass = 0

@@ -70,16 +70,20 @@ class TreeImporter(
         val localEdges = repository.allRelationships()
         val origins = repository.originsOf(local.map { it.id })
 
+        // Every person holding a key is kept, not the last one written: a copy left by an earlier
+        // import holds the origin of the person it copies, and the matcher has to see both (#193).
         val ownTreeId = identity.treeId
-        val originIndex = buildMap {
-            origins.forEach { put(it.sourceTreeId to it.sourcePersonId, it.personId) }
-            // This installation names its people by their own ids, so anything that names them
-            // that way is recognised without a name comparison at all: a re-import of our own
-            // export, and just as much an origin carried back by a file that went through somebody
-            // else's tree (#194). Put last so it wins — an origin recorded on somebody else can
-            // name one of our people, and the person who actually has that id is who it means.
-            local.forEach { put(ownTreeId to it.id, it.id) }
+        val originIndex = mutableMapOf<Pair<String, String>, MutableList<String>>()
+        fun index(key: Pair<String, String>, personId: String) {
+            val holders = originIndex.getOrPut(key) { mutableListOf() }
+            if (personId !in holders) holders += personId
         }
+        origins.forEach { index(it.sourceTreeId to it.sourcePersonId, it.personId) }
+        // This installation names its people by their own ids, so anything that names them that
+        // way is recognised without a name comparison at all: a re-import of our own export, and
+        // just as much an origin carried back by a file that went through somebody else's tree
+        // (#194).
+        local.forEach { index(ownTreeId to it.id, it.id) }
 
         val matches = DuplicateMatcher.match(
             imported = document.people,

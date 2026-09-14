@@ -22,8 +22,11 @@ function match({
   imported, local, importedGraph = new Map(), localGraph = new Map(),
   origins = [], sourceTreeId = 'their-tree',
 }) {
-  const originIndex = new Map(origins.map(([treeId, personId, localId]) => (
-    [originKey(treeId, personId), localId])));
+  const originIndex = new Map();
+  for (const [treeId, personId, localId] of origins) {
+    const key = originKey(treeId, personId);
+    originIndex.set(key, [...(originIndex.get(key) ?? []), localId]);
+  }
   const results = matchPeople({
     imported, importedGraph, local, localGraph, originIndex, sourceTreeId,
   });
@@ -174,6 +177,31 @@ test('one local person is never claimed by two imported people', () => {
   });
   assert.strictEqual(result.get('i1').localId, 'l1');
   assert.strictEqual(result.get('i2').localId, null, 'l1 is already taken');
+});
+
+test('a copy and the person it copies are each matched to themselves', () => {
+  // `d` is a stale copy of `a`, carrying a's origin. Both were imported before, so two people here
+  // hold that origin -- and the one indexed last is the copy (#193).
+  const result = match({
+    imported: [
+      { id: 'a', name: 'Ankit Kumar' },
+      { id: 'd', name: 'Ankit Kumar', origins: [{ treeId: 'their-tree', personId: 'a' }] },
+    ],
+    local: [{ id: 'la', name: 'Ankit Kumar' }, { id: 'ld', name: 'Ankit Kumar' }],
+    origins: [['their-tree', 'a', 'la'], ['their-tree', 'd', 'ld'], ['their-tree', 'a', 'ld']],
+  });
+  const settled = (id) => [result.get(id).localId, result.get(id).tier];
+  assert.deepStrictEqual(settled('a'), ['la', MatchTier.CERTAIN]);
+  assert.deepStrictEqual(settled('d'), ['ld', MatchTier.CERTAIN]);
+});
+
+test('of two people holding the same origin, the one holding nothing else is meant', () => {
+  const result = match({
+    imported: [{ id: 'a', name: null }],
+    local: [{ id: 'ld', name: null }, { id: 'la', name: null }],
+    origins: [['their-tree', 'a', 'la'], ['their-tree', 'a', 'ld'], ['their-tree', 'd', 'ld']],
+  });
+  assert.strictEqual(result.get('a').localId, 'la');
 });
 
 test('matching the same file twice is stable', () => {

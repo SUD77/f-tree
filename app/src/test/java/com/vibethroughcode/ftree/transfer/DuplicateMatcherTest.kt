@@ -30,9 +30,12 @@ class DuplicateMatcherTest {
         importedGraph: MatchGraph = MatchGraph(emptyMap()),
         localGraph: MatchGraph = MatchGraph(emptyMap()),
         originIndex: Map<Pair<String, String>, String> = emptyMap(),
+        /** For an origin held by more than one person here; [originIndex] is the usual case. */
+        heldBy: Map<Pair<String, String>, List<String>> =
+            originIndex.mapValues { listOf(it.value) },
         sourceTreeId: String = "their-tree",
     ) = DuplicateMatcher.match(
-        imported, importedGraph, local, localGraph, originIndex, sourceTreeId,
+        imported, importedGraph, local, localGraph, heldBy, sourceTreeId,
     ).associateBy { it.importedId }
 
     @Test
@@ -230,6 +233,49 @@ class DuplicateMatcherTest {
 
         assertEquals("l1", result.getValue("i1").localId)
         assertNull("l1 is already taken", result.getValue("i2").localId)
+    }
+
+    @Test
+    fun `a copy and the person it copies are each matched to themselves`() {
+        // `d` is a stale copy of `a`, carrying a's origin. Both were imported before, so two
+        // people here hold that origin (#193).
+        val result = match(
+            imported = listOf(
+                PersonRecord(id = "a", name = "Ankit Kumar"),
+                PersonRecord(
+                    id = "d",
+                    name = "Ankit Kumar",
+                    origins = listOf(OriginRecord("their-tree", "a")),
+                ),
+            ),
+            local = listOf(
+                Person(id = "la", name = "Ankit Kumar"),
+                Person(id = "ld", name = "Ankit Kumar"),
+            ),
+            heldBy = mapOf(
+                ("their-tree" to "a") to listOf("la", "ld"),
+                ("their-tree" to "d") to listOf("ld"),
+            ),
+        )
+
+        assertEquals("la", result.getValue("a").localId)
+        assertEquals(MatchTier.CERTAIN, result.getValue("a").tier)
+        assertEquals("ld", result.getValue("d").localId)
+        assertEquals(MatchTier.CERTAIN, result.getValue("d").tier)
+    }
+
+    @Test
+    fun `of two people holding the same origin, the one holding nothing else is meant`() {
+        val result = match(
+            imported = listOf(PersonRecord(id = "a")),
+            local = listOf(Person(id = "ld"), Person(id = "la")),
+            heldBy = mapOf(
+                ("their-tree" to "a") to listOf("ld", "la"),
+                ("their-tree" to "d") to listOf("ld"),
+            ),
+        )
+
+        assertEquals("la", result.getValue("a").localId)
     }
 
     @Test

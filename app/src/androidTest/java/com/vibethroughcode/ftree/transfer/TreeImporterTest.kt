@@ -8,6 +8,7 @@ import com.vibethroughcode.ftree.data.FTreeDatabase
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.Gender
 import com.vibethroughcode.ftree.data.Person
+import com.vibethroughcode.ftree.data.PersonOrigin
 import com.vibethroughcode.ftree.data.PhotoStore
 import com.vibethroughcode.ftree.data.RelativeKind
 import kotlinx.coroutines.flow.first
@@ -180,6 +181,40 @@ class TreeImporterTest {
         assertEquals(0, result.peopleAdded)
         assertEquals(3, result.peopleMerged)
         assertEquals(3, mine.repository.allPeople().size)
+    }
+
+    @Test
+    fun aFileHoldingACopyOfSomebodyCanBeImportedAgainAndAgainWithoutGrowing() = runTest {
+        // The shape of a real export (#193): `copy` was left by an earlier import that did not
+        // recognise `original`, and carries the origin of the person it copies. Neither can be
+        // told apart by name.
+        val original = Person(name = "Ankit")
+        val copy = Person(name = "Ankit")
+        listOf(original, copy).forEach { theirs.repository.addPerson(it) }
+        theirs.db.personOriginDao().insertAll(
+            listOf(PersonOrigin(copy.id, theirs.identity.treeId, original.id)),
+        )
+        val archive = exportOf(theirs)
+
+        // This tree as the first import of that file leaves it, with ids chosen so the copy is read
+        // back after the original. The old index kept whichever holder of the shared origin it
+        // read last, so an import from scratch passed or failed on the order of two random ids.
+        val mineOriginal = Person(id = "local-1-original", name = "Ankit")
+        val mineCopy = Person(id = "local-2-copy", name = "Ankit")
+        listOf(mineOriginal, mineCopy).forEach { mine.repository.addPerson(it) }
+        mine.db.personOriginDao().insertAll(
+            listOf(
+                PersonOrigin(mineOriginal.id, theirs.identity.treeId, original.id),
+                PersonOrigin(mineCopy.id, theirs.identity.treeId, copy.id),
+                PersonOrigin(mineCopy.id, theirs.identity.treeId, original.id),
+            ),
+        )
+
+        repeat(3) { again ->
+            val result = importInto(mine, archive)
+            assertEquals("import ${again + 1} added people again", 0, result.peopleAdded)
+        }
+        assertEquals(2, mine.repository.allPeople().size)
     }
 
     @Test
