@@ -33,7 +33,13 @@ const names = require('./names');
  * cannot open a connection, nearby sharing or not.
  */
 class Nearby extends EventEmitter {
-  constructor({ directory, displayName = null, downloadDirectory = null } = {}) {
+  constructor({
+    directory,
+    displayName = null,
+    downloadDirectory = null,
+    // A parameter only so a test can watch a token expire without waiting five minutes.
+    pairingTokenLifetimeMs = protocol.PAIRING_TOKEN_LIFETIME_MS,
+  } = {}) {
     super();
     this.directory = directory;
     this.identity = new NearbyIdentity(directory, displayName);
@@ -45,6 +51,8 @@ class Nearby extends EventEmitter {
     this.outgoing = null;
     this.pairingToken = null;
     this.pairingTokenAt = 0;
+    this.pairingTokenTimer = null;
+    this.pairingTokenLifetimeMs = pairingTokenLifetimeMs;
   }
 
   get visible() {
@@ -131,11 +139,7 @@ class Nearby extends EventEmitter {
    */
   qrLink() {
     if (!this.visible) return null;
-    const now = Date.now();
-    if (!this.pairingToken || now - this.pairingTokenAt > protocol.PAIRING_TOKEN_LIFETIME_MS) {
-      this.pairingToken = crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES);
-      this.pairingTokenAt = now;
-    }
+    if (!this.#tokenIsLive()) this.#mintPairingToken();
     const address = localAddress();
     if (!address) return null;
     return {
@@ -220,6 +224,18 @@ class Nearby extends EventEmitter {
     this.incoming?.transfer.decline();
   }
 
+  /**
+   * The person at this screen stopped a transfer that was not waiting on their answer -- while the
+   * codes were up, or partway through the bytes.
+   *
+   * Not `declineIncoming`: a decline is an answer to an offer, and the state machine treats one
+   * arriving at any other moment as a message out of place, so the sender would be told something
+   * went wrong rather than that somebody chose to stop.
+   */
+  cancelIncoming() {
+    this.incoming?.transfer.cancel();
+  }
+
   #onIncoming(transfer) {
     // One file per transfer, written to a `.part` and renamed only once it is whole -- the same
     // pattern `UpdateClient.download` already uses, and for the same reason: a half-written file
@@ -227,17 +243,26 @@ class Nearby extends EventEmitter {
     const partPath = path.join(this.downloadDirectory, `nearby-${Date.now()}.ftree.part`);
     const sink = fs.createWriteStream(partPath);
     transfer.sink = sink;
-    if (this.pairingToken) {
+    // Only a token that is still live. The timer below retires an expired one and redraws the
+    // screen, but between the moment it lapses and the moment that fires, "five minutes" would
+    // otherwise be five minutes and however long the event loop took.
+    if (this.#tokenIsLive()) {
       transfer.pairingToken = this.pairingToken;
       // Single use: the first connection that presents it spends it, and the screen shows a new one.
       transfer.onTokenUsed = () => {
-        this.pairingToken = null;
+        this.#forgetPairingToken();
+        this.emit('qr-changed');
       };
     }
 
     this.incoming = { transfer, partPath, sink };
 
-    transfer.on('code', (sas) => this.emit('receive-code', sas));
+    transfer.on('code', (sas) => {
+      // Whether the sender scanned travels with the code, because it changes what this screen says:
+      // a scanning sender skips the comparison, so there is nobody on the other end to compare with.
+      const pairedByQr = Boolean((transfer.peerHello?.flags ?? 0) & protocol.FLAG_PAIRED_BY_QR);
+      this.emit('receive-code', sas, { pairedByQr });
+    });
     transfer.on('offer', (offer) => this.emit('receive-offer', describeOffer(offer)));
     transfer.on('progress', (p) => this.emit('receive-progress', p));
     transfer.on('complete', (summary) => {
@@ -285,7 +310,38 @@ class Nearby extends EventEmitter {
     }
     this.identity.stopAdvertising();
     this.beaconKey = null;
+    this.#forgetPairingToken();
+  }
+
+  #tokenIsLive() {
+    return this.pairingToken !== null
+      && Date.now() - this.pairingTokenAt <= this.pairingTokenLifetimeMs;
+  }
+
+  /**
+   * A fresh token for the code on screen, and a timer that retires it.
+   *
+   * The timer is what makes "valid for five minutes" true of the *picture* and not only of the
+   * check. Without it the square would go on showing a token nothing would honour, and the phone
+   * pointed at it would be refused with nothing on this screen saying why. `qr-changed` asks
+   * whoever is drawing the code to ask for it again, which mints the next one.
+   */
+  #mintPairingToken() {
+    this.#forgetPairingToken();
+    this.pairingToken = crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES);
+    this.pairingTokenAt = Date.now();
+    this.pairingTokenTimer = setTimeout(() => {
+      this.#forgetPairingToken();
+      this.emit('qr-changed');
+    }, this.pairingTokenLifetimeMs);
+    this.pairingTokenTimer.unref?.();
+  }
+
+  #forgetPairingToken() {
+    if (this.pairingTokenTimer) clearTimeout(this.pairingTokenTimer);
+    this.pairingTokenTimer = null;
     this.pairingToken = null;
+    this.pairingTokenAt = 0;
   }
 }
 

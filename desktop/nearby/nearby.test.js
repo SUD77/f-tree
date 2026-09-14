@@ -18,6 +18,7 @@ const crypto = require('node:crypto');
 const { Nearby, localAddress } = require('./index');
 const { parseQrLink } = require('./qrlink');
 const protocol = require('./protocol');
+const { PROBLEM } = require('./problems');
 
 function scratch(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `ftree-${name}-`));
@@ -190,6 +191,107 @@ test('a refused transfer leaves nothing partial behind', async () => {
   const left = fs.existsSync(downloads) ? fs.readdirSync(downloads) : [];
   assert.deepEqual(left, [], `left behind: ${left.join(', ')}`);
 
+  await receiver.setVisible(false);
+});
+
+/*
+ * The code on screen, as the screen sees it.
+ *
+ * `loopback.test.js` holds the protocol to "a token is used only by a connection that scanned it,
+ * and only once". These are the facade's half: that the square on screen is told when it has
+ * stopped being true -- spent, or old -- so it is never left showing a code nothing will honour.
+ */
+function sendTo(receiver, { token = null, onCode = (sender) => sender.confirmSendCode(true) } = {}) {
+  const directory = scratch('qr-sender');
+  const { file } = sampleFile(directory, 8192);
+  const sender = new Nearby({ directory });
+  const finished = new Promise((resolve) => sender.once('send-finished', resolve));
+  sender.on('send-code', () => onCode(sender));
+  return sender.send({
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    suggestedFileName: 'family.ftree',
+    link: {
+      address: '127.0.0.1',
+      port: receiver.server.port,
+      deviceId: receiver.identity.deviceId,
+      keyFingerprint: receiver.beaconKey.fingerprint,
+      token,
+    },
+  }).then(() => finished);
+}
+
+test('a code that has been used is redrawn, and the new one is different', async () => {
+  const receiver = new Nearby({ directory: scratch('qr-spent') });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  const token = Buffer.from(receiver.pairingToken);
+  let redraws = 0;
+  receiver.on('qr-changed', () => { redraws += 1; });
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const how = new Promise((resolve) => receiver.once('receive-code', (_sas, info) => resolve(info)));
+
+  const problem = await sendTo(receiver, { token });
+  assert.equal(problem, null, JSON.stringify(problem));
+  // The receiver is told the sender scanned, so it does not ask anybody to compare digits that the
+  // other screen never showed.
+  assert.deepEqual(await how, { pairedByQr: true });
+  assert.equal(redraws, 1, 'the screen was not told its code had been spent');
+  assert.equal(receiver.pairingToken, null);
+  receiver.qrLink();
+  assert.ok(receiver.pairingToken && !receiver.pairingToken.equals(token));
+  await receiver.setVisible(false);
+});
+
+test('a code that has run out of time is redrawn, and a scan of it is refused', async () => {
+  // Five minutes, scaled down. What matters is that the picture and the check agree: the square is
+  // retired at the moment the token is, not at the next time somebody happens to ask for it.
+  const receiver = new Nearby({ directory: scratch('qr-old'), pairingTokenLifetimeMs: 120 });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  const token = Buffer.from(receiver.pairingToken);
+  const retired = new Promise((resolve) => receiver.once('qr-changed', resolve));
+  await retired;
+  assert.equal(receiver.pairingToken, null);
+
+  let offered = false;
+  receiver.on('receive-offer', () => { offered = true; });
+  const problem = await sendTo(receiver, { token });
+  assert.equal(problem?.problem, PROBLEM.BAD_PAIRING, JSON.stringify(problem));
+  assert.equal(offered, false);
+  await receiver.setVisible(false);
+});
+
+test('a list-picked sender is told the receiver said it compares, not that it scanned', async () => {
+  const receiver = new Nearby({ directory: scratch('qr-list') });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const how = new Promise((resolve) => receiver.once('receive-code', (_sas, info) => resolve(info)));
+
+  const problem = await sendTo(receiver);
+  assert.equal(problem, null, JSON.stringify(problem));
+  assert.deepEqual(await how, { pairedByQr: false });
+  await receiver.setVisible(false);
+});
+
+test('the receiver can stop a transfer while the codes are up, and the sender hears why', async () => {
+  // Cancel has to really cancel: the sender is told CANCELLED rather than a generic failure, and
+  // nothing partial is left in the receiver's folder.
+  const receiverDirectory = scratch('cancel-receive');
+  const receiver = new Nearby({ directory: receiverDirectory });
+  await receiver.setVisible(true);
+  receiver.on('receive-code', () => receiver.cancelIncoming());
+  const receiverEnd = new Promise((resolve) => receiver.once('receive-finished', resolve));
+
+  const problem = await sendTo(receiver, { onCode: () => {} });
+  assert.equal(problem?.problem, PROBLEM.CANCELLED, JSON.stringify(problem));
+  assert.equal((await receiverEnd).problem, PROBLEM.CANCELLED);
+
+  const downloads = path.join(receiverDirectory, 'nearby');
+  assert.deepEqual(fs.existsSync(downloads) ? fs.readdirSync(downloads) : [], []);
   await receiver.setVisible(false);
 });
 

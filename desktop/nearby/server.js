@@ -157,6 +157,16 @@ class IncomingTransfer extends EventEmitter {
     this.#run(EVENT.userDeclined());
   }
 
+  /**
+   * The person at this screen stopped it at a moment that was not a question -- the codes on
+   * screen, or the bytes arriving. The session already answers `user-cancelled` in every state with
+   * `ABORT(CANCELLED)`, which the sender can put into words; a decline sent here instead would reach
+   * it as a message out of place.
+   */
+  cancel() {
+    this.#run(EVENT.userCancelled());
+  }
+
   #onData(chunk) {
     try {
       for (const frame of this.connection.feed(chunk, this.transcript)) {
