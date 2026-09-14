@@ -2253,7 +2253,7 @@ async function reviewImport(chosen) {
     const { doc, photos: importedPhotos } = await readArchiveBytes(chosen.bytes);
     let plan;
     try {
-      plan = planImport({ document: doc, tree: state.tree, ownTreeId: state.ownTreeId });
+      plan = planImport({ document: doc, tree: state.tree });
     } catch (error) {
       if (error instanceof ImportRefused) error.importProblem = 'empty';
       throw error;

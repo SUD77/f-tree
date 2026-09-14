@@ -165,6 +165,24 @@ class TreeImporterTest {
     }
 
     @Test
+    fun myPeopleCarriedBackThroughSomebodyElsesTreeAreRecognised() = runTest {
+        // Nobody here can be matched by name: one has none, and two share one (#194).
+        val unnamed = Person(name = null)
+        val elder = Person(name = "Ravi")
+        val younger = Person(name = "Ravi")
+        listOf(unnamed, elder, younger).forEach { mine.repository.addPerson(it) }
+
+        // Into a cousin's tree, which gives everybody new ids and records where they came from,
+        // and back out again under the cousin's tree id.
+        importInto(theirs, exportOf(mine))
+        val result = importInto(mine, exportOf(theirs))
+
+        assertEquals(0, result.peopleAdded)
+        assertEquals(3, result.peopleMerged)
+        assertEquals(3, mine.repository.allPeople().size)
+    }
+
+    @Test
     fun aMergeFillsGapsAndNeverOverwrites() = runTest {
         // Mine knows the name only; theirs knows the dates and disagrees about the notes.
         val localId = "shared"

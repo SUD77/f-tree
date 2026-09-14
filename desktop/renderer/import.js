@@ -35,9 +35,8 @@ const isBlank = (value) => value == null || String(value).trim() === '';
  * @param {object} args
  * @param {object} args.document  the parsed exchange document, as `archive.js` returns it
  * @param {import('./document.js').Tree} args.tree  the tree currently open
- * @param {string} args.ownTreeId  this installation's id
  */
-export function planImport({ document, tree, ownTreeId = '' }) {
+export function planImport({ document, tree }) {
   // `parseDocument` has already refused the wrong format and a version from the future, which are
   // the two refusals that must happen before anything here trusts a field. This adds the third.
   if (!document.people?.length) {
@@ -50,10 +49,20 @@ export function planImport({ document, tree, ownTreeId = '' }) {
    * Where each local person has been known by before.
    *
    * Two sources. Origins recorded by previous imports are the ordinary one. The second is the
-   * identity rule: a file exported by *this* installation names its people by ids this tree still
-   * uses, so re-importing our own export recognises everybody outright, with no name comparison
-   * at all. Getting that wrong in the safe direction merely proposes duplicates; getting it wrong
-   * in the unsafe direction would merge strangers, so it is keyed on an id, never on a name.
+   * identity rule: this tree names its own people by their ids under its own `sourceTreeId`, so
+   * anything that names them that way -- re-importing our own export, or an origin carried back
+   * by a file that went through somebody else's tree -- is recognised outright, with no name
+   * comparison at all. Getting that wrong in the safe direction merely proposes duplicates;
+   * getting it wrong in the unsafe direction would merge strangers, so it is keyed on an id, never
+   * on a name.
+   *
+   * Keyed on the *tree's* id, not this installation's. A tree opened from a phone keeps the
+   * phone's id (see `document.js`) and its people keep the phone's ids, so that is the name they
+   * go by; this machine's id names nobody in it. And indexed whatever the file claims to be,
+   * because a file from elsewhere can still carry our people in its origins (#194).
+   *
+   * Written last so that it wins: an origin recorded on somebody else can name one of our own
+   * people, and the person who actually has that id is who it means.
    */
   const originIndex = new Map();
   for (const person of local) {
@@ -61,8 +70,8 @@ export function planImport({ document, tree, ownTreeId = '' }) {
       originIndex.set(originKey(origin.treeId, origin.personId), person.id);
     }
   }
-  if (ownTreeId && document.sourceTreeId === ownTreeId) {
-    for (const person of local) originIndex.set(originKey(ownTreeId, person.id), person.id);
+  if (tree.sourceTreeId) {
+    for (const person of local) originIndex.set(originKey(tree.sourceTreeId, person.id), person.id);
   }
 
   const importedGraph = graphOf((document.relationships ?? []).map((r) => [r.from, r.to]));

@@ -70,13 +70,15 @@ class TreeImporter(
         val localEdges = repository.allRelationships()
         val origins = repository.originsOf(local.map { it.id })
 
+        val ownTreeId = identity.treeId
         val originIndex = buildMap {
             origins.forEach { put(it.sourceTreeId to it.sourcePersonId, it.personId) }
-            // An export from this very installation identifies its people by their own ids, so a
-            // re-import of our own file recognises everybody without any name comparison at all.
-            if (document.sourceTreeId == identity.treeId) {
-                local.forEach { put(identity.treeId to it.id, it.id) }
-            }
+            // This installation names its people by their own ids, so anything that names them
+            // that way is recognised without a name comparison at all: a re-import of our own
+            // export, and just as much an origin carried back by a file that went through somebody
+            // else's tree (#194). Put last so it wins — an origin recorded on somebody else can
+            // name one of our people, and the person who actually has that id is who it means.
+            local.forEach { put(ownTreeId to it.id, it.id) }
         }
 
         val matches = DuplicateMatcher.match(
