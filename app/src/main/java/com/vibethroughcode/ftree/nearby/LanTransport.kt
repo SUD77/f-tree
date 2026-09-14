@@ -2,6 +2,8 @@ package com.vibethroughcode.ftree.nearby
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import com.vibethroughcode.ftree.nearby.wire.Beacon
 import com.vibethroughcode.ftree.nearby.wire.DeviceId
@@ -14,6 +16,7 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
+import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
@@ -48,6 +51,7 @@ class LanTransport(
     private var multicastLock: WifiManager.MulticastLock? = null
     private var serverSocket: ServerSocket? = null
     private var beaconSocket: MulticastSocket? = null
+    @Volatile private var lanForBeacons: Lan? = null
     private var announcement: Beacon? = null
 
     private val accepting = AtomicBoolean(false)
@@ -102,8 +106,20 @@ class LanTransport(
 
         val socket = MulticastSocket(NearbyProtocol.BEACON_PORT)
         socket.reuseAddress = true
+        val lan = lan()
+        lanForBeacons = lan
         runCatching {
-            socket.joinGroup(InetAddress.getByName(NearbyProtocol.MULTICAST_GROUP))
+            // Joined, and sent from, on the Wi-Fi itself. Left to the system, both happen on the
+            // default interface, which with a VPN on is the VPN and hears nobody in the room.
+            lan?.network?.bindSocket(socket)
+            val group = InetAddress.getByName(NearbyProtocol.MULTICAST_GROUP)
+            val onInterface = lan?.networkInterface
+            if (onInterface != null) {
+                socket.networkInterface = onInterface
+                socket.joinGroup(InetSocketAddress(group, 0), onInterface)
+            } else {
+                socket.joinGroup(group)
+            }
             // TTL 1 is what makes "the same Wi-Fi" literally true: the datagram does not survive a
             // router, so a device two hops away cannot see this one however the network is wired.
             socket.timeToLive = NearbyProtocol.MULTICAST_TTL
@@ -140,7 +156,16 @@ class LanTransport(
 
     override fun stopDiscovery() {
         listening.set(false)
-        runCatching { beaconSocket?.leaveGroup(InetAddress.getByName(NearbyProtocol.MULTICAST_GROUP)) }
+        runCatching {
+            val group = InetAddress.getByName(NearbyProtocol.MULTICAST_GROUP)
+            val onInterface = lanForBeacons?.networkInterface
+            if (onInterface != null) {
+                beaconSocket?.leaveGroup(InetSocketAddress(group, 0), onInterface)
+            } else {
+                beaconSocket?.leaveGroup(group)
+            }
+        }
+        lanForBeacons = null
         runCatching { beaconSocket?.close() }
         beaconSocket = null
         // Released here rather than in close(), because a lock held while nothing is listening is a
@@ -190,24 +215,57 @@ class LanTransport(
 
     override fun connect(address: String, port: Int, timeoutMillis: Int): NearbyChannel {
         val socket = Socket()
+        // Over the Wi-Fi, never through a VPN that would carry a LAN address somewhere else.
+        runCatching { lan()?.network?.bindSocket(socket) }
         socket.connect(InetSocketAddress(address, port), timeoutMillis)
         runCatching { socket.tcpNoDelay = true }
         return SocketChannel(socket)
     }
 
+    /** The local network this feature speaks on: its handle, interface, address and prefix. */
+    private class Lan(
+        val network: Network,
+        val networkInterface: NetworkInterface?,
+        val address: Inet4Address,
+        val prefixLength: Int,
+    )
+
     /**
-     * Read from the active network's link properties — ACCESS_NETWORK_STATE, which the app already
-     * declares — rather than from `WifiManager.connectionInfo`, which is deprecated and on recent
-     * releases answers 0.0.0.0 without a location permission this feature deliberately never asks for.
+     * The Wi-Fi (or wired) network, found by what it is rather than by being the active one.
+     *
+     * With a VPN switched on, the active network *is* the VPN: its address is not one anybody in the
+     * room can reach, a limited broadcast leaves through it and reaches nobody, and a connection to
+     * a LAN address may be carried off to the VPN's far end. So the network is chosen by transport,
+     * and every socket this class opens is bound to it with [Network.bindSocket].
+     *
+     * Read from link properties — ACCESS_NETWORK_STATE, already declared — rather than from
+     * `WifiManager.connectionInfo`, which is deprecated and on recent releases answers 0.0.0.0
+     * without a location permission this feature deliberately never asks for.
      */
-    override fun localAddress(): String? = runCatching {
-        val network = connectivity.activeNetwork ?: return null
-        connectivity.getLinkProperties(network)?.linkAddresses
-            ?.map { it.address }
-            ?.filterIsInstance<Inet4Address>()
-            ?.mapNotNull { it.hostAddress }
-            ?.firstOrNull { QrLink.isPrivateAddress(it) }
+    @Suppress("DEPRECATION") // allNetworks: the callback API would need a registration held for one lookup.
+    private fun lan(): Lan? = runCatching {
+        val candidates = connectivity.allNetworks.filter { network ->
+            val capabilities = connectivity.getNetworkCapabilities(network) ?: return@filter false
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        }
+        for (network in candidates) {
+            val properties = connectivity.getLinkProperties(network) ?: continue
+            val link = properties.linkAddresses.firstOrNull { link ->
+                val address = link.address
+                address is Inet4Address && address.hostAddress?.let(QrLink::isPrivateAddress) == true
+            } ?: continue
+            return@runCatching Lan(
+                network = network,
+                networkInterface = properties.interfaceName?.let { runCatching { NetworkInterface.getByName(it) }.getOrNull() },
+                address = link.address as Inet4Address,
+                prefixLength = link.prefixLength,
+            )
+        }
+        null
     }.getOrNull()
+
+    override fun localAddress(): String? = lan()?.address?.hostAddress
 
     override fun close() {
         stopAnnouncing()
@@ -246,16 +304,14 @@ class LanTransport(
      */
     private fun send(datagram: ByteArray) {
         val socket = beaconSocket ?: return
-        for (target in listOf(NearbyProtocol.MULTICAST_GROUP, NearbyProtocol.BROADCAST_ADDRESS)) {
+        // The subnet's own broadcast rather than 255.255.255.255 when the subnet is known: see
+        // LanAddress.directedBroadcast for why the limited one can leave by the wrong door.
+        val broadcast = lanForBeacons
+            ?.let { InetAddress.getByAddress(LanAddress.directedBroadcast(it.address.address, it.prefixLength)) }
+            ?: InetAddress.getByName(NearbyProtocol.BROADCAST_ADDRESS)
+        for (target in listOf(InetAddress.getByName(NearbyProtocol.MULTICAST_GROUP), broadcast)) {
             runCatching {
-                socket.send(
-                    DatagramPacket(
-                        datagram,
-                        datagram.size,
-                        InetAddress.getByName(target),
-                        NearbyProtocol.BEACON_PORT,
-                    ),
-                )
+                socket.send(DatagramPacket(datagram, datagram.size, target, NearbyProtocol.BEACON_PORT))
             }
             // A send that fails is a network that is not there. There is nowhere to report it and
             // nothing to do about it: the next announcement is two seconds away.
