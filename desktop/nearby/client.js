@@ -254,7 +254,7 @@ class NearbySender extends EventEmitter {
         this.emit('code', action.sas);
         break;
       case 'read-more-of-the-file':
-        this.#readMore();
+        this.#readSoon();
         break;
       case 'fail':
         this.#finish(action.problem, action.importProblem);
@@ -273,6 +273,27 @@ class NearbySender extends EventEmitter {
    * Pull rather than push, so the session decides when more is wanted and a cancellation between
    * two chunks is honoured at the next one rather than after the whole file has gone.
    */
+  /**
+   * The next chunk on a later turn of the event loop, and only once the socket has room for it.
+   *
+   * It used to be the next chunk *now*: `#readMore` sent a frame, the session asked for more, and
+   * `#readMore` ran again inside that same call -- the whole file in one synchronous recursion.
+   * Three things followed, none visible with a small tree. A Cancel pressed on the sending screen
+   * could not be handled until the last byte was in the socket. The socket buffered the whole file
+   * in memory, because nothing waited for it to drain. And at around 200 MB the recursion ran out of
+   * stack, which the catch in `#onData` reported to the person as MALFORMED_FRAME.
+   */
+  #readSoon() {
+    if (this.finished || this.reading) return;
+    this.reading = true;
+    const next = () => {
+      this.reading = false;
+      this.#readMore();
+    };
+    if (this.socket?.writableNeedDrain) this.socket.once('drain', next);
+    else setImmediate(next);
+  }
+
   #readMore() {
     if (this.finished) return;
     if (this.handle === null) this.handle = fs.openSync(this.filePath, 'r');

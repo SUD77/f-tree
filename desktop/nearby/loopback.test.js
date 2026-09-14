@@ -242,6 +242,48 @@ test('the second connection is refused rather than left hanging', async () => {
   server.close();
 });
 
+test('a sender can be stopped between chunks, not only after the last one', async () => {
+  // The sender used to read and send every chunk in one synchronous run: a Cancel pressed on its
+  // screen could not be handled until the whole file was in the socket, the socket buffered all of
+  // it in memory, and at around 200 MB the recursion ran out of stack and reported MALFORMED_FRAME.
+  // Here the Cancel is asked for on the first progress event and must land long before the end.
+  const directory = scratch();
+  const total = 8 * 1024 * 1024;
+  const { file } = sampleFile(directory, total);
+
+  const receiverIdentity = new NearbyIdentity(path.join(directory, 'r'));
+  const beaconKey = receiverIdentity.startAdvertising();
+  const sink = fs.createWriteStream(path.join(directory, 'out.ftree'));
+  sink.on('error', () => {});
+  const server = new NearbyServer({ identity: receiverIdentity, beaconKey, sink });
+  const port = await server.listen('127.0.0.1');
+  server.on('transfer', (incoming) => incoming.on('offer', () => incoming.accept()));
+
+  const sender = new NearbySender({
+    identity: new NearbyIdentity(path.join(directory, 's')),
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+  });
+  await sender.prepare();
+  sender.on('code', () => sender.confirmCode(true));
+  let asked = false;
+  sender.on('progress', () => {
+    if (asked) return;
+    asked = true;
+    // On a later turn, the way a click on Cancel arrives.
+    setImmediate(() => sender.cancel());
+  });
+
+  const problem = await new Promise((resolve) => {
+    sender.once('finished', resolve);
+    sender.connect('127.0.0.1', port);
+  });
+  server.close();
+
+  assert.equal(problem?.problem, PROBLEM.CANCELLED);
+  assert.ok(sender.sent < BigInt(total), `the whole file was read before the Cancel landed: ${sender.sent} of ${total}`);
+});
+
 test('a sender that connects to nothing says so instead of waiting', async () => {
   const directory = scratch();
   const { file } = sampleFile(directory, 1024);
