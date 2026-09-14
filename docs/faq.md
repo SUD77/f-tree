@@ -53,14 +53,20 @@ backend, and no sync.
 
 ### Does anything leave my phone?
 
-Only what you send yourself: an export, a shared branch, or a relationship card. Nothing is
-transmitted automatically.
+Only what you send yourself: an export, a shared branch, a relationship card, or a tree sent
+through **nearby sharing**. Nothing is transmitted automatically — nearby sharing does nothing
+until you open its screen, and the receiver has to accept, by name, before a single byte of family
+data arrives.
 
-The app declares two permissions, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, and both exist only
-for the **opt-in updater**. `UpdateRepository` refuses to make a request while the preference is
-false, so "no network unless you ask for it" is a property of the code rather than of the interface.
-`update/` is deliberately the only package in the app that opens a socket, so that claim is
-checkable by reading it.
+The app declares six permissions. Two, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, exist only for
+the **opt-in updater**; `UpdateRepository` refuses to make a request while the preference is false,
+so "no network unless you ask for it" is a property of the code rather than of the interface. Three
+more, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` and `ACCESS_NETWORK_STATE`, exist only for
+nearby sharing and do nothing while both of its screens are closed; all five of these are normal
+permissions that never prompt, and none is in the location family. The sixth, `CAMERA`, is the only
+one that asks, and only if you choose to scan a nearby code — typing it works everywhere the camera
+would. `update/` and `nearby/` are deliberately the only packages in the app that open a socket, so
+both claims are checkable by reading them.
 
 ### Is there analytics or crash reporting?
 
@@ -170,6 +176,16 @@ file. It needs a **native speaker** more than a developer.
 ---
 
 ## Sharing and merging
+
+### Is nearby sharing sync?
+
+No. Sync would mean the app deciding on its own, in the background, what belongs where, and there
+still isn't one. Nearby sharing sends one `.ftree`, once, to a device you can see on the Wi-Fi you
+are already on — no internet, no account, no server — and only after that device's owner accepts.
+What happens to the family in it is decided by the same import screen a file shared through a chat
+app already goes through: matching, conflicts, add-never-replace, all unchanged. It is visible only
+while its screen is open, and both screens show the same six-digit code so you can tell it reached
+the right device.
 
 ### How do two people combine their family trees?
 

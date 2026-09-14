@@ -119,6 +119,15 @@ whatever it lands on.
 A line of any length fits, because both ends are always shown and a middle that will not fit is
 counted rather than cut — "+4 more" is true where a silently shortened chain is not.
 
+### Or nearby, with no file manager at all
+
+A branch — or a whole export — can also go by [nearby sharing](nearby-protocol.md) instead of a
+share sheet: pick a device on the same Wi-Fi, confirm the six digits, and the same `.ftree` arrives
+without ever passing through a chat app or a downloads folder. Nothing about the format changes for
+this route; it is still this file. What is different is the trip: the file on disk is still a
+plain, unencrypted ZIP, as described above, but the connection carrying it there is encrypted end
+to end, which a chat upload never was.
+
 ## Joining a shared branch to your own tree
 
 This is the other half of why it exists. Import the branch, then create one relationship between
@@ -185,5 +194,6 @@ unzip -p family.ftree tree.json | python3 -m json.tool | head -40
 ## Where to go next
 
 - [Architecture](architecture.md)
+- [Nearby sharing: the protocol](nearby-protocol.md)
 - [The data model, field by field](data-model.md)
 - [The website and the browser viewer](site.md)

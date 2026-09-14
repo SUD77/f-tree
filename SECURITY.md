@@ -31,8 +31,9 @@ The parts of f-tree where a vulnerability would have real consequences:
 
 ### The updater (`update/`)
 
-This is the only code in the app that opens a socket, and the highest-value area to look at. Before
-installing anything it checks, in this order:
+This is one of two places in the app that open a socket — the other is nearby sharing, below — and
+the highest-value area to look at, because a defeated check here can install an artefact rather
+than merely move a file. Before installing anything it checks, in this order:
 
 1. the download's SHA-256 against the `digest` GitHub publishes for the asset,
 2. that the archive's package name is this app,
@@ -56,6 +57,35 @@ The exported and shared files, the `FileProvider` configuration, and the content
 other apps. In scope: any way another app obtains a file it was not granted, or any way a shared
 branch carries a person who was meant to stay behind.
 
+### Nearby sharing (`nearby/`)
+
+The transport that sends a `.ftree` directly to another device on the same Wi-Fi. In scope:
+anything that lets family data reach a device that was never shown on screen and accepted there by
+name; forging or spoofing the beacon so a device impersonates one it is not; deriving or predicting
+the six-digit confirmation code without controlling the network path both devices are actually on;
+replaying a QR pairing token, or using one that was never scanned; and any crash or memory-safety
+issue reachable from a malformed frame, before or after the handshake completes.
+
+**The threat model is a stranger on the same LAN, not a stranger on the internet** — the socket and
+the beacon exist only on a private, link-local address, and only while one of the two nearby
+screens is open. What such a stranger can learn from the beacon alone, without being invited to
+connect: a generated device name (never the phone's model or its owner's real name), the platform
+and app version, a public-key fingerprint, and the address and port to connect to. They learn
+nothing about the family a device holds — no person, no name, no count — without completing the
+full encrypted handshake and then being accepted on-screen by a human who can see who they are
+letting in.
+
+The six digits are what turn "an encrypted connection" into "the encrypted connection you meant to
+make": both devices derive them from the handshake, and the two people holding the screens have to
+agree they match. The receiver commits to its half of the key before it has seen the sender's, so a
+device sitting on the path between them cannot try key guesses until it finds one that produces a
+matching code — see ["Why the receiver promises
+first"](docs/nearby-protocol.md#why-the-receiver-promises-first) for the mechanism. A code mismatch
+means treat the connection as hostile and start again, exactly as it would for any other
+numeric-comparison pairing. A QR pairing skips the six digits because the token itself, never sent
+over the wire, stands in for that confirmation — so a stolen photograph of somebody's QR code is
+worth nothing once it expires or is used once.
+
 ### The website and browser viewer
 
 [ftree.vibethroughcode.com](https://ftree.vibethroughcode.com/) and its
@@ -78,10 +108,14 @@ it opens.
 
 These are deliberate, and knowing them may save you time:
 
-- **There is no server, account or sync.** There is no backend to attack; the entire threat surface
-  is the app on the device, the release artefacts, and the static site.
-- **The tree never touches the network.** The two permissions the app declares, `INTERNET` and
-  `REQUEST_INSTALL_PACKAGES`, exist only for the opt-in updater.
+- **There is no server, account or sync.** Nearby sharing does not add one: a transfer goes
+  directly between two devices, encrypted, and nothing about it is stored, relayed or reconciled
+  anywhere in between. The threat surface is the app on the device, the release artefacts, the
+  static site, and now the nearby transport described above.
+- **Nothing leaves the device except when you deliberately send it** — to a device you can see, on
+  a network you are already on, with no account and nothing in between. Two of the app's six
+  permissions, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, exist only for the opt-in updater; three
+  more exist only for nearby sharing and do nothing while both of its screens are closed.
 - **An APK signed with a different key cannot update an installed f-tree** — Android refuses it.
   The updater checks the certificate itself so that this is refused early, with an explanation,
   rather than discovered at the end of a download.

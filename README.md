@@ -9,7 +9,7 @@
 **A free, offline, open-source family tree app for Android.**
 Ask how any two people are related and it names the relationship, in English or Hindi, and draws the line between them.
 
-**No account. No server. No analytics. Nothing leaves your phone.**
+**No account. No server. No analytics. Nothing leaves your phone unless you send it.**
 
 <br>
 
@@ -65,8 +65,9 @@ f-tree is built around those gaps instead of around a form you have to fill in c
 | 🔗 **A graph, not a tree.** | Multiple spouses, children across marriages, half-siblings, adoption, step-relations and unknown ancestors all work without special cases. |
 | ❓ **"How are we related?"** | Pick any two people. f-tree names it — *first cousin once removed*, *great-great-grandfather* — and lists every person the line runs through. It walks marriages as well as blood, because "my wife's mother" is what people actually ask. |
 | 🇮🇳 **Hindi kinship, done properly.** | Hindi has five words where English has "uncle". Your mother's brother is **मामा**, your father's younger brother **चाचा**, his wife **चाची**. Not a translation — a different model of the family. |
-| 📴 **Genuinely offline.** | No account, no login, no backend, no sync, no analytics. Two permissions exist, both only for the opt-in updater. |
+| 📴 **No account, no cloud.** | No login, no backend, no sync, no analytics. Every permission the app declares exists only for the opt-in updater or for nearby sharing, and neither touches the network until you ask it to. |
 | 🤝 **Sharing that merges, never overwrites.** | Send one branch as a small file over WhatsApp. The recipient imports it and it *merges* into their tree. The worst an import can do is add a duplicate you can then merge. |
+| 📶 **Nearby sharing.** | Send a tree straight to a device you can see, over the Wi-Fi you are already on — no account, no server, nothing in between. Both screens show the same six digits, so you know it went to the right one. |
 
 <br>
 
@@ -109,8 +110,9 @@ start here.
 
 Three ways to read it — the chart, a compact reading that stays legible at any size, and the people
 index. It answers **how two people are related**, in English and in हिन्दी. It imports a relative's
-file, matching people rather than duplicating them, and it adds and frames photographs. Nothing
-leaves the machine.
+file, matching people rather than duplicating them, and it adds and frames photographs. Nearby
+sharing sends a tree straight to another device on the same Wi-Fi, phone or laptop, with the same
+six-digit check as the Android app. Nothing leaves the machine except when you send it that way.
 
 ### Try it without installing anything
 
@@ -173,6 +175,13 @@ it, then marry the two families together with one relationship.
 A relationship can be sent as a card rather than a file, because chat apps quietly drop the message
 that comes with a document but show it beside an image.
 
+**Send it straight to a device you can see**
+
+Nearby sharing puts a tree on a device across the table — no export, no chat app, no cloud drive.
+Both screens show the same six digits, or scan a QR to skip typing them. Wi-Fi only, encrypted, off
+until you open the screen, and it carries a file exactly the way sharing already did: the receiver
+reviews it in the same import screen, matching duplicates rather than overwriting anything.
+
 **Accessible by design**
 
 The canvas charts cannot be read by a screen reader, so *Compact* exists: the same family, composed
@@ -193,12 +202,15 @@ rather than painted, at any text size, spoken aloud, one tap per person.
 | Is there an account or a login? | No. There is nothing to log in to. |
 | Is there a server? | No. There is no backend to have one with. |
 | Analytics, crash reporting, ads? | None, in the app or on the website. |
-| What permissions does it ask for? | `INTERNET` and `REQUEST_INSTALL_PACKAGES` — both only for the opt-in updater, which refuses to make a request while the setting is off. |
+| Can it send my tree to another device? | Only nearby sharing, and only when you start it: to a device you can see, on the network you are already on, with a code both screens show, and no account or server in between. |
+| What permissions does it ask for? | Six. Two are for the opt-in updater — `INTERNET`, `REQUEST_INSTALL_PACKAGES`. Three are for nearby sharing — `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`, `ACCESS_NETWORK_STATE` — and do nothing until you open its screen. None of those five ever prompts. The sixth, `CAMERA`, is the only one that does, and only if you choose to scan a nearby code; typing it works everywhere the camera would. |
 | Does the browser viewer upload my file? | No. It is read in the tab. |
 | Can I get my data out? | Any time, as a `.ftree` — a ZIP with plain JSON in it. [Documented here.](docs/ftree-format.md) |
 
-The updater is the only code in the app that opens a socket, and it is deliberately kept in one
-package (`update/`) so that claim is checkable by reading rather than by trust.
+`update/` and `nearby/` are the only code in the app that opens a socket, each kept in its own
+package so that claim is checkable by reading rather than by trust. Nearby sharing does nothing
+until one of its two screens is open, and it sends a tree only after you pick a device and its
+owner accepts.
 
 <br>
 
@@ -258,7 +270,11 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 - **A Hindi interface.** Only the family *words* change with the setting. Translating the buttons
   and error messages is a separate job needing a fluent reviewer, and a half-translated app reads
   worse than an English one.
-- **Cloud sync.** The absence is the feature.
+- **Cloud sync.** The absence is the feature: no account, no server, nothing stored or relayed
+  between your devices while you are not looking. Nearby sharing is not this — there is still no
+  account and no server; it carries one file, from a device you can see to a device you can see,
+  and then stops. Nothing is reconciled, and the receiver reviews what arrives exactly like any
+  other import.
 
 <br>
 
