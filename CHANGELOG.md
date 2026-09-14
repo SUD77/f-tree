@@ -25,6 +25,12 @@ betas leading up to a stable release are folded into that release's entry here.
   six-digit path no longer broke while a QR happened to be on screen.
 - Credit to **SUD77**, who wrote the protocol, both language cores, and the cross-language test that
   proves a Kotlin process and a Node process agree byte for byte.
+- **Importing the same file again no longer adds anybody twice.** A file holding a stale copy of
+  somebody — left by an earlier import that failed to recognise them — used to add a few more
+  people on *every* import (#193). The two causes are fixed on both platforms: your own people
+  are now recognised when a file of yours comes back through somebody else's tree (#194), and a
+  copy and the person it copies are each matched to themselves. Each import also no longer saves
+  another copy of every photograph (#195).
 
 ## [0.8.0](https://github.com/thisisankit27/f-tree/releases/tag/v0.8.0) — 2026-09-09
 
