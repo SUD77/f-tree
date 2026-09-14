@@ -121,14 +121,14 @@ class PeerTableTest {
     }
 
     @Test
-    fun `the list is sorted for somebody reading it`() {
+    fun `the list keeps arrival order rather than re-sorting under a finger`() {
+        // Sorted by name, "Amber Otter" arriving would push "Quiet Heron" down a row just as
+        // somebody reached for it. Arrival order, and a rename or a new address keeps the place.
         val table = PeerTable()
         table.seen(beacon(a, name = "Quiet Heron"), "192.168.1.5", 1000)
-        table.seen(beacon(b, name = "Amber Otter"), "192.168.1.6", 1000)
-        assertEquals(
-            listOf("Amber Otter", "Quiet Heron"),
-            table.list().map { it.displayName },
-        )
+        table.seen(beacon(b, name = "Amber Otter"), "192.168.1.6", 1100)
+        table.seen(beacon(a, name = "Zinnia"), "192.168.1.9", 2000)
+        assertEquals(listOf("Zinnia", "Amber Otter"), table.list().map { it.displayName })
     }
 
     @Test

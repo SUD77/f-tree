@@ -61,13 +61,13 @@ class PeerTable(private val expiryMillis: Long = NearbyProtocol.PEER_EXPIRY_MS.t
     operator fun get(key: String): NearbyPeer? = peers[key]
 
     /**
-     * Sorted by name, then by id.
+     * In the order the devices first appeared, and never re-sorted.
      *
-     * The tiebreak matters more than it looks: two devices that have not been named are both
-     * *"Quiet Heron"* until somebody renames one, and a list whose rows swap places between
-     * announcements is a list somebody taps the wrong row in.
+     * Sorting by name looks tidier and is worse in the hand: a device that arrives and sorts above
+     * the row somebody is reaching for moves that row out from under their finger, and out from
+     * under a screen reader's cursor mid-sentence. A [LinkedHashMap] keeps insertion order when a
+     * key is written again, so a device that announces twice a second, is renamed, or changes
+     * address keeps its place; only one that expires or says goodbye and comes back goes to the end.
      */
-    fun list(): List<NearbyPeer> = peers.values.sortedWith(
-        compareBy({ it.displayName.lowercase() }, { it.key }),
-    )
+    fun list(): List<NearbyPeer> = peers.values.toList()
 }

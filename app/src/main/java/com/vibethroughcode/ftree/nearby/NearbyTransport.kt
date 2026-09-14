@@ -111,5 +111,15 @@ interface NearbyTransport {
     /** Opens a connection to a peer. Blocking; callers are already off the main thread. */
     fun connect(address: String, port: Int, timeoutMillis: Int): NearbyChannel
 
+    /**
+     * This device's private IPv4 address on the local network, or null when it has none.
+     *
+     * Shown on the receive screen so it can be typed on the other device — the fallback for a
+     * network that drops discovery, and the only way in for an emulator, which cannot hear a
+     * beacon at all. Only a private address is ever returned, the same rule a typed or scanned
+     * address is held to on the way in.
+     */
+    fun localAddress(): String? = null
+
     fun close()
 }

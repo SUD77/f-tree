@@ -58,36 +58,52 @@ class NearbyPreferences(context: Context) {
 
     private val _trusted = MutableStateFlow(readTrusted())
 
-    /** Devices that have completed a transfer here, by hex device id. Never an address. */
-    val trusted: StateFlow<Set<String>> = _trusted.asStateFlow()
+    /**
+     * Devices that have completed a transfer here, by hex device id, with the name each had then.
+     * Never an address.
+     *
+     * The name is kept only so the list in Settings says *who* can be forgotten; a bare id would
+     * make "forget" a button nobody could use with confidence. It is the name the device announced,
+     * already sanitised on arrival, and it is updated whenever the same device completes another
+     * transfer under a new one.
+     */
+    val trusted: StateFlow<Map<String, String>> = _trusted.asStateFlow()
 
-    fun remember(deviceId: String) {
-        val updated = _trusted.value + deviceId
-        prefs.edit().putStringSet(KEY_TRUSTED, updated).apply()
-        _trusted.value = updated
+    fun remember(deviceId: String, name: String) {
+        write(_trusted.value + (deviceId to name))
     }
 
     fun forget(deviceId: String) {
-        val updated = _trusted.value - deviceId
-        prefs.edit().putStringSet(KEY_TRUSTED, updated).apply()
-        _trusted.value = updated
+        write(_trusted.value - deviceId)
     }
 
     fun forgetAll() {
         prefs.edit().remove(KEY_TRUSTED).apply()
-        _trusted.value = emptySet()
+        _trusted.value = emptyMap()
+    }
+
+    private fun write(updated: Map<String, String>) {
+        val encoded = updated.map { (id, name) -> id + name }.toSet()
+        prefs.edit().putStringSet(KEY_TRUSTED, encoded).apply()
+        _trusted.value = updated
     }
 
     /**
+     * Each entry is the 32-character hex id followed directly by the name. The id is fixed width,
+     * so there is no separator to escape and no name that can be mistaken for part of the id.
+     *
      * A copy, because [android.content.SharedPreferences.getStringSet] hands back an instance the
      * caller must not modify and whose contents are undefined after the next edit.
      */
-    private fun readTrusted(): Set<String> =
-        prefs.getStringSet(KEY_TRUSTED, emptySet())?.toSet() ?: emptySet()
+    private fun readTrusted(): Map<String, String> =
+        (prefs.getStringSet(KEY_TRUSTED, emptySet()) ?: emptySet())
+            .filter { it.length >= ID_HEX_LENGTH }
+            .associate { it.substring(0, ID_HEX_LENGTH) to it.substring(ID_HEX_LENGTH) }
 
     private companion object {
         const val KEY_ENABLED = "enabled"
         const val KEY_TRUSTED_ONLY = "trusted-only"
         const val KEY_TRUSTED = "trusted-devices"
+        const val ID_HEX_LENGTH = 32
     }
 }
