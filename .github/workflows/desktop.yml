@@ -105,6 +105,10 @@ jobs:
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
           FTREE_SMOKE_PHOTO: '1'
+          # Nearby sharing (#175): a second device in the same process sends over 127.0.0.1, and the
+          # transfer must end in the import review with the tree untouched -- and the page must still
+          # be unable to open a socket of its own. The complement of FTREE_SMOKE_NETWORK above.
+          FTREE_SMOKE_NEARBY: '1'
         run: xvfb-run -a npx electron . --no-sandbox
 
   package:
@@ -179,6 +183,9 @@ jobs:
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
           FTREE_SMOKE_PHOTO: '1'
+          # And nearby sharing against the package: the only run that proves `nearby/` and the
+          # vendored QR encoder were packaged at all.
+          FTREE_SMOKE_NEARBY: '1'
         run: |
           python3 ../tools/make_sample_tree.py "$RUNNER_TEMP/fixtures"
           xvfb-run -a ./dist/linux-unpacked/f-tree-desktop --no-sandbox
