@@ -12,6 +12,7 @@
 
 const fs = require('node:fs');
 const os = require('node:os');
+const dgram = require('node:dgram');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
@@ -22,6 +23,7 @@ const { Discovery } = require('./discovery');
 const { NearbyServer } = require('./server');
 const { NearbySender } = require('./client');
 const { encodeQrLink, parseQrLink, isPrivateAddress, isTestableAddress } = require('./qrlink');
+const { lanInterfaces, pickAddress } = require('./interfaces');
 const { PROBLEM, problemName, importProblemOf } = require('./problems');
 const names = require('./names');
 
@@ -53,6 +55,8 @@ class Nearby extends EventEmitter {
     this.pairingTokenAt = 0;
     this.pairingTokenTimer = null;
     this.pairingTokenLifetimeMs = pairingTokenLifetimeMs;
+    /** The address the OS routes the nearby group through, found when visibility starts. */
+    this.routed = null;
   }
 
   get visible() {
@@ -115,6 +119,8 @@ class Nearby extends EventEmitter {
       this.emit('problem', { problem: PROBLEM.NETWORK, detail: error.message });
     }
 
+    // Which adapter the code on screen should name, asked once per visible session.
+    this.routed = await routedAddress();
     this.emit('visibility', true);
     return true;
   }
@@ -184,7 +190,7 @@ class Nearby extends EventEmitter {
   qrLink() {
     if (!this.visible) return null;
     if (!this.#tokenIsLive()) this.#mintPairingToken();
-    const address = localAddress();
+    const address = localAddress(this.routed);
     if (!address) return null;
     return {
       text: encodeQrLink({
@@ -436,14 +442,38 @@ function describeOffer(offer) {
  * Filtered through the same private-range rule a scanned code is held to, so a machine with a
  * public address on one interface cannot put it in a code somebody then points a phone at.
  */
-function localAddress() {
-  for (const addresses of Object.values(os.networkInterfaces())) {
-    for (const entry of addresses ?? []) {
-      if (entry.family !== 'IPv4' || entry.internal) continue;
-      if (isPrivateAddress(entry.address)) return entry.address;
+function localAddress(routed = null) {
+  // It used to be the first private IPv4 in whatever order the OS listed its adapters, which on a
+  // laptop with Docker put 172.17.0.1 in the code -- a network that does not exist outside this
+  // machine. Now the same LAN adapters discovery announces on, preferring the one the OS routes
+  // the nearby group through. See `interfaces.js`.
+  return pickAddress(lanInterfaces(os.networkInterfaces()), routed);
+}
+
+/**
+ * The address the OS would send the nearby multicast group from -- in practice the adapter holding
+ * the default route, which is the network this machine is really on.
+ *
+ * A UDP `connect` sends nothing. It asks the kernel to choose a route and a source address for that
+ * destination, and the answer is read back from the socket. The destination is this protocol's own
+ * group, so even the question is about the local network. Null when there is no route to ask about.
+ */
+function routedAddress() {
+  return new Promise((resolve) => {
+    const probe = dgram.createSocket('udp4');
+    const done = (value) => {
+      try { probe.close(); } catch { /* already closed */ }
+      resolve(value);
+    };
+    probe.once('error', () => done(null));
+    try {
+      probe.connect(protocol.BEACON_PORT, protocol.MULTICAST_GROUP, () => {
+        try { done(probe.address().address); } catch { done(null); }
+      });
+    } catch {
+      done(null);
     }
-  }
-  return null;
+  });
 }
 
 /**
