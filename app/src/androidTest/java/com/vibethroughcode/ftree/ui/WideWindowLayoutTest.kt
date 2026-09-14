@@ -118,6 +118,7 @@ class WideWindowLayoutTest {
                     SettingsScreen(
                         onExport = {},
                         onImport = {},
+                        onNearby = {},
                         viewModel = viewModel(factory = FTreeViewModels.Factory),
                     )
                 }

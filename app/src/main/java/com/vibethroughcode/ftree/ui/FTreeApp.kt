@@ -48,10 +48,13 @@ import androidx.navigation.toRoute
 import com.vibethroughcode.ftree.BuildConfig
 import com.vibethroughcode.ftree.FTreeApplication
 import com.vibethroughcode.ftree.R
+import com.vibethroughcode.ftree.nearby.NearbyState
 import com.vibethroughcode.ftree.transfer.TreeDocument
 import com.vibethroughcode.ftree.transfer.sendBranchIntent
 import com.vibethroughcode.ftree.ui.common.LocalKinshipLanguage
 import com.vibethroughcode.ftree.ui.common.isShortWindow
+import com.vibethroughcode.ftree.ui.nearby.NearbyScreen
+import com.vibethroughcode.ftree.ui.nearby.NearbyViewModel
 import com.vibethroughcode.ftree.ui.people.PeopleScreen
 import com.vibethroughcode.ftree.ui.person.PersonDetailScreen
 import com.vibethroughcode.ftree.ui.person.PersonEditScreen
@@ -120,6 +123,8 @@ fun FTreeApp(
         .container.kinshipPreferences.language.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val transferViewModel: TransferViewModel = viewModel(factory = FTreeViewModels.Factory)
+    // Activity-scoped, like the transfer view model, so a rotation does not hang up a transfer.
+    val nearbyViewModel: NearbyViewModel = viewModel(factory = FTreeViewModels.Factory)
 
     TransferMessages(transferViewModel, snackbarHostState)
 
@@ -253,6 +258,7 @@ fun FTreeApp(
                         SettingsScreen(
                             onExport = { exportPicker.launch(defaultExportName()) },
                             onImport = { importPicker.launch(arrayOf("*/*")) },
+                            onNearby = nearbyViewModel::open,
                             viewModel = settingsViewModel,
                         )
                     }
@@ -303,6 +309,50 @@ fun FTreeApp(
                         )
                     }
                 }
+            }
+        }
+
+        /*
+         * Nearby sharing, over whatever opened it, for the same reason as the import review below:
+         * a live connection cannot be put in a route, and backing out has to hang up.
+         *
+         * What arrives is handed to the review through the very call the file picker uses. Nothing
+         * here decides anything about anybody's family; this only delivers the bytes to the code
+         * that already does.
+         */
+        val nearbyMode by nearbyViewModel.mode.collectAsStateWithLifecycle()
+        val nearbyState by nearbyViewModel.state.collectAsStateWithLifecycle()
+        LaunchedEffect(nearbyState) {
+            if (nearbyState is NearbyState.Arrived) {
+                nearbyViewModel.handOff { file ->
+                    transferViewModel.prepareImport(Uri.fromFile(file), nearbyViewModel::importPrepared)
+                }
+            }
+        }
+        nearbyMode?.let { mode ->
+            val peers by nearbyViewModel.peers.collectAsStateWithLifecycle()
+            val listening by nearbyViewModel.listening.collectAsStateWithLifecycle()
+            val preparing by nearbyViewModel.preparing.collectAsStateWithLifecycle()
+            Dialog(
+                onDismissRequest = nearbyViewModel::close,
+                properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+            ) {
+                NearbyScreen(
+                    mode = mode,
+                    state = nearbyState,
+                    peers = peers,
+                    listening = listening,
+                    deviceName = nearbyViewModel.deviceName,
+                    preparing = preparing,
+                    onSend = nearbyViewModel::send,
+                    onSendTo = nearbyViewModel::sendTo,
+                    onConfirmCode = nearbyViewModel::confirmCode,
+                    onAccept = nearbyViewModel::accept,
+                    onDecline = nearbyViewModel::decline,
+                    onCancel = nearbyViewModel::cancel,
+                    onDismiss = nearbyViewModel::dismiss,
+                    onClose = nearbyViewModel::close,
+                )
             }
         }
 

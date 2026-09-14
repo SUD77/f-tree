@@ -18,9 +18,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.WarningAmber
@@ -36,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +54,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +66,7 @@ import com.vibethroughcode.ftree.BuildConfig
 import com.vibethroughcode.ftree.R
 import com.vibethroughcode.ftree.data.KinshipLanguage
 import com.vibethroughcode.ftree.ui.common.SectionRule
+import com.vibethroughcode.ftree.ui.nearby.NearbyMode
 import com.vibethroughcode.ftree.ui.common.READABLE_MEASURE
 import com.vibethroughcode.ftree.ui.common.ReadingColumns
 import com.vibethroughcode.ftree.ui.theme.FTreeText
@@ -74,6 +83,10 @@ const val SettingsExportTag = "settings-export"
 const val SettingsImportTag = "settings-import"
 const val SettingsBetaToggleTag = "settings-beta-toggle"
 const val SettingsBetaConfirmTag = "settings-beta-confirm"
+const val SettingsNearbyToggleTag = "settings-nearby-toggle"
+const val SettingsNearbySendTag = "settings-nearby-send"
+const val SettingsNearbyReceiveTag = "settings-nearby-receive"
+const val SettingsNearbyRenameTag = "settings-nearby-rename"
 
 /**
  * Settings, and the only place in the app that can reach the network.
@@ -88,6 +101,7 @@ const val SettingsBetaConfirmTag = "settings-beta-confirm"
 fun SettingsScreen(
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onNearby: (NearbyMode) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel,
 ) {
@@ -98,6 +112,11 @@ fun SettingsScreen(
     val kinshipLanguage by viewModel.kinshipLanguage.collectAsStateWithLifecycle()
     val betaChannel by viewModel.betaChannel.collectAsStateWithLifecycle()
     var confirmingBeta by remember { mutableStateOf(false) }
+    val nearbyEnabled by viewModel.nearbyEnabled.collectAsStateWithLifecycle()
+    val deviceName by viewModel.deviceName.collectAsStateWithLifecycle()
+    val trustedOnly by viewModel.trustedOnly.collectAsStateWithLifecycle()
+    val trustedDevices by viewModel.trustedDevices.collectAsStateWithLifecycle()
+    var renaming by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -206,6 +225,106 @@ fun SettingsScreen(
                 )
             }
 
+            /*
+             * After "Your data", because export, import and this are three answers to one question:
+             * how does a tree get from here to there. Off until switched on, and even then nothing
+             * is announced until one of the two screens is open — there is no "always visible" and
+             * no "accept without asking", and both absences are the design.
+             */
+            Column {
+                SectionRule(stringResource(R.string.settings_section_nearby))
+
+                SettingsSwitch(
+                    title = stringResource(R.string.settings_nearby_toggle),
+                    body = stringResource(R.string.settings_nearby_explainer),
+                    checked = nearbyEnabled,
+                    onCheckedChange = viewModel::setNearbyEnabled,
+                    tag = SettingsNearbyToggleTag,
+                )
+
+                AnimatedVisibility(visible = nearbyEnabled) {
+                    Column {
+                        SettingsAction(
+                            icon = { Icon(Icons.Default.Send, contentDescription = null) },
+                            title = stringResource(R.string.settings_nearby_send),
+                            body = stringResource(R.string.settings_nearby_send_body),
+                            onClick = { onNearby(NearbyMode.SEND) },
+                            modifier = Modifier.testTag(SettingsNearbySendTag),
+                        )
+                        SettingsAction(
+                            icon = { Icon(Icons.Default.CallReceived, contentDescription = null) },
+                            title = stringResource(R.string.settings_nearby_receive),
+                            body = stringResource(R.string.settings_nearby_receive_body),
+                            onClick = { onNearby(NearbyMode.RECEIVE) },
+                            modifier = Modifier.testTag(SettingsNearbyReceiveTag),
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.settings_nearby_name_title),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(deviceName, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            TextButton(
+                                onClick = { renaming = true },
+                                modifier = Modifier.testTag(SettingsNearbyRenameTag),
+                            ) { Text(stringResource(R.string.settings_nearby_name_edit)) }
+                        }
+                        Text(
+                            stringResource(R.string.settings_nearby_name_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                        )
+
+                        SettingsSwitch(
+                            title = stringResource(R.string.settings_nearby_trusted_only),
+                            body = stringResource(R.string.settings_nearby_trusted_only_body),
+                            checked = trustedOnly,
+                            onCheckedChange = viewModel::setTrustedOnly,
+                            tag = "settings-nearby-trusted-only",
+                        )
+
+                        Text(
+                            stringResource(R.string.settings_nearby_trusted_title).uppercase(),
+                            style = FTreeText.sectionLabel,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                        )
+                        if (trustedDevices.isEmpty()) {
+                            Text(
+                                stringResource(R.string.settings_nearby_trusted_none),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            trustedDevices.entries.sortedBy { it.value.lowercase() }.forEach { (id, name) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                    val forgetLabel = stringResource(R.string.settings_nearby_forget_named, name)
+                                    TextButton(
+                                        onClick = { viewModel.forgetDevice(id) },
+                                        modifier = Modifier.semantics { contentDescription = forgetLabel },
+                                    ) { Text(stringResource(R.string.settings_nearby_forget)) }
+                                }
+                            }
+                            TextButton(onClick = viewModel::forgetAllDevices) {
+                                Text(stringResource(R.string.settings_nearby_forget_all))
+                            }
+                        }
+                    }
+                }
+            }
+
             Column {
                 SectionRule(stringResource(R.string.settings_section_about))
 
@@ -287,6 +406,18 @@ fun SettingsScreen(
     }
     }
 
+    if (renaming) {
+        RenameDeviceDialog(
+            current = deviceName,
+            generated = viewModel.generatedDeviceName,
+            onDismiss = { renaming = false },
+            onDone = { name ->
+                renaming = false
+                viewModel.renameDevice(name)
+            },
+        )
+    }
+
     if (confirmingBeta) {
         BetaOptInDialog(
             onDismiss = { confirmingBeta = false },
@@ -333,6 +464,45 @@ private fun BetaOptInDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.settings_beta_dialog_cancel))
+            }
+        },
+    )
+}
+
+/**
+ * Names this device, committed on Done and never per keystroke: the name is broadcast to everybody
+ * on the Wi-Fi while a nearby screen is open, and half of one should never be. Left empty, the
+ * generated name comes back.
+ */
+@Composable
+private fun RenameDeviceDialog(
+    current: String,
+    generated: String,
+    onDismiss: () -> Unit,
+    onDone: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(if (current == generated) "" else current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_nearby_name_dialog_title)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(64) },
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.settings_nearby_name_dialog_hint, generated)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onDone(text) }),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onDone(text) }) {
+                Text(stringResource(R.string.settings_nearby_name_dialog_done))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_nearby_name_dialog_cancel))
             }
         },
     )

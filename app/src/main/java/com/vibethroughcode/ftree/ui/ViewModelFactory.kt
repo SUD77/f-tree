@@ -16,6 +16,7 @@ import com.vibethroughcode.ftree.ui.person.PersonEditViewModel
 import com.vibethroughcode.ftree.ui.relation.RelationViewModel
 import com.vibethroughcode.ftree.ui.relative.AddRelativeViewModel
 import com.vibethroughcode.ftree.ui.transfer.TransferViewModel
+import com.vibethroughcode.ftree.ui.nearby.NearbyViewModel
 import com.vibethroughcode.ftree.ui.settings.SettingsViewModel
 import com.vibethroughcode.ftree.ui.tree.TreeViewModel
 import com.vibethroughcode.ftree.ui.tree.WholeTreeViewModel
@@ -47,6 +48,9 @@ object FTreeViewModels {
                 chart = app.container.chartPreferences,
                 kinship = app.container.kinshipPreferences,
                 updates = app.container.updateRepository,
+                nearbyPreferences = app.container.nearbyPreferences,
+                nearbyIdentity = app.container.nearbyIdentity,
+                nearbyRepository = app.container.nearbyRepository,
             )
         }
         initializer {
@@ -57,6 +61,15 @@ object FTreeViewModels {
                 branchShare = app.container.branchShare,
                 contentResolver = app.contentResolver,
                 repository = app.container.familyRepository,
+            )
+        }
+        initializer {
+            val app = this[APPLICATION_KEY] as FTreeApplication
+            NearbyViewModel(
+                repository = app.container.nearbyRepository,
+                identity = app.container.nearbyIdentity,
+                exporter = app.container.exporter,
+                outgoingDirectory = java.io.File(app.cacheDir, "nearby-out"),
             )
         }
         initializer {
