@@ -133,12 +133,19 @@ class TreeImporter(
         }
 
         // Photos are files, so they are written before the transaction; a failure afterwards leaves
-        // an unreferenced file rather than a person pointing at nothing.
+        // an unreferenced file rather than a person pointing at nothing. A photo is only saved for
+        // a record that can actually use one: somebody arriving new, or somebody merging into a
+        // local person who has none of their own. `filledFrom` never overwrites an existing photo,
+        // so saving one for anybody else would just leave a file on disk that nothing points at.
         var photosAdded = 0
         val savedPhotos = mutableMapOf<String, String>()
         document.people.forEach { record ->
             val entry = record.photo ?: return@forEach
             val bytes = photoBytes[entry] ?: return@forEach
+            val localId = mergeTargets[record.id]
+            val needsPhoto = localId == null ||
+                database.personDao().findById(localId)?.photoId == null
+            if (!needsPhoto) return@forEach
             val name = entry.removePrefix(TreeDocument.ENTRY_PHOTOS)
             val saved = photos.saveBytes(bytes, preferredId = uniquePhotoName(name))
             if (saved != null) {

@@ -443,6 +443,63 @@ test('photos arrive under names that cannot overwrite one already held', () => {
   assert.deepStrictEqual([...photos.get(bhim.photo)], [2, 2, 2]);
 });
 
+test('importing a file with photos twice adds no photos the second time', () => {
+  // The second import recognises Asha by the origin the first one recorded, and by then she
+  // already has the photo -- saving it again would be a copy that nobody points at.
+  const tree = treeWith([]);
+  const doc = document({ people: [person('a', 'Asha', { photo: 'photos/1.jpg' })] });
+  const photos = new Map();
+  const importedPhotos = new Map([['photos/1.jpg', new Uint8Array([7, 7, 7])]]);
+
+  const runImport = () => {
+    const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+    return applyImport({ tree, plan, decisions: plan.defaultDecisions, photos, importedPhotos });
+  };
+
+  const first = runImport();
+  assert.strictEqual(first.photosAdded, 1);
+  assert.strictEqual(photos.size, 1);
+
+  const second = runImport();
+  assert.strictEqual(second.peopleMerged, 1, 'the second import did not recognise Asha');
+  assert.strictEqual(second.photosAdded, 0, 'a photo was saved again for somebody who already has one');
+  assert.strictEqual(photos.size, 1, 'the photo map grew on a re-import');
+});
+
+test('a merge into somebody with no photo of their own still takes theirs, '
+  + 'but somebody who already has one does not get a second copy', () => {
+  const tree = treeWith([
+    person('a', 'Asha', { photo: 'photos/asha.jpg' }),
+    person('b', 'Bhim'),
+  ]);
+  const doc = document({
+    sourceTreeId: MY_TREE,
+    people: [
+      person('a', 'Asha', { photo: 'photos/1.jpg' }),
+      person('b', 'Bhim', { photo: 'photos/2.jpg' }),
+    ],
+  });
+  const photos = new Map([['photos/asha.jpg', new Uint8Array([9, 9, 9])]]);
+  const importedPhotos = new Map([
+    ['photos/1.jpg', new Uint8Array([1, 1, 1])],
+    ['photos/2.jpg', new Uint8Array([2, 2, 2])],
+  ]);
+
+  const plan = planImport({ document: doc, tree, ownTreeId: MY_TREE });
+  const result = applyImport({ tree, plan, decisions: plan.defaultDecisions, photos, importedPhotos });
+
+  assert.strictEqual(result.peopleMerged, 2);
+  assert.strictEqual(result.photosAdded, 1, 'a photo was saved for Asha, who already had one');
+  assert.strictEqual(photos.size, 2, 'the photo map grew by more than the one photo Bhim needed');
+
+  const asha = tree.people.find((p) => p.name === 'Asha');
+  const bhim = tree.people.find((p) => p.name === 'Bhim');
+  assert.strictEqual(asha.photo, 'photos/asha.jpg', "Asha's own photo was replaced");
+  assert.deepStrictEqual([...photos.get('photos/asha.jpg')], [9, 9, 9], "Asha's photo bytes changed");
+  assert.ok(bhim.photo, 'Bhim, who had no photo, did not pick one up');
+  assert.deepStrictEqual([...photos.get(bhim.photo)], [2, 2, 2]);
+});
+
 test('the plan says what confirming would do before it is confirmed', () => {
   const tree = treeWith([person('mine', 'Asha')]);
   const doc = document({ people: [person('a', 'Asha'), person('b', 'Bhim')] });

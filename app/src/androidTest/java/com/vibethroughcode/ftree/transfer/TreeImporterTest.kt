@@ -1,6 +1,7 @@
 package com.vibethroughcode.ftree.transfer
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -96,6 +97,14 @@ class TreeImporterTest {
     private suspend fun namesIn(side: Side): List<String?> =
         side.repository.observeAllPeople().first().map { it.name }
 
+    private fun jpeg(): ByteArray {
+        val bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        return ByteArrayOutputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
+            it.toByteArray()
+        }
+    }
+
     // ------------------------------------------------------------------
 
     @Test
@@ -148,6 +157,26 @@ class TreeImporterTest {
         assertEquals(0, second.peopleAdded)
         assertEquals(2, second.peopleMerged)
         assertEquals(countAfterFirst, mine.repository.allPeople().size)
+    }
+
+    @Test
+    fun theSecondImportOfAPhotoDoesNotSaveItAgain() = runTest {
+        val photoId = theirs.photos.saveBytes(jpeg())!!
+        theirs.repository.addPerson(Person(name = "Ankit Kumar", photoId = photoId))
+        val archive = exportOf(theirs)
+
+        val first = importInto(mine, archive)
+        assertEquals(1, first.photosAdded)
+
+        // Origins recorded by the first import make the second recognise her outright, and by
+        // then she already has the photo -- writing it again would be a file nobody points at.
+        val photoDirectory = File(context.filesDir, PhotoStore.DIRECTORY)
+        val filesAfterFirst = photoDirectory.listFiles()?.size ?: 0
+        val second = importInto(mine, archive)
+
+        assertEquals(1, second.peopleMerged)
+        assertEquals(0, second.photosAdded)
+        assertEquals(filesAfterFirst, photoDirectory.listFiles()?.size ?: 0)
     }
 
     @Test
