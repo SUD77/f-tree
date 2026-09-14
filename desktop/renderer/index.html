@@ -454,4 +454,10 @@
   </div>
 </div>
 
+<!--
+  The QR encoder, vendored unedited (see its header and docs/desktop.md). A classic script rather
+  than a module because upstream is one: it defines the global `qrcode`, exactly as it would on any
+  page, and qr-picture.js is the only thing that calls it. Before app.js, which is deferred anyway.
+-->
+<script src="vendor/qr.js"></script>
 <script type="module" src="app.js"></script>

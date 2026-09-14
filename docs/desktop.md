@@ -199,9 +199,9 @@ dismissed the same way. **Skip this version** is now a separate answer from **No
 today, the other about this release. Only the automatic check honours a skip; asking from the menu
 always gets an answer, because a question deserves one.
 
-The two settings that reach the network are off until switched on. This app makes no request of any
-kind unless somebody has asked it to, and a default of "on" would quietly make that untrue for
-everybody who never opened the menu. Betas and checking are separate settings rather than three
+The three settings that reach a network — the two update switches and nearby sharing — are off until
+switched on. This app makes no request of any kind unless somebody has asked it to, and a default of
+"on" would quietly make that untrue for everybody who never opened the menu. Betas and checking are separate settings rather than three
 states of one, because they answer different questions — whether the app may ask GitHub anything,
 and which answer it will accept — so betas with checking off makes no request at all, and the
 checkbox is greyed rather than merely useless.
@@ -252,6 +252,57 @@ Android, compact is derived from the focused chart, so the two cannot disagree; 
 is the whole tree and there is no focused chart here, so compact makes that selection itself. That
 is a deliberate difference, and the reason the selection rules sit in one shared module.
 
+## Nearby sharing
+
+**File › Send to a nearby device** and **File › Receive from a nearby device** move a tree between two
+devices on the same Wi-Fi, directly, with nothing uploaded anywhere
+([#166](https://github.com/thisisankit27/f-tree/issues/166)). The wire is specified in
+[`nearby-protocol.md`](nearby-protocol.md); the Electron side of it is `desktop/nearby/`, behind one
+facade (`nearby/index.js`), which is the only file `main.js` requires from there.
+
+| | |
+|---|---|
+| **Off until switched on** | Preferences › Nearby sharing, the menu checkbox, or the dialog's own *Turn on*. Off, nothing is constructed: no socket, and no device id on disk. |
+| **Visible only while the dialog is open** | Receiving makes this machine visible; closing the dialog, for any reason, gives every socket back. There is no "always visible" and no "accept without asking" ([#171](https://github.com/thisisankit27/f-tree/issues/171)). |
+| **Sending only looks** | The send screen browses for receivers without announcing itself, so a machine trying to send never appears in anybody's list. |
+| **Six digits, compared** | Both screens show the same code; the sender says whether they match. *No* stops everything, and is worded as what it means: somebody may be in the middle. |
+| **It ends in the review** | An arrived file is read, deleted from the app's folder, and handed to the same import review File › Import opens. Nothing about the family is decided by nearby code. With nothing open, it opens as an untitled tree instead. |
+
+The dialog is `renderer/nearby.js`; every sentence it shows is in `renderer/nearby-words.js`, whose
+test fails when a reason in `nearby/problems.js` has no sentence. The page asks `preload.js`'s
+`nearby` object for everything and cannot open a socket itself — the viewer session's
+`refuseTheNetwork` is untouched, and `FTREE_SMOKE_NEARBY` asserts it from the page's side.
+
+The device name is set in Preferences and committed when the field is left, never per keystroke,
+because it is broadcast. The default is generated (*Quiet Heron*), never the hostname.
+
+### The QR code, and the file that is not ours
+
+The receive screen shows its address as a QR code for a phone to scan. The encoder is **vendored,
+unedited**: Kazuhiko Arase's [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator),
+MIT, at `desktop/renderer/vendor/qr.js`.
+
+| | |
+|---|---|
+| version | `qrcode-generator` 1.5.2, the file `qrcode.js` |
+| fetched | `npm pack qrcode-generator@1.5.2`, matching the registry's `sha512-pItrW0Z9…Nw==`; jsDelivr serves the same bytes |
+| SHA-256 | `18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780`, of everything after the provenance comment at the top of the file |
+
+Vendored rather than written, because a subtly wrong QR encoder does not fail to draw: it draws a
+code that scans as a *different string*, and in a pairing flow that is the worst available failure.
+Vendored rather than an npm dependency, so `package.json` keeps no runtime dependencies. Kept
+byte-identical so it stays diffable against upstream — `renderer/vendor/qr.test.js` hashes it and
+fails on any edit. To update it, replace everything below the comment with the new upstream file and
+change the version and hash in the comment, in the test, and here.
+
+The same test holds the protocol's vector 15, *QR modules*: the link `vectors.txt` pins as
+`qrlink | encode` draws exactly the matrix in `docs/nearby/qr-golden.txt` — the link on the first line,
+then one row per line of `1` and `0`, quiet zone left out, so the Android suite can read the same file
+and prove ZXing decodes the desktop's code as the link. That matrix was checked, when it was recorded, by
+two decoders sharing no code with the encoder or each other (zxing-cpp and jsQR), both reading it back
+as the link at error correction M, version 8. The code is drawn dark on white in both themes — many
+scanners never try an inverted one — with the four-module quiet zone the standard asks for.
+
 ## Why Electron and not the app's own code
 
 Compose Multiplatform would reuse the app's Kotlin, which is the better answer on paper. It is the
@@ -271,6 +322,8 @@ Installers are around 100MB. That is what Electron costs.
 |---|---|
 | `desktop/main.js` | the shell: window, menu, file dialogs, the session file, the smoke test |
 | `desktop/preload.js` | the only bridge between page and machine, and a deliberately short one |
+| `desktop/nearby/` | nearby sharing's protocol and sockets, main process only, behind `nearby/index.js` |
+| `desktop/renderer/vendor/qr.js` | the QR encoder, vendored unedited — see *The QR code* above |
 | `desktop/build/icon.png` | the mark from the website, at 512px |
 | `site/playground/*` | the viewer, carried into the package as a resource |
 
@@ -398,8 +451,9 @@ offered to run; a mismatch deletes the file and installs nothing. On Windows the
 launched from the app. On Linux the AppImage is downloaded and revealed — a `.deb` needs `apt` and
 an AppImage is the reader's file to put where they want it, so the app does not pretend otherwise.
 
-**This is the one thing that reaches the network,** and it is made from the main process. The window
-stays refused outright, so nothing the page contains can ever call out.
+**This is the one thing that reaches the internet,** and it is made from the main process. Nearby
+sharing is the other thing that uses a network, and it never leaves the local one (below). The window
+stays refused outright in both cases, so nothing the page contains can ever call out.
 
 ## What it deliberately does not have
 

@@ -1546,9 +1546,27 @@
  * catches the eye.
  */
 .editor .nearby-listen { display: grid; gap: 22px; align-items: center; }
-.editor .nearby-listen.with-code { grid-template-columns: 172px minmax(0, 1fr); }
+.editor .nearby-listen.with-code { grid-template-columns: 188px minmax(0, 1fr); }
 
 .editor .nearby-listen-words { display: grid; gap: 10px; }
+
+/*
+ * The code, on white in both themes. Many scanners never try an inverted symbol, so a night-mode
+ * square drawn light-on-dark would look right and read as nothing. The white is the symbol's quiet
+ * zone as much as its background -- qr-picture.js draws the four-module margin into the SVG -- so
+ * the plate adds only a hairline and the corner radius every surface here has.
+ */
+.editor .nearby-qr {
+  width: 188px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.editor .nearby-qr svg { display: block; width: 100%; height: 100%; }
 
 .editor .nearby-steps {
   margin: 0;

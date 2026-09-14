@@ -27,10 +27,15 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 // renderer. The extension differs -- `.test.mjs` there, because those files must be modules
 // whatever the directory above them says.
 const RUNNERS = ['test', 'test:package'];
+//
+// `renderer/vendor` holds files that are not ours -- the QR encoder, byte-for-byte upstream -- and
+// the test beside it is the one that says so. A directory missing from this list is a directory
+// whose tests this guard cannot see, so it is listed the moment it has one.
 const TEST_DIRS = [
   { dir: '.', suffix: '.test.js' },
   { dir: 'nearby', suffix: '.test.js' },
   { dir: 'renderer', suffix: '.test.js' },
+  { dir: 'renderer/vendor', suffix: '.test.js' },
   { dir: '../site/playground', suffix: '.test.mjs' },
 ];
 

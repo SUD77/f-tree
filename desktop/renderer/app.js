@@ -44,6 +44,7 @@ import {
 import { createAutosave, describeWriteFailure } from './autosave.js';
 import { relateIcon, prefsIcon } from './icons.js';
 import { createNearby } from './nearby.js';
+import { qrMatrix, qrSvg } from './qr-picture.js';
 
 const { PARENT, SPOUSE, SIBLING } = RelationshipType;
 
@@ -2748,6 +2749,22 @@ function wireShell() {
  */
 let nearbyDialog = null;
 
+/**
+ * The receive screen's link as a QR code, or null.
+ *
+ * Null rather than a broken square when the encoder is missing or refuses: the address in words is
+ * printed beside it either way, and a phone can type what it cannot scan. The code is a
+ * convenience; the six digits and the typed address are what always work (#172).
+ */
+function drawCode(text) {
+  if (typeof globalThis.qrcode !== 'function') return null;
+  try {
+    return qrSvg(qrMatrix(globalThis.qrcode, text), { label: 'A code to scan with f-tree on a phone' });
+  } catch {
+    return null;
+  }
+}
+
 function wireNearby() {
   if (!shell?.nearby) return;
   nearbyDialog = createNearby({
@@ -2758,6 +2775,7 @@ function wireNearby() {
       importArrived,
       setSetting: setPref,
     },
+    drawCode,
   });
   if (shell.smoke) window.__nearbyForTest = () => ({ open: nearbyDialog.isOpen, step: nearbyDialog.step });
 }
