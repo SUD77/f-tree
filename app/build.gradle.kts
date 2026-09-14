@@ -146,4 +146,21 @@ dependencies {
  */
 tasks.withType<Test>().configureEach {
     System.getProperty("ftree.tree")?.let { systemProperty("ftree.tree", it) }
+
+    /*
+     * The JavaScript half of the nearby protocol, and the tree the cross-language test sends.
+     *
+     * `CrossLanguageTransferTest` runs this module's Kotlin against `desktop/nearby/` in a real
+     * `node` process, so those files are genuinely inputs to this task even though Gradle has no
+     * other reason to think so. Without this the test is considered up to date when only the
+     * JavaScript has changed -- which is exactly the change it exists to catch, and it would pass
+     * by not running. Verified by breaking a label on the JS side: unregistered, the task is
+     * skipped and reports success.
+     */
+    inputs.files(
+        fileTree(rootProject.file("desktop/nearby")) { include("**/*.js") },
+        rootProject.file("site/playground/sample-family.ftree"),
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("nearbyCrossLanguageInputs")
+        .optional()
 }
