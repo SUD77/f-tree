@@ -227,7 +227,13 @@ class Nearby extends EventEmitter {
     const partPath = path.join(this.downloadDirectory, `nearby-${Date.now()}.ftree.part`);
     const sink = fs.createWriteStream(partPath);
     transfer.sink = sink;
-    if (this.pairingToken) transfer.pairingToken = this.pairingToken;
+    if (this.pairingToken) {
+      transfer.pairingToken = this.pairingToken;
+      // Single use: the first connection that presents it spends it, and the screen shows a new one.
+      transfer.onTokenUsed = () => {
+        this.pairingToken = null;
+      };
+    }
 
     this.incoming = { transfer, partPath, sink };
 

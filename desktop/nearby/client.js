@@ -60,6 +60,12 @@ class NearbySender extends EventEmitter {
     this.privateKey = dh.generatePrivate();
     this.publicKey = dh.publicOf(this.privateKey);
     this.nonce = crypto.randomBytes(protocol.HANDSHAKE_NONCE_BYTES);
+    // PAIRED_BY_QR means "this connection presents a pairing token", so only a sender that scanned
+    // one claims it. A receiver showing a code uses its token for exactly the connections that say
+    // so; a sender that picked the device from a list and claimed it would fail as an impostor.
+    this.helloFlags = this.pairedByQr
+      ? protocol.SUPPORTED_FLAGS
+      : protocol.SUPPORTED_FLAGS & ~protocol.FLAG_PAIRED_BY_QR;
 
     this.transcript = new handshake.TranscriptHash();
     this.socket = null;
@@ -146,7 +152,7 @@ class NearbySender extends EventEmitter {
   #hello() {
     return messages.Hello.encode({
       platform: beacon.thisPlatform(),
-      flags: protocol.SUPPORTED_FLAGS,
+      flags: this.helloFlags,
       deviceId: this.identity.deviceId,
       displayName: this.identity.displayName,
     });
@@ -169,7 +175,7 @@ class NearbySender extends EventEmitter {
       ack.flags,
       protocol.VERSION,
       protocol.MIN_VERSION,
-      protocol.SUPPORTED_FLAGS,
+      this.helloFlags,
       protocol.SUPPORTED_FLAGS,
     );
     negotiation.verifyTreeFormat(messages.TREE_FORMAT_VERSION, ack.treeFormatMax);

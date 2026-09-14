@@ -321,6 +321,35 @@ class NearbyTransferTest {
     }
 
     @Test
+    fun `a device picked from the list still connects while a code is on the other screen`() {
+        // The token is for connections that say they scanned it. Applied to every connection, the
+        // ordinary path — pick a device, compare six digits — would fail whenever a QR happened
+        // to be showing, and fail as if the sender were an impostor.
+        val result = transfer(
+            fileBytes = 4096,
+            senderToken = Handshake.NO_TOKEN,
+            receiverToken = ByteArray(NearbyProtocol.PAIRING_TOKEN_BYTES) { 0x33 },
+            pairedByQr = false,
+        )
+        assertNull("sender: ${result.sendProblem}", result.sendProblem)
+        assertNotNull("the list path must still compare codes", result.senderSaw.sas)
+        assertArrayEquals(result.sent, result.received)
+    }
+
+    @Test
+    fun `a sender claiming a scan is refused when no code is showing`() {
+        val result = transfer(
+            fileBytes = 4096,
+            senderToken = ByteArray(NearbyProtocol.PAIRING_TOKEN_BYTES) { 0x44 },
+            receiverToken = Handshake.NO_TOKEN,
+            pairedByQr = true,
+        )
+        assertNotNull("a scan of nothing was accepted", result.sendProblem)
+        assertNull("a code was shown", result.senderSaw.sas)
+        assertEquals(0, result.received.size)
+    }
+
+    @Test
     fun `a wrong pairing token fails on the first sealed frame`() {
         // The token never goes on the wire; both ends mix it into the salt. A sender that did not
         // see the screen derives a different key, and the failure's shape is the point: it is not
@@ -381,7 +410,7 @@ class NearbyTransferTest {
                     HelloAck(
                         chosenVersion = NearbyProtocol.VERSION,
                         platform = NearbyPlatform.LINUX,
-                        flags = NearbyProtocol.SUPPORTED_FLAGS,
+                        flags = NearbyProtocol.FLAG_ACCEPTS_TREE,
                         deviceId = receiverId,
                         displayName = "Amber Otter",
                         keyCommitment = Handshake.keyCommitment(beaconPublic, promisedNonce),

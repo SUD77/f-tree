@@ -106,6 +106,17 @@ class NearbySendTransfer(
     private val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES)
         .also { SecureRandom().nextBytes(it) }
 
+    /**
+     * What this HELLO offers. `PAIRED_BY_QR` means "this connection presents a pairing token", so
+     * it is claimed only by a sender that scanned one; a receiver showing a code uses its token for
+     * exactly the connections that say so, and a sender that picked the device from a list must not.
+     */
+    private val helloFlags = if (pairedByQr) {
+        NearbyProtocol.SUPPORTED_FLAGS
+    } else {
+        NearbyProtocol.SUPPORTED_FLAGS and NearbyProtocol.FLAG_PAIRED_BY_QR.inv()
+    }
+
     private val transcript = TranscriptHash()
     private var connection: NearbyConnection? = null
     private var peer: HelloAck? = null
@@ -283,7 +294,7 @@ class NearbySendTransfer(
 
     private fun hello(): ByteArray = Hello(
         platform = NearbyPlatform.ANDROID,
-        flags = NearbyProtocol.SUPPORTED_FLAGS,
+        flags = helloFlags,
         deviceId = identity.deviceId,
         displayName = identity.displayName,
     ).encode()
@@ -302,7 +313,7 @@ class NearbySendTransfer(
             statedFlags = ack.flags,
             senderMax = NearbyProtocol.VERSION,
             senderMin = NearbyProtocol.MIN_VERSION,
-            senderFlags = NearbyProtocol.SUPPORTED_FLAGS,
+            senderFlags = helloFlags,
             receiverBeaconFlags = NearbyProtocol.SUPPORTED_FLAGS,
         )
         Negotiation.verifyTreeFormat(TreeDocument.VERSION, ack.treeFormatMax)
@@ -351,6 +362,8 @@ class NearbyReceiveTransfer(
     private val pairingToken: ByteArray = Handshake.NO_TOKEN,
     private val maxOfferBytes: Long = NearbyProtocol.MAX_OFFER_BYTES.toLong(),
     private val listener: NearbyTransferListener,
+    /** Called when a connection has presented the token, which is then spent. */
+    private val onTokenUsed: () -> Unit = {},
 ) {
 
     private val nonce = ByteArray(NearbyProtocol.HANDSHAKE_NONCE_BYTES)
@@ -359,6 +372,8 @@ class NearbyReceiveTransfer(
     private val digest = MessageDigest.getInstance("SHA-256")
 
     private var connection: NearbyConnection? = null
+    private var hello: Hello? = null
+    private var activeToken: ByteArray = Handshake.NO_TOKEN
     private var pendingSendKey: ByteArray? = null
     private var pendingReceiveKey: ByteArray? = null
     private var offer: Offer? = null
@@ -369,6 +384,9 @@ class NearbyReceiveTransfer(
 
     /** What the sender claimed, once it has arrived. Shown in the prompt as a claim. */
     val incomingOffer: Offer? get() = offer
+
+    /** Who the sender said it was in HELLO. A claim, like the offer, until the code is compared. */
+    val sender: Hello? get() = hello
 
     fun accept() {
         userAnswer.offer(true)
@@ -548,6 +566,18 @@ class NearbyReceiveTransfer(
         // refused before four megabytes of somebody's family crosses a room.
         val chosen = Negotiation.chooseVersion(hello.maxVersion, hello.minVersion)
         Negotiation.verifyTreeFormat(TreeDocument.VERSION, hello.treeFormatMax)
+        this.hello = hello
+
+        // The token on screen is used for the connections that say they scanned it, and only
+        // those. Applied to every connection, a sender that picked this device from a list — and
+        // so knows no token — would derive a different key and fail as if it were an impostor.
+        if (hello.flags and NearbyProtocol.FLAG_PAIRED_BY_QR != 0) {
+            if (pairingToken.contentEquals(Handshake.NO_TOKEN)) {
+                throw NearbyFailure(NearbyProblem.BAD_PAIRING)
+            }
+            activeToken = pairingToken
+            onTokenUsed()
+        }
         return HelloAck(
             chosenVersion = chosen,
             platform = NearbyPlatform.ANDROID,
@@ -575,7 +605,7 @@ class NearbyReceiveTransfer(
         // exactly this position.
         transcript.add(encodeFrame(NearbyProtocol.TYPE_KEY_ACK, reply))
         val keys = Handshake.deriveKeys(
-            Handshake.extract(transcript.value(), pairingToken, shared),
+            Handshake.extract(transcript.value(), activeToken, shared),
         )
         pendingSendKey = keys.receiverToSender
         pendingReceiveKey = keys.senderToReceiver

@@ -320,6 +320,79 @@ test('a QR pairing skips the code, and only a matching token works', async () =>
   }
 });
 
+/**
+ * One transfer to a receiver that is showing `screenToken` (or nothing), from a sender that did or
+ * did not scan. Resolves with the sender's problem, whether it saw a code, and how often the
+ * receiver spent its token.
+ */
+async function withTokenOnScreen({ screenToken, pairedByQr, senderToken = null }) {
+  const directory = scratch();
+  const { file } = sampleFile(directory, 4096);
+  const receiverIdentity = new NearbyIdentity(path.join(directory, 'r'));
+  const beaconKey = receiverIdentity.startAdvertising();
+  const sink = fs.createWriteStream(path.join(directory, 'out.ftree'));
+  const server = new NearbyServer({ identity: receiverIdentity, beaconKey, sink });
+  const port = await server.listen('127.0.0.1');
+
+  let spent = 0;
+  server.on('transfer', (incoming) => {
+    if (screenToken) incoming.pairingToken = screenToken;
+    incoming.onTokenUsed = () => {
+      spent += 1;
+    };
+    incoming.on('offer', () => incoming.accept());
+    incoming.on('complete', () => sink.end(() => incoming.verified(null)));
+  });
+
+  const sender = new NearbySender({
+    identity: new NearbyIdentity(path.join(directory, 's')),
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    pairedByQr,
+    pairingToken: senderToken,
+  });
+  await sender.prepare();
+  let codeShown = false;
+  sender.on('code', () => {
+    codeShown = true;
+    sender.confirmCode(true);
+  });
+  const problem = await new Promise((resolve) => {
+    sender.once('finished', resolve);
+    sender.connect('127.0.0.1', port);
+  });
+  server.close();
+  return { problem, codeShown, spent };
+}
+
+test('a device picked from the list still connects while a code is on the other screen', async () => {
+  // The token is for connections that say they scanned it. Applied to every connection, the
+  // ordinary path -- pick a device, compare six digits -- would fail whenever a QR was showing.
+  const result = await withTokenOnScreen({
+    screenToken: crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES),
+    pairedByQr: false,
+  });
+  assert.equal(result.problem, null, JSON.stringify(result.problem));
+  assert.equal(result.codeShown, true, 'the list path must still compare codes');
+  assert.equal(result.spent, 0, 'a connection that never scanned spent the token');
+});
+
+test('a scan spends the token, and a scan of nothing is refused', async () => {
+  const token = crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES);
+  const scanned = await withTokenOnScreen({ screenToken: token, pairedByQr: true, senderToken: token });
+  assert.equal(scanned.problem, null, JSON.stringify(scanned.problem));
+  assert.equal(scanned.codeShown, false);
+  assert.equal(scanned.spent, 1);
+
+  const nothing = await withTokenOnScreen({
+    screenToken: null,
+    pairedByQr: true,
+    senderToken: crypto.randomBytes(protocol.PAIRING_TOKEN_BYTES),
+  });
+  assert.ok(nothing.problem, 'a scan of nothing was accepted');
+  assert.equal(nothing.codeShown, false);
+});
+
 test('the receiver refuses an offer larger than it will take, before any bytes move', async () => {
   const directory = scratch();
   const { file } = sampleFile(directory, 64 * 1024);
@@ -390,7 +463,7 @@ async function againstScriptedReceiver(promisedNonce, ackNonce) {
           socket.write(encodeFrame(protocol.TYPE_HELLO_ACK, messages.HelloAck.encode({
             chosenVersion: protocol.VERSION,
             platform: beacon.PLATFORM.LINUX,
-            flags: protocol.SUPPORTED_FLAGS,
+            flags: protocol.FLAG_ACCEPTS_TREE,
             deviceId: Buffer.alloc(16, 2),
             displayName: 'Amber Otter',
             keyCommitment: handshake.keyCommitment(publicKey, promisedNonce),

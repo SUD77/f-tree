@@ -117,8 +117,14 @@ class IncomingTransfer extends EventEmitter {
     this.received = 0n;
     this.digest = crypto.createHash('sha256');
     this.finished = false;
-    /** Set by the caller before a transfer, when the receiver's screen showed a QR. */
+    /**
+     * The token on the receiver's screen, set by the caller while a QR is showing. It is used only
+     * for a connection whose HELLO says it scanned one; `onTokenUsed` is called when one does, and
+     * the token is then spent.
+     */
     this.pairingToken = handshake.NO_TOKEN;
+    this.onTokenUsed = () => {};
+    this.activeToken = handshake.NO_TOKEN;
 
     this.session = new ReceiverSession({
       busy,
@@ -175,6 +181,15 @@ class IncomingTransfer extends EventEmitter {
     negotiation.verifyTreeFormat(messages.TREE_FORMAT_VERSION, hello.treeFormatMax);
     this.peerHello = hello;
     this.chosenVersion = chosen;
+
+    // The token is for the connections that say they scanned it, and only those. Applied to every
+    // connection, a sender that picked this device from a list -- and so knows no token -- would
+    // derive a different key and fail as if it were an impostor.
+    if (hello.flags & protocol.FLAG_PAIRED_BY_QR) {
+      if (this.pairingToken.equals(handshake.NO_TOKEN)) throw new NearbyFailure(PROBLEM.BAD_PAIRING);
+      this.activeToken = this.pairingToken;
+      this.onTokenUsed();
+    }
     this.negotiatedFlags = negotiation.negotiateFlags(hello.flags, protocol.SUPPORTED_FLAGS);
 
     return messages.HelloAck.encode({
@@ -207,7 +222,7 @@ class IncomingTransfer extends EventEmitter {
     this.transcript.add(encodeFrame(protocol.TYPE_KEY_ACK, reply));
     const transcriptValue = this.transcript.value();
 
-    const prk = handshake.extract(transcriptValue, this.pairingToken, shared);
+    const prk = handshake.extract(transcriptValue, this.activeToken, shared);
     const keys = handshake.deriveKeys(prk);
     this.sas = keys.sas;
     this.pendingKeys = {
