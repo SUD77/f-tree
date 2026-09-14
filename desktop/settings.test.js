@@ -170,3 +170,37 @@ test('a version the reader has declined is not offered again', () => {
 test('with nothing skipped, everything is offered', () => {
   assert.strictEqual(shouldOffer(normalise({}), 'desktop-v0.5.0'), true);
 });
+
+// ------------------------------------------------------------------ nearby sharing
+
+test('nearby sharing is off until switched on, and only a real true turns it on', () => {
+  // The third setting that reaches a network. Off means nothing is constructed and nothing binds.
+  assert.strictEqual(DEFAULT_SETTINGS.nearbySharing, false);
+  assert.strictEqual(normalise({ nearbySharing: 'true' }).nearbySharing, false);
+  assert.strictEqual(normalise({ nearbySharing: 1 }).nearbySharing, false);
+  assert.strictEqual(normalise({ nearbySharing: true }).nearbySharing, true);
+});
+
+test('the device name is the generated one until somebody chooses one', () => {
+  assert.strictEqual(DEFAULT_SETTINGS.nearbyName, null);
+  assert.strictEqual(normalise({ nearbyName: 42 }).nearbyName, null);
+  // Nothing survives cleaning, so it is no name rather than an empty one broadcast twice a second.
+  assert.strictEqual(normalise({ nearbyName: '   ' }).nearbyName, null);
+});
+
+test('a stored name is cleaned on the way back in, not only on the way out', () => {
+  // The settings file is in a folder the reader can edit. A bidirectional override is the one
+  // character that lets a device draw itself as another device, so it is stripped here too.
+  const override = String.fromCodePoint(0x202e); // written out: the character itself is invisible
+  assert.strictEqual(normalise({ nearbyName: `Ankit${override}s phone` }).nearbyName, 'Ankits phone');
+  assert.strictEqual(normalise({ nearbyName: '  Study   desk ' }).nearbyName, 'Study desk');
+  assert.ok(Buffer.byteLength(normalise({ nearbyName: 'ह'.repeat(40) }).nearbyName) <= 64);
+});
+
+test('switching nearby sharing off does not forget the name', () => {
+  // A remembered update result is a cache that can go stale; a name is something somebody chose.
+  const named = applyChange(normalise({ nearbySharing: true }), 'nearbyName', 'Study desk');
+  const off = applyChange(named, 'nearbySharing', false);
+  assert.strictEqual(off.nearbySharing, false);
+  assert.strictEqual(off.nearbyName, 'Study desk');
+});

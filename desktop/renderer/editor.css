@@ -1193,7 +1193,7 @@
 /* `[open]` to match the specificity of `.editor .review[open]`, which would otherwise win and
    give this the import dialog's 760px. A settings dialog wants to be narrower than a merge review:
    there is nothing here to compare side by side. */
-.editor .prefs[open] { width: min(500px, calc(100vw - 48px)); }
+.editor .prefs[open] { width: min(540px, calc(100vw - 48px)); }
 
 .editor .prefs-body {
   display: block;
@@ -1238,7 +1238,8 @@
   line-height: 1.45;
   color: var(--ink-faint);
   margin: 0;
-  max-width: 52ch;
+  max-width: 64ch;
+  text-wrap: pretty;
 }
 
 .editor .prefs-control {
@@ -1270,6 +1271,354 @@
 .editor .prefs-control:disabled { opacity: .38; cursor: default; }
 
 .editor .prefs-row:has(.prefs-check:disabled) .prefs-label { color: var(--ink-faint); }
+
+/*
+ * Two columns wherever there is room for them: how the app reads on the left, and the three things
+ * that reach a network -- updates and nearby sharing -- together on the right.
+ *
+ * Measured, not assumed. The harness's budget is for the 900px window the app opens at, and a
+ * 1080p laptop at the scaling Windows and GNOME default to cannot give it one: on this project's own
+ * test laptop the window is about 754px tall, the dialog's body 457px, and one column of three
+ * sections is 547px. What scrolled out of sight was the Nearby section -- a setting that reaches a
+ * network, hidden at the bottom of the screen a reader opens to check exactly that. Side by side, the
+ * taller column is about 340px. Below 960px there is no room, and it goes back to one column.
+ */
+@media (min-width: 960px) {
+  .editor .prefs[open] { width: min(880px, calc(100vw - 48px)); }
+  .editor .prefs-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+  .editor .prefs-group:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
+  .editor .prefs-group:nth-child(2),
+  .editor .prefs-group:nth-child(3) { grid-column: 2; border-left: 1px solid var(--rule); }
+  .editor .prefs-group:nth-child(2) { grid-row: 1; border-top: 0; }
+  .editor .prefs-group:nth-child(3) { grid-row: 2; align-self: stretch; }
+}
+
+/*
+ * The nearby row carries a second control under its note: the device name, which only means
+ * something while the switch above it is on. A sub-label rather than a row of its own, so it reads
+ * as part of that setting. (It is also why the dialog is 540px rather than 500: with a third
+ * section, 500 wrapped three notes onto second lines and pushed the last setting out of sight --
+ * the budget in runSettingsSmoke is the check.)
+ */
+.editor .prefs-row-nested .prefs-sublabel {
+  grid-row: 3;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.editor .prefs-row-nested .prefs-text { grid-row: 3; margin-top: 8px; }
+/* The field sets the control column's width, so the checkbox above it keeps to the right edge. */
+.editor .prefs-row-nested .prefs-check { justify-self: end; }
+
+/* The one free-text setting: a name, set in the controls' face and shape so the row reads as one. */
+.editor .prefs-text {
+  width: 13em;
+  cursor: text;
+  padding: 6px 12px;
+}
+
+.editor .prefs-text::placeholder { color: var(--ink-faint); opacity: .8; }
+.editor .prefs-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor .prefs-row:has(.prefs-text:disabled) .prefs-sublabel { color: var(--ink-faint); }
+
+/* ------------------------------------------------------------------ nearby sharing */
+
+/*
+ * The review dialog's shell again -- head, body, foot, the same buttons -- because receiving ends in
+ * the review and the two should read as one application asking. Narrower than a merge review, wider
+ * than preferences: there is a list to pick from and, on the receive screen, a code beside words.
+ *
+ * One element is allowed to be loud, and it is the six digits. Everything else here is the app's
+ * ordinary furniture; the code is the one thing two people hold up side by side and read aloud to
+ * each other, so it is set large, in the monospace face -- equal-width digits line up group against
+ * group, and a zero cannot pass for an O -- on a plate of its own.
+ */
+.editor .nearby[open] { width: min(560px, calc(100vw - 48px)); }
+
+.editor .nearby-body { gap: 16px; }
+
+.editor .nearby-prose {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* Waiting on the network: a line that says what for, and a dot that says it has not stalled. */
+.editor .nearby-waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.editor .nearby-pulse {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--forest);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editor .nearby-pulse { animation: save-state-pulse 1s ease-in-out infinite alternate; }
+}
+
+/*
+ * Devices, in the order they arrived. A row is a button: the whole of it is the target, the name is
+ * what somebody is looking for, and the platform and address are there to tell two "Quiet Heron"s
+ * apart -- set small and faint because they are for checking, not for reading.
+ */
+.editor .nearby-peers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor .nearby-peer {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.editor .nearby-peer:hover { background: var(--bone-dim); border-color: var(--forest); }
+.editor .nearby-peer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.editor .nearby-peer-name {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.editor .nearby-peer-where {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.editor .nearby-peer-where code,
+.editor .nearby-where {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* The typed address: folded away, because the list is the ordinary way and a field reads as a step. */
+.editor .nearby-typed { border-top: 1px solid var(--rule); padding-top: 12px; }
+
+.editor .nearby-disclose {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+}
+
+.editor .nearby-disclose:hover { color: var(--ink); text-decoration-color: currentColor; }
+.editor .nearby-disclose:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.editor .nearby-typed-form { margin-top: 10px; display: grid; gap: 6px; }
+.editor .nearby-typed-form[hidden] { display: none; }
+
+.editor .nearby-label { font-size: 11.5px; letter-spacing: .02em; color: var(--ink-faint); }
+
+.editor .nearby-typed-row { display: flex; gap: 10px; }
+
+.editor .nearby-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.editor .nearby-input::placeholder { color: var(--ink-faint); opacity: .8; }
+.editor .nearby-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor .nearby-typed-row .btn { font-family: inherit; font-size: 13px; padding: 8px 16px; }
+
+.editor .nearby-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-faint); }
+
+/*
+ * The six digits. Two groups of three with a wide gap, because a person compares a group at a
+ * time; a plate of the review's own bone, because this is the thing the whole screen is about.
+ * Slashed zero and tabular figures, so neither screen can be misread against the other.
+ */
+.editor .nearby-code {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  gap: .6em;
+  padding: 22px 12px 20px;
+  font-family: var(--mono);
+  font-size: 46px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .08em;
+  font-variant-numeric: tabular-nums slashed-zero;
+  color: var(--ink);
+  background: var(--bone-dim);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+}
+
+/* Kept on screen while the answer is awaited, smaller: a reminder, not the question. */
+.editor .nearby-code.small {
+  justify-content: flex-start;
+  align-self: flex-start;
+  padding: 9px 16px;
+  font-size: 20px;
+}
+
+/* The compare step's two answers sit apart: "different" at the left, where the panel puts Delete. */
+.editor .nearby[data-step='compare'] .review-actions { flex: 1; }
+.editor .nearby .nearby-danger { margin-right: auto; }
+
+/* What the other device says it is sending. Its word, set as a sentence, then the two facts. */
+.editor .nearby-claim {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.editor .nearby-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.editor .nearby-facts dt { color: var(--ink-faint); }
+.editor .nearby-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12.5px; }
+
+/* The bytes moving. A bar, and the amount in words under it -- the bar is for the eye, not the ear. */
+.editor .nearby-bar {
+  height: 8px;
+  background: var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.editor .nearby-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--forest);
+  border-radius: inherit;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editor .nearby-bar i { transition: width .2s ease-out; }
+}
+
+.editor .nearby-amount { margin: -6px 0 0; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+
+/*
+ * A stop, said plainly. The two reasons that mean somebody may be in the middle get the refusal's
+ * colour on the heading and a rule beside the sentence: not decoration, the one moment the app has
+ * to be believed when it says "do not carry on here".
+ */
+.editor .nearby-problem p { margin: 0; max-width: 60ch; font-size: 14px; line-height: 1.6; color: var(--ink); }
+
+.editor .nearby-problem.alarm {
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--danger);
+}
+
+.editor .nearby[data-alarm='true'] .review-title { color: var(--danger); }
+
+/*
+ * Receiving: the ways to be found. The code and the words beside it, because somebody with a phone
+ * scans and somebody with a laptop reads -- and the words come first for a reader, the square only
+ * catches the eye.
+ */
+.editor .nearby-listen { display: grid; gap: 22px; align-items: center; }
+.editor .nearby-listen.with-code { grid-template-columns: 188px minmax(0, 1fr); }
+
+.editor .nearby-listen-words { display: grid; gap: 10px; }
+
+/*
+ * The code, on white in both themes. Many scanners never try an inverted symbol, so a night-mode
+ * square drawn light-on-dark would look right and read as nothing. The white is the symbol's quiet
+ * zone as much as its background -- qr-picture.js draws the four-module margin into the SVG -- so
+ * the plate adds only a hairline and the corner radius every surface here has.
+ */
+.editor .nearby-qr {
+  width: 188px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.editor .nearby-qr svg { display: block; width: 100%; height: 100%; }
+
+.editor .nearby-steps {
+  margin: 0;
+  padding-left: 1.25em;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.editor .nearby-steps b { color: var(--ink); font-weight: 600; }
+
+.editor .nearby-or { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-faint); }
+
+.editor .nearby-where {
+  color: var(--ink);
+  background: var(--sunk);
+  border-radius: 5px;
+  padding: 1px 6px;
+  user-select: all;
+}
+
+@media (max-width: 620px) {
+  .editor .nearby-listen.with-code { grid-template-columns: 1fr; justify-items: center; }
+  .editor .nearby-peer { flex-direction: column; gap: 4px; }
+  .editor .nearby-code { font-size: 36px; }
+}
 
 /* ------------------------------------------------------------------ photographs */
 

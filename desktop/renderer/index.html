@@ -264,6 +264,28 @@
     </div>
   </dialog>
 
+  <!-- ------------------------------------------------------------ nearby sharing -->
+  <!--
+    Sending a tree to a device in the same room, and receiving one (#174).
+
+    The review dialog's box, head and foot, on purpose: receiving ends in that dialog, and the two
+    should read as one application asking. The body is one step at a time, drawn by nearby.js --
+    a device to pick, a code to compare, an offer to accept, the bytes moving. The status line in
+    the foot is the one polite live region: devices arriving are announced there once, not one
+    interruption each.
+  -->
+  <dialog class="review nearby" id="nearby" aria-labelledby="nearby-title" aria-describedby="nearby-lead">
+    <div class="review-head" id="nearby-head" tabindex="-1">
+      <h2 class="review-title" id="nearby-title"></h2>
+      <p class="review-lead" id="nearby-lead"></p>
+    </div>
+    <div class="review-body nearby-body" id="nearby-body"></div>
+    <div class="review-foot">
+      <p class="review-outcome" id="nearby-status" role="status" aria-live="polite"></p>
+      <div class="review-actions" id="nearby-actions"></div>
+    </div>
+  </dialog>
+
   <!-- ------------------------------------------------------------ a photograph, whole -->
   <!--
     Uncropped, on purpose. Every other place this app shows a face shows it inside a circle, and a
@@ -314,7 +336,10 @@
   <dialog class="review prefs" id="prefs" aria-labelledby="prefs-title">
     <div class="review-head" id="prefs-head" tabindex="-1">
       <h2 class="review-title" id="prefs-title">Preferences</h2>
-      <p class="review-lead">Kept on this machine, with the trees. Nothing here is sent anywhere.</p>
+      <!-- Until nearby sharing this said "Nothing here is sent anywhere". The device name below is
+           broadcast, so the sentence says which one thing is, rather than keeping a promise the
+           dialog itself would break. -->
+      <p class="review-lead">Kept on this machine, with the trees. Only the nearby name ever leaves it.</p>
     </div>
 
     <div class="review-body prefs-body">
@@ -364,6 +389,36 @@
           </p>
         </div>
       </section>
+
+      <!--
+        The third setting that reaches a network, and off until switched on like the other two.
+
+        What the note does not offer is as deliberate as what it says (#171). There is no "always
+        visible": a device that announces itself while nobody is looking at it is one somebody has
+        forgotten they configured. There is no "accept without asking": the receiver saying yes to
+        each transfer is the feature's one real safety property, and a switch for it would be a
+        switch for undoing it.
+
+        The name is committed when the field is done -- Enter, leaving it, or Done -- and never per
+        keystroke. It is broadcast, and half a name announced twice a second is not a thing anybody
+        meant to publish.
+      -->
+      <section class="prefs-group">
+        <h3 class="prefs-heading">Nearby sharing</h3>
+
+        <!-- One row, not two: the name belongs to the switch above it and can only be set while
+             that is on, so it sits under it rather than beside it as a setting of its own. -->
+        <div class="prefs-row prefs-row-nested">
+          <label class="prefs-label" for="pref-nearby">Send and receive on this Wi-Fi</label>
+          <input type="checkbox" id="pref-nearby" class="prefs-check">
+          <p class="prefs-note" id="pref-nearby-note">
+            Seen only while its window is open. Nothing arrives unless you accept it.
+          </p>
+          <label class="prefs-sublabel" for="pref-nearby-name">Name others see</label>
+          <input type="text" id="pref-nearby-name" class="prefs-control prefs-text" maxlength="64"
+                 autocomplete="off" spellcheck="false">
+        </div>
+      </section>
     </div>
 
     <div class="review-foot">
@@ -399,4 +454,10 @@
   </div>
 </div>
 
+<!--
+  The QR encoder, vendored unedited (see its header and docs/desktop.md). A classic script rather
+  than a module because upstream is one: it defines the global `qrcode`, exactly as it would on any
+  page, and qr-picture.js is the only thing that calls it. Before app.js, which is deferred anyway.
+-->
+<script src="vendor/qr.js"></script>
 <script type="module" src="app.js"></script>

@@ -20,6 +20,10 @@ const { chooseUpdate } = require('./update');
 const { writeTreeFile } = require('./atomic');
 const { backUpBefore, folderFor } = require('./backups');
 const { installationId } = require('./identity');
+// The one file from `nearby/` this shell requires -- see its header. Requiring it binds nothing.
+const {
+  Nearby, parseTypedAddress, problemName, IMPORT_PROBLEMS, MAX_OFFER_BYTES,
+} = require('./nearby');
 const {
   DEFAULT_SETTINGS,
   normalise: normaliseSettings,
@@ -134,6 +138,12 @@ async function changeSetting(key, value, win) {
   settings = applySettingChange(settings, key, value);
   if (JSON.stringify(before) === JSON.stringify(settings)) return settings;
   await writeSettings();
+
+  // Off means off at once, not at the next launch: every socket given back, and the facade gone.
+  if (before.nearbySharing && !settings.nearbySharing) await shutDownNearby();
+  // The name is broadcast, so it reaches the facade only here -- when the field was committed.
+  if (before.nearbyName !== settings.nearbyName) nearby?.setDeviceName(settings.nearbyName);
+
   if (win && !win.isDestroyed()) buildMenu(win);
 
   /*
@@ -524,6 +534,16 @@ function buildMenu(win) {
         { label: 'Open tree…', accelerator: 'CmdOrCtrl+O', click: () => chooseInto(win) },
       { label: 'Import into this tree…', accelerator: 'CmdOrCtrl+I',
         click: () => win.webContents.send('menu:command', 'file:import') },
+        /*
+         * Beside Import, because they are the same question -- how does a tree get from there to
+         * here -- answered without a file in between. Sending needs a tree on screen, so it is
+         * greyed without one; receiving does not, because a desktop with nothing on it yet is the
+         * commonest machine a family is sent *to*.
+         */
+        { label: 'Send to a nearby device…', enabled: treeOpen,
+          click: () => win.webContents.send('menu:command', 'nearby:send') },
+        { label: 'Receive from a nearby device…',
+          click: () => win.webContents.send('menu:command', 'nearby:receive') },
         { type: 'separator' },
         /*
          * Saving is asked of the page, not done here. The page holds the tree, the writer and the
@@ -605,9 +625,19 @@ function buildMenu(win) {
             await changeSetting('betaReleases', item.checked, win);
           },
         },
+        /*
+         * The third thing that reaches a network, and in the menu for the reason the other two are:
+         * a checkbox you can see without opening anything is the plainest way to say it is off.
+         */
+        {
+          label: 'Nearby sharing',
+          type: 'checkbox',
+          checked: settings.nearbySharing,
+          click: async (item) => { await changeSetting('nearbySharing', item.checked, win); },
+        },
         { type: 'separator' },
         {
-          label: 'Both are off until you switch them on',
+          label: 'All three are off until you switch them on',
           enabled: false,
         },
         { type: 'separator' },
@@ -1010,6 +1040,303 @@ ipcMain.handle('tree:last', async () => {
     await writeSession({});
     return null;
   }
+});
+
+/* ------------------------------------------------------------------ nearby sharing */
+
+/*
+ * Sending a family to a device in the same room, from the shell's side (#166, #174).
+ *
+ * The protocol, the sockets and the file on disk live in `nearby/`, behind one facade. What this
+ * section adds is the part that has to trust nobody: the page asks, and everything it asks is
+ * checked here before the facade hears of it -- an address the typed-address rule allows, a device
+ * key that is in the list, counts that are counts, an import problem that is one of the importer's
+ * own. The page still cannot open a socket of any kind: `refuseTheNetwork` on the viewer session is
+ * untouched, and every connection nearby sharing makes is made from this process.
+ *
+ * Three rules shape it:
+ *
+ * - **Off means not constructed.** `Nearby` is built the first time it is needed *and* the setting
+ *   is on, and thrown away the moment the setting goes off. Before that there is no device id on
+ *   disk, no socket, and nothing to announce.
+ * - **Visible only while the dialog is open.** Opening the receive screen makes this machine visible;
+ *   closing it, for any reason, gives every socket back. Opening the send screen only *browses* --
+ *   see `Nearby#setBrowsing` -- so a machine trying to send never appears in anybody's list.
+ * - **A transfer ends where an import begins.** An arrived file is read into memory, deleted from
+ *   the app's folder, and handed to the page, which runs it through the same review a file picked
+ *   from a dialog gets. Nothing here reads it as a family.
+ */
+
+let nearby = null;
+/** The window whose nearby dialog is open. Only it may drive the facade, and it hears everything. */
+let nearbyWin = null;
+/** 'send' or 'receive', while the dialog is open. */
+let nearbyMode = null;
+/** Whether the page has a tree to send. The File menu's Send item follows it. */
+let treeOpen = false;
+/** The `.ftree` written for the transfer in flight, removed when it ends however it ends. */
+let leavingFile = null;
+/** Windows whose closing already ends the session, so reopening the dialog adds no listener. */
+const watchedForClose = new WeakSet();
+
+const nearbyFolder = () => path.join(app.getPath('userData'), 'nearby');
+
+function tellNearby(type, payload = {}) {
+  if (nearbyWin && !nearbyWin.isDestroyed()) {
+    nearbyWin.webContents.send('nearby:event', { type, ...payload });
+  }
+}
+
+/** A peer as the page draws it: the name to click and the two facts that tell two apart. */
+const publicPeer = (peer) => ({
+  key: peer.key,
+  name: peer.displayName,
+  platform: peer.platform,
+  address: peer.address,
+});
+
+const publicQr = (link) => (link ? { text: link.text, address: link.address, port: link.port } : null);
+
+/**
+ * A file name from another device, made safe to show and to suggest in a Save dialog.
+ *
+ * It is the sender's text: it becomes the review's title, and -- with nothing open -- the name of
+ * the tree the page offers to save. Path separators, controls and the bidirectional overrides go,
+ * and it always ends in `.ftree`.
+ */
+function arrivedName(raw) {
+  const cleaned = String(raw ?? '')
+    .replace(/[\\/]/g, ' ')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 96);
+  const named = cleaned && cleaned !== '.' && cleaned !== '..' ? cleaned : 'family';
+  return /\.ftree$/i.test(named) ? named : `${named}.ftree`;
+}
+
+async function forgetLeavingFile() {
+  if (!leavingFile) return;
+  const file = leavingFile;
+  leavingFile = null;
+  await fs.rm(file, { force: true }).catch(() => {});
+}
+
+function nearbyFacade() {
+  if (!settings.nearbySharing) return null;
+  if (nearby) return nearby;
+
+  nearby = new Nearby({
+    directory: nearbyFolder(),
+    displayName: settings.nearbyName,
+    downloadDirectory: path.join(nearbyFolder(), 'arriving'),
+  });
+
+  nearby.on('peers', (list) => tellNearby('peers', { peers: list.map(publicPeer) }));
+  nearby.on('problem', ({ problem }) => tellNearby('problem', { problem: problemName(problem) }));
+  nearby.on('qr-changed', () => tellNearby('qr-changed'));
+
+  nearby.on('send-code', (code, info = {}) => tellNearby('send-code', { code, peerName: info.peerName }));
+  nearby.on('send-progress', ({ sent, total }) => {
+    tellNearby('send-progress', { done: Number(sent), total: Number(total) });
+  });
+  nearby.on('send-finished', (problem) => {
+    forgetLeavingFile();
+    tellNearby('send-finished', {
+      problem: problem ? problem.problemName : null,
+      importProblem: problem?.importProblem ?? null,
+    });
+  });
+
+  nearby.on('receive-code', (code, info = {}) => {
+    tellNearby('receive-code', { code, pairedByQr: Boolean(info.pairedByQr), peerName: info.peerName });
+  });
+  nearby.on('receive-offer', (offer) => tellNearby('receive-offer', { offer }));
+  nearby.on('receive-progress', ({ received, total }) => {
+    tellNearby('receive-progress', { done: Number(received), total: Number(total) });
+  });
+  nearby.on('receive-complete', async ({ name, path: file }) => {
+    let bytes;
+    try {
+      bytes = await fs.readFile(file);
+    } catch {
+      nearby?.importFinished('unreadable');
+      tellNearby('receive-finished', { problem: 'IMPORT_REFUSED', importProblem: 'unreadable' });
+      return;
+    } finally {
+      // Read once and gone: a family sent to this machine is not kept in the app's own folder
+      // behind the reader's back. What they keep is whatever they confirm in the review.
+      await fs.rm(file, { force: true }).catch(() => {});
+    }
+    tellNearby('receive-complete', {
+      name: arrivedName(name),
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    });
+  });
+  nearby.on('receive-finished', (problem) => {
+    tellNearby('receive-finished', {
+      problem: problem?.problemName ?? null,
+      importProblem: problem?.importProblem ?? null,
+    });
+  });
+
+  return nearby;
+}
+
+/** Stops whatever is in flight and gives back every socket. The dialog closing, for any reason. */
+async function endNearbySession() {
+  nearbyWin = null;
+  nearbyMode = null;
+  if (!nearby) return;
+  nearby.cancelSend();
+  nearby.cancelIncoming();
+  await nearby.setVisible(false);
+  await nearby.setBrowsing(false);
+  await forgetLeavingFile();
+}
+
+/** The setting went off. Everything stops, and the facade is thrown away rather than kept idle. */
+async function shutDownNearby() {
+  const win = nearbyWin;
+  await endNearbySession();
+  if (nearby) nearby.removeAllListeners();
+  nearby = null;
+  if (win && !win.isDestroyed()) win.webContents.send('nearby:event', { type: 'off' });
+}
+
+/** Only the window that opened the dialog may drive it. */
+const fromNearbyWindow = (event) => Boolean(nearbyWin) && event.sender === nearbyWin.webContents;
+
+/*
+ * Opening the dialog. Receiving makes this machine visible; sending only looks.
+ *
+ * With the setting off the answer is `off`, and nothing has been constructed: the dialog then says
+ * what turning it on would mean, and turning it on goes through `settings:set` like every other
+ * switch, so the menu and the preferences dialog follow.
+ */
+ipcMain.handle('nearby:open', async (event, mode) => {
+  if (mode !== 'send' && mode !== 'receive') return { state: 'refused' };
+  if (mode === 'send' && !treeOpen) return { state: 'refused' };
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { state: 'refused' };
+
+  await endNearbySession();
+  const facade = nearbyFacade();
+  if (!facade) return { state: 'off' };
+
+  nearbyWin = win;
+  nearbyMode = mode;
+  if (!watchedForClose.has(win)) {
+    watchedForClose.add(win);
+    win.once('closed', () => { if (nearbyWin === win) endNearbySession(); });
+  }
+
+  if (mode === 'receive') {
+    if (!(await facade.setVisible(true))) return { state: 'failed', problem: 'NETWORK' };
+    return { state: 'receiving', deviceName: facade.deviceName, qr: publicQr(facade.qrLink()) };
+  }
+  await facade.setBrowsing(true);
+  return { state: 'browsing', deviceName: facade.deviceName, peers: facade.peers().map(publicPeer) };
+});
+
+ipcMain.handle('nearby:close', async (event) => {
+  if (fromNearbyWindow(event)) await endNearbySession();
+});
+
+/** The code on the receive screen, asked for again whenever the facade says the old one is spent. */
+ipcMain.handle('nearby:qr', (event) => {
+  if (!fromNearbyWindow(event) || nearbyMode !== 'receive' || !nearby?.visible) return null;
+  return publicQr(nearby.qrLink());
+});
+
+/** The generated name, for the preferences field's placeholder -- only once the setting is on. */
+ipcMain.handle('nearby:identity', () => {
+  const facade = nearbyFacade();
+  return facade ? { name: facade.deviceName } : null;
+});
+
+const isCount = (n) => Number.isInteger(n) && n >= 0 && n <= 0xffffffff;
+
+/*
+ * Sending: the page hands over the bytes its own writer produced and verified, never a document for
+ * this side to encode -- the same rule as saving, for the same reason. They are written to a file in
+ * the app's folder because the facade streams from disk (an honest length and digest before the
+ * first byte moves), and that file is removed when the transfer ends, whichever way it ends.
+ */
+ipcMain.handle('nearby:send', async (event, request) => {
+  if (!fromNearbyWindow(event) || nearbyMode !== 'send' || !nearby) return { ok: false, reason: 'NOT_OPEN' };
+  if (nearby.outgoing || leavingFile) return { ok: false, reason: 'BUSY' };
+
+  const { bytes, counts = {}, name, peerKey = null, address = null } = request ?? {};
+  const data = bytes instanceof ArrayBuffer ? Buffer.from(bytes)
+    : ArrayBuffer.isView(bytes) ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength) : null;
+  if (!data || data.length === 0) return { ok: false, reason: 'BAD_REQUEST' };
+  if (data.length > MAX_OFFER_BYTES) return { ok: false, reason: 'TOO_LARGE' };
+  if (![counts.people, counts.relationships, counts.photos].every(isCount)) {
+    return { ok: false, reason: 'BAD_REQUEST' };
+  }
+
+  let target;
+  if (typeof peerKey === 'string' && /^[0-9a-f]{32}$/.test(peerKey)) {
+    if (!nearby.peers().some((peer) => peer.key === peerKey)) return { ok: false, reason: 'GONE' };
+    target = { peerKey };
+  } else if (typeof address === 'string') {
+    const typed = parseTypedAddress(address);
+    if (!typed) return { ok: false, reason: 'ADDRESS' };
+    target = { link: { ...typed, token: null, keyFingerprint: null } };
+  } else {
+    return { ok: false, reason: 'BAD_REQUEST' };
+  }
+
+  const folder = path.join(nearbyFolder(), 'leaving');
+  await fs.mkdir(folder, { recursive: true });
+  leavingFile = path.join(folder, `${crypto.randomUUID()}.ftree`);
+  await fs.writeFile(leavingFile, data);
+
+  try {
+    await nearby.send({
+      filePath: leavingFile,
+      counts: { people: counts.people, relationships: counts.relationships, photos: counts.photos },
+      suggestedFileName: arrivedName(name),
+      ...target,
+    });
+  } catch (error) {
+    await forgetLeavingFile();
+    return { ok: false, reason: /no longer nearby/.test(error.message) ? 'GONE' : 'NETWORK' };
+  }
+  return { ok: true };
+});
+
+ipcMain.handle('nearby:confirmCode', (event, matched) => {
+  if (fromNearbyWindow(event) && typeof matched === 'boolean') nearby?.confirmSendCode(matched);
+});
+
+ipcMain.handle('nearby:accept', (event) => { if (fromNearbyWindow(event)) nearby?.acceptIncoming(); });
+ipcMain.handle('nearby:decline', (event) => { if (fromNearbyWindow(event)) nearby?.declineIncoming(); });
+
+/** Stops the transfer in flight -- whichever way it is going -- and keeps the dialog open. */
+ipcMain.handle('nearby:cancel', (event) => {
+  if (!fromNearbyWindow(event) || !nearby) return;
+  nearby.cancelSend();
+  nearby.cancelIncoming();
+});
+
+/*
+ * The page has read the arrived file -- opened the review, or refused it -- so the sender can be told
+ * whether what it sent was readable. `null`, or one of the importer's own reasons, and nothing else.
+ */
+ipcMain.handle('nearby:importFinished', (event, problem) => {
+  if (!fromNearbyWindow(event)) return;
+  if (problem !== null && !IMPORT_PROBLEMS.includes(problem)) return;
+  nearby?.importFinished(problem);
+});
+
+ipcMain.on('nearby:canSend', (event, can) => {
+  const next = can === true;
+  if (next === treeOpen) return;
+  treeOpen = next;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) buildMenu(win);
 });
 
 /*
@@ -2221,6 +2548,224 @@ async function runImportSmoke(win, check) {
 }
 
 /*
+ * Nearby sharing, end to end, with a second device in this process (#175).
+ *
+ * The app is the receiver, driven the way a person drives it: the menu command, the dialog, its
+ * buttons, the IPC and the real facade. The other device is a second `Nearby`, constructed here and
+ * only here -- this function runs only under FTREE_SMOKE -- sending over 127.0.0.1. Loopback is the
+ * protocol and not the router; what this proves is the wiring between the two, which no unit test
+ * reaches.
+ *
+ * The assertion that earns the gate is "it lands in the review rather than in the tree". A transfer
+ * completes, and what the person is looking at afterwards is the import review with the tree behind
+ * it unchanged. If anybody ever shortcuts the review -- for a device that has connected before, say
+ * -- this fails.
+ *
+ * And the complement of FTREE_SMOKE_NETWORK, from the other side. That gate shows the viewer
+ * session's refusal did not spread to the default session; this one shows, from inside the page,
+ * that the refusal still holds now the main process has sockets it did not have before. A fetch and
+ * a WebSocket are aimed at a live server on this machine, and the server must never hear of them --
+ * refused rather than merely failed, which a closed port could not tell apart.
+ */
+async function runNearbySmoke(win, check, fileToSend) {
+  const http = require('node:http');
+  const netModule = require('node:net');
+  const page = (fn, ...args) => win.webContents.executeJavaScript(
+    `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
+  const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+  const until = async (probe, ms = 10_000) => {
+    const end = Date.now() + ms;
+    let last = await probe();
+    while (!last && Date.now() < end) {
+      await settle(100);
+      last = await probe();
+    }
+    return last;
+  };
+  const dialogState = () => page(() => {
+    const d = document.getElementById('nearby');
+    return {
+      open: d.open,
+      step: d.dataset.step ?? null,
+      alarm: d.dataset.alarm ?? null,
+      title: d.open ? document.getElementById('nearby-title').textContent : '',
+      status: d.open ? document.getElementById('nearby-status').textContent : '',
+      code: d.querySelector('.nearby-code')?.getAttribute('aria-label') ?? null,
+      qr: Boolean(d.querySelector('.nearby-qr svg')),
+    };
+  });
+  const press = (label) => page((text) => {
+    const button = [...document.querySelectorAll('#nearby-actions button')].find((b) => b.textContent === text);
+    button?.click();
+    return Boolean(button);
+  }, label);
+
+  console.log('\n  -- nearby sharing --');
+
+  // Off until switched on, and off means nothing was built -- not merely nothing visible.
+  check('nearby sharing is off until switched on', settings.nearbySharing === false,
+    String(settings.nearbySharing));
+  check('and with it off, nothing nearby has been constructed', nearby === null);
+
+  // Beside Import, and Send only while there is a tree to send -- this section runs with one open.
+  const fileMenu = Menu.getApplicationMenu()?.items.find((item) => item.label === 'File');
+  const item = (label) => fileMenu?.submenu.items.find((entry) => entry.label === label);
+  check('File offers to send to and receive from a nearby device',
+    Boolean(item('Send to a nearby device…')) && Boolean(item('Receive from a nearby device…')));
+  check('and sending is available because a tree is open', item('Send to a nearby device…')?.enabled === true);
+
+  const countsBefore = await page(() => document.getElementById('counts').textContent);
+
+  win.webContents.send('menu:command', 'nearby:receive');
+  let seen = await until(async () => { const s = await dialogState(); return s.step === 'off' && s; });
+  check('asking to receive with it off says so, and offers to turn it on', Boolean(seen), JSON.stringify(seen));
+
+  await press('Turn on nearby sharing');
+  seen = await until(async () => { const s = await dialogState(); return s.step === 'listen' && s; });
+  check('turning it on from the dialog makes this machine visible', Boolean(seen) && Boolean(nearby?.visible),
+    `${seen?.step} / visible ${nearby?.visible}`);
+  const qr = nearby?.qrLink();
+  check('the receive screen shows its code whenever there is an address to put in one',
+    qr === null || seen.qr, qr ? qr.text : 'no private-range address on this machine');
+  check('and the menu followed the setting', settings.nearbySharing === true);
+
+  // The other device, in this process and only in this function.
+  const peer = new Nearby({ directory: await fs.mkdtemp(path.join(app.getPath('userData'), 'peer-')) });
+  const sendOnce = async () => {
+    const finished = new Promise((resolve) => peer.once('send-finished', resolve));
+    const code = new Promise((resolve) => peer.once('send-code', resolve));
+    await peer.send({
+      filePath: fileToSend,
+      counts: { people: 4, relationships: 4, photos: 0 },
+      suggestedFileName: path.basename(fileToSend),
+      link: {
+        address: '127.0.0.1',
+        port: nearby.server.port,
+        deviceId: nearby.identity.deviceId,
+        keyFingerprint: nearby.beaconKey.fingerprint,
+        token: null,
+      },
+    });
+    return { code, finished };
+  };
+
+  /* --------------------------------------------------------------- the transfer that matters */
+  let run = await sendOnce();
+  const peerCode = await run.code;
+  seen = await until(async () => { const s = await dialogState(); return s.step === 'incoming-code' && s; });
+  const shownDigits = (seen?.code ?? '').replace(/\D/g, '');
+  check('both screens show the same six digits', shownDigits === peerCode, `${shownDigits} / ${peerCode}`);
+  check('and they are spoken a digit at a time', /^Code: \d \d \d, \d \d \d$/.test(seen?.code ?? ''),
+    String(seen?.code));
+
+  peer.confirmSendCode(true);
+  seen = await until(async () => { const s = await dialogState(); return s.step === 'offer' && s; });
+  check('the offer is shown before a byte moves, as the sender\'s claim',
+    Boolean(seen) && /says it holds 4 people/.test(await page(() => document.querySelector('.nearby-claim')?.textContent ?? '')),
+    seen?.title);
+  await press('Accept');
+
+  const review = await until(() => page(() => (document.getElementById('review').open ? {
+    title: document.getElementById('review-title').textContent,
+    nearbyOpen: document.getElementById('nearby').open,
+    counts: document.getElementById('counts').textContent,
+  } : null)), 15_000);
+  const sent = await Promise.race([run.finished, settle(10_000).then(() => 'timed out')]);
+
+  check('a finished transfer lands in the import review', Boolean(review), JSON.stringify(review));
+  check('and not in the tree: nothing has changed behind the review',
+    review?.counts === countsBefore, `${countsBefore} → ${review?.counts}`);
+  check('the review is of the file that arrived', review?.title === path.basename(fileToSend), review?.title);
+  check('and the nearby dialog has made way for it', review?.nearbyOpen === false);
+  check('the sender is told the file could be read', sent === null, JSON.stringify(sent));
+  const left = await fs.readdir(path.join(app.getPath('userData'), 'nearby', 'arriving')).catch(() => []);
+  check('and no copy of the family is left in the app\'s own folder', left.length === 0, left.join(', ') || 'none');
+  // Waited for rather than read at once: the page gives visibility back only *after* it has told the
+  // sender the file was readable, so the sender can hear "done" a moment before the port closes.
+  check('and visibility was given back when the dialog closed',
+    await until(async () => nearby?.visible === false, 5000));
+
+  await page(() => document.getElementById('review-cancel').click());
+  await settle();
+  const after = await page(() => document.getElementById('counts').textContent);
+  check('declining the review leaves the tree as it was', after === countsBefore, after);
+
+  /* --------------------------------------------------------------- a mismatch, and a no */
+  win.webContents.send('menu:command', 'nearby:receive');
+  await until(async () => (await dialogState()).step === 'listen');
+  run = await sendOnce();
+  await run.code;
+  await until(async () => (await dialogState()).step === 'incoming-code');
+  peer.confirmSendCode(false);
+  seen = await until(async () => { const s = await dialogState(); return s.step === 'failed' && s; });
+  check('codes that did not match are an alarm on the receiving screen, not a retry',
+    seen?.alarm === 'true' && /codes were different/i.test(seen?.title ?? '')
+      && !(await page(() => [...document.querySelectorAll('#nearby-actions button')].some((b) => /again|waiting/i.test(b.textContent)))),
+    seen?.title);
+  const mismatch = await run.finished;
+  check('and the sender stopped for that reason', mismatch?.problemName === 'CODES_DID_NOT_MATCH',
+    JSON.stringify(mismatch));
+  await press('Close');
+  await settle();
+
+  win.webContents.send('menu:command', 'nearby:receive');
+  await until(async () => (await dialogState()).step === 'listen');
+  run = await sendOnce();
+  await run.code;
+  peer.confirmSendCode(true);
+  await until(async () => (await dialogState()).step === 'offer');
+  await press('Decline');
+  const declined = await run.finished;
+  seen = await until(async () => { const s = await dialogState(); return s.step === 'listen' && /Declined/.test(s.status) && s; });
+  check('declining tells the sender, and the screen goes back to waiting',
+    declined?.problemName === 'DECLINED' && Boolean(seen), `${JSON.stringify(declined)} / ${seen?.status}`);
+  const port = nearby.server.port;
+
+  /* --------------------------------------------------------------- the page still reaches nothing */
+  let reached = 0;
+  const listener = http.createServer((request, response) => { reached += 1; response.end('reached'); });
+  listener.on('upgrade', (request, socket) => { reached += 1; socket.destroy(); });
+  await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  const target = listener.address().port;
+  const fromThePage = await page(async (where) => {
+    const tried = {};
+    try {
+      await fetch(`http://127.0.0.1:${where}/`);
+      tried.fetch = 'answered';
+    } catch (error) {
+      tried.fetch = `refused (${error.message})`;
+    }
+    tried.socket = await new Promise((resolve) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${where}/`);
+      socket.onopen = () => resolve('opened');
+      socket.onerror = () => resolve('refused');
+      setTimeout(() => resolve('no answer'), 4000);
+    });
+    return tried;
+  }, target);
+  await settle(300);
+  listener.close();
+  check('the page still cannot open a connection, nearby sharing or not',
+    reached === 0 && /^refused/.test(fromThePage.fetch) && fromThePage.socket === 'refused',
+    `${JSON.stringify(fromThePage)}, the server heard ${reached}`);
+
+  /* --------------------------------------------------------------- off again */
+  await press('Close');
+  await settle();
+  await changeSetting('nearbySharing', false, win);
+  const stillListening = await new Promise((resolve) => {
+    const probe = netModule.connect(port, '127.0.0.1');
+    probe.once('connect', () => { probe.destroy(); resolve(true); });
+    probe.once('error', () => resolve(false));
+  });
+  check('switching it off throws the facade away and gives the port back',
+    nearby === null && !stillListening, `facade ${nearby === null ? 'gone' : 'kept'}, port ${stillListening ? 'open' : 'closed'}`);
+
+  await peer.setVisible(false);
+  peer.removeAllListeners();
+}
+
+/*
  * The menu, read back from the app that built it.
  *
  * Nothing tested the menu before this. It is assembled inline in `createWindow`, so there is no
@@ -2507,6 +3052,14 @@ async function runSmoke(win, file) {
   if (process.env.FTREE_SMOKE_PHOTO) {
     await reopenSample();
     await runPhotoSmoke(win, check);
+  }
+
+  // Last of the feature sections: it switches nearby sharing on, and the sections above were
+  // written against a fresh install where it is off.
+  if (process.env.FTREE_SMOKE_NEARBY) {
+    await reopenSample();
+    await runNearbySmoke(win, check, process.env.FTREE_SMOKE_IMPORT
+      ? path.resolve(process.env.FTREE_SMOKE_IMPORT) : file);
   }
 
   if (process.env.FTREE_SMOKE_SHOT) {

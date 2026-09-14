@@ -20,10 +20,12 @@
  */
 
 const dgram = require('node:dgram');
+const os = require('node:os');
 const { EventEmitter } = require('node:events');
 
 const protocol = require('./protocol');
 const beaconWire = require('./beacon');
+const { lanInterfaces, beaconTargets } = require('./interfaces');
 
 /**
  * The peer table.
@@ -103,15 +105,30 @@ class PeerTable extends EventEmitter {
  * while nobody is looking at the screen that says it is.
  */
 class Discovery extends EventEmitter {
-  constructor({ identity, clock = () => Date.now() } = {}) {
+  /**
+   * `interfaces` returns the LAN adapters to use, and is asked again before every send -- so a
+   * laptop that joins the Wi-Fi after the dialog opened starts announcing there within one beat,
+   * rather than after somebody closes and reopens it. Injectable so a test can hand it a table.
+   */
+  constructor({
+    identity,
+    clock = () => Date.now(),
+    interfaces = () => lanInterfaces(os.networkInterfaces()),
+  } = {}) {
     super();
     this.identity = identity;
     this.clock = clock;
+    this.interfaces = interfaces;
     this.socket = null;
     this.peers = new PeerTable();
     this.announcement = null;
     this.timers = [];
     this.lastAnswered = 0;
+    /** Adapter addresses the group has been joined on. */
+    this.joined = new Set();
+    this.joinedDefault = false;
+    /** Sends go one at a time; see `#send`. */
+    this.sending = Promise.resolve();
 
     this.peers.on('appeared', (peer) => this.emit('appeared', peer));
     this.peers.on('changed', (peer) => this.emit('changed', peer));
@@ -134,12 +151,12 @@ class Discovery extends EventEmitter {
 
       this.socket.bind(protocol.BEACON_PORT, () => {
         try {
-          this.socket.addMembership(protocol.MULTICAST_GROUP);
           this.socket.setMulticastTTL(protocol.MULTICAST_TTL);
           this.socket.setMulticastLoopback(true);
         } catch (error) {
           this.emit('multicast-unavailable', error);
         }
+        this.#join(this.interfaces());
         try {
           this.socket.setBroadcast(true);
         } catch (error) {
@@ -219,12 +236,81 @@ class Discovery extends EventEmitter {
     this.#send(beaconWire.encodeBeacon(this.announcement));
   }
 
-  #send(datagram) {
+  /**
+   * The group joined on every LAN adapter, not only the one the OS calls default.
+   *
+   * With no interface named, `addMembership` joins on the default adapter alone, and on a machine
+   * with a VM switch or a VPN that is often not the one the room is on -- beacons from the phone
+   * arrive on the Wi-Fi and are never delivered. Each adapter is joined once and forgotten when it
+   * goes, so one that comes back is joined again. A failure on one adapter is that adapter's news.
+   */
+  #join(lans) {
     if (!this.socket) return;
-    for (const address of [protocol.MULTICAST_GROUP, protocol.BROADCAST_ADDRESS]) {
-      this.socket.send(datagram, protocol.BEACON_PORT, address, () => {
+    const present = new Set(lans.map((lan) => lan.address));
+    for (const address of [...this.joined]) if (!present.has(address)) this.joined.delete(address);
+    for (const lan of lans) {
+      if (this.joined.has(lan.address)) continue;
+      try {
+        this.socket.addMembership(protocol.MULTICAST_GROUP, lan.address);
+        this.joined.add(lan.address);
+      } catch (error) {
+        this.emit('multicast-unavailable', error);
+      }
+    }
+    // No adapter qualified: join the way this always did, on whatever the OS picks.
+    if (!lans.length && !this.joinedDefault) {
+      try {
+        this.socket.addMembership(protocol.MULTICAST_GROUP);
+        this.joinedDefault = true;
+      } catch (error) {
+        this.emit('multicast-unavailable', error);
+      }
+    }
+  }
+
+  /**
+   * One datagram to every target, in turn.
+   *
+   * Per adapter: to the group with the multicast interface set to that adapter, and to that
+   * adapter's own subnet-directed broadcast, which routing delivers out of the adapter that owns the
+   * subnet. See `interfaces.js` for why neither the default multicast interface nor 255.255.255.255
+   * can be trusted on a machine with more than one network.
+   *
+   * In turn, and each send finished before the next begins, because `setMulticastInterface` is a
+   * socket option read when the datagram actually leaves. Two sends queued back to back would both
+   * go out through whichever adapter was set last. The adapters are read again on every call, and
+   * newly appeared ones joined.
+   */
+  #send(datagram) {
+    this.sending = this.sending.then(() => this.#sendNow(datagram)).catch(() => {});
+    return this.sending;
+  }
+
+  async #sendNow(datagram) {
+    if (!this.socket) return;
+    const lans = this.interfaces();
+    this.#join(lans);
+    const targets = beaconTargets(lans, {
+      group: protocol.MULTICAST_GROUP,
+      limitedBroadcast: protocol.BROADCAST_ADDRESS,
+    });
+    for (const target of targets) {
+      if (!this.socket) return;
+      if (target.via) {
+        try {
+          this.socket.setMulticastInterface(target.via);
+        } catch {
+          continue; // the adapter went between listing it and using it
+        }
+      }
+      await new Promise((resolve) => {
         // A send that fails is a network that is not there. There is nowhere to report it and
         // nothing to do about it: the next announcement is two seconds away.
+        try {
+          this.socket.send(datagram, protocol.BEACON_PORT, target.address, () => resolve());
+        } catch {
+          resolve();
+        }
       });
     }
   }

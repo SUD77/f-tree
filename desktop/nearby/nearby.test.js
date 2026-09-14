@@ -15,9 +15,10 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { Nearby, localAddress } = require('./index');
+const { Nearby, localAddress, parseTypedAddress } = require('./index');
 const { parseQrLink } = require('./qrlink');
 const protocol = require('./protocol');
+const { PROBLEM } = require('./problems');
 
 function scratch(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `ftree-${name}-`));
@@ -56,6 +57,34 @@ test('switching visibility off gives the socket back', async () => {
   // And the key is gone with it. A fresh one each time is what keeps a session's recordings from
   // being readable by anybody who later extracted the old one.
   assert.equal(nearby.beaconKey, null);
+});
+
+test('a sender can look for receivers without becoming one', async () => {
+  // The list without the rest of visibility: no port, no key, no beacon. A desktop that is only
+  // trying to send must not appear in anybody else's list while it does.
+  const receiver = new Nearby({ directory: scratch('browse-receiver') });
+  const sender = new Nearby({ directory: scratch('browse-sender') });
+  await receiver.setVisible(true);
+  await sender.setBrowsing(true);
+
+  assert.equal(sender.visible, false);
+  assert.equal(sender.server, null);
+  assert.equal(sender.beaconKey, null);
+  assert.equal(sender.discovery.announcement, null, 'a browsing sender announced itself');
+
+  // Two copies on one machine see each other (discovery.test.js); give the start burst its moment.
+  const until = Date.now() + 4000;
+  while (Date.now() < until && !sender.peers().some((p) => p.key === receiver.identity.deviceId.toString('hex'))) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(sender.peers().some((p) => p.key === receiver.identity.deviceId.toString('hex')),
+    'the browsing sender never saw the receiver');
+  assert.ok(!receiver.peers().some((p) => p.key === sender.identity.deviceId.toString('hex')),
+    'the receiver can see a device that is only browsing');
+
+  await sender.setBrowsing(false);
+  assert.equal(sender.discovery, null);
+  await receiver.setVisible(false);
 });
 
 test('a device has a name it did not take from the machine', () => {
@@ -193,6 +222,191 @@ test('a refused transfer leaves nothing partial behind', async () => {
   await receiver.setVisible(false);
 });
 
+/*
+ * The code on screen, as the screen sees it.
+ *
+ * `loopback.test.js` holds the protocol to "a token is used only by a connection that scanned it,
+ * and only once". These are the facade's half: that the square on screen is told when it has
+ * stopped being true -- spent, or old -- so it is never left showing a code nothing will honour.
+ */
+function sendTo(receiver, { token = null, onCode = (sender) => sender.confirmSendCode(true) } = {}) {
+  const directory = scratch('qr-sender');
+  const { file } = sampleFile(directory, 8192);
+  const sender = new Nearby({ directory });
+  const finished = new Promise((resolve) => sender.once('send-finished', resolve));
+  sender.on('send-code', () => onCode(sender));
+  return sender.send({
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    suggestedFileName: 'family.ftree',
+    link: {
+      address: '127.0.0.1',
+      port: receiver.server.port,
+      deviceId: receiver.identity.deviceId,
+      keyFingerprint: receiver.beaconKey.fingerprint,
+      token,
+    },
+  }).then(() => finished);
+}
+
+test('a code that has been used is redrawn, and the new one is different', async () => {
+  const receiver = new Nearby({ directory: scratch('qr-spent') });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  const token = Buffer.from(receiver.pairingToken);
+  let redraws = 0;
+  receiver.on('qr-changed', () => { redraws += 1; });
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const how = new Promise((resolve) => receiver.once('receive-code', (_sas, info) => resolve(info)));
+
+  const problem = await sendTo(receiver, { token });
+  assert.equal(problem, null, JSON.stringify(problem));
+  // The receiver is told the sender scanned, so it does not ask anybody to compare digits that the
+  // other screen never showed.
+  const info = await how;
+  assert.equal(info.pairedByQr, true);
+  // And who it was, by the name the sender gave -- the receiver has no list entry to take it from.
+  assert.match(info.peerName ?? '', /^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  assert.equal(redraws, 1, 'the screen was not told its code had been spent');
+  assert.equal(receiver.pairingToken, null);
+  receiver.qrLink();
+  assert.ok(receiver.pairingToken && !receiver.pairingToken.equals(token));
+  await receiver.setVisible(false);
+});
+
+test('a code that has run out of time is redrawn, and a scan of it is refused', async () => {
+  // Five minutes, scaled down. What matters is that the picture and the check agree: the square is
+  // retired at the moment the token is, not at the next time somebody happens to ask for it.
+  const receiver = new Nearby({ directory: scratch('qr-old'), pairingTokenLifetimeMs: 120 });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  const token = Buffer.from(receiver.pairingToken);
+  const retired = new Promise((resolve) => receiver.once('qr-changed', resolve));
+  await retired;
+  assert.equal(receiver.pairingToken, null);
+
+  let offered = false;
+  receiver.on('receive-offer', () => { offered = true; });
+  const problem = await sendTo(receiver, { token });
+  assert.equal(problem?.problem, PROBLEM.BAD_PAIRING, JSON.stringify(problem));
+  assert.equal(offered, false);
+  await receiver.setVisible(false);
+});
+
+test('a list-picked sender is told the receiver said it compares, not that it scanned', async () => {
+  const receiver = new Nearby({ directory: scratch('qr-list') });
+  await receiver.setVisible(true);
+  receiver.qrLink();
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const how = new Promise((resolve) => receiver.once('receive-code', (_sas, info) => resolve(info)));
+
+  const problem = await sendTo(receiver);
+  assert.equal(problem, null, JSON.stringify(problem));
+  assert.equal((await how).pairedByQr, false);
+  await receiver.setVisible(false);
+});
+
+test('the receiver can stop a transfer while the codes are up, and the sender hears why', async () => {
+  // Cancel has to really cancel: the sender is told CANCELLED rather than a generic failure, and
+  // nothing partial is left in the receiver's folder.
+  const receiverDirectory = scratch('cancel-receive');
+  const receiver = new Nearby({ directory: receiverDirectory });
+  await receiver.setVisible(true);
+  receiver.on('receive-code', () => receiver.cancelIncoming());
+  const receiverEnd = new Promise((resolve) => receiver.once('receive-finished', resolve));
+
+  const problem = await sendTo(receiver, { onCode: () => {} });
+  assert.equal(problem?.problem, PROBLEM.CANCELLED, JSON.stringify(problem));
+  assert.equal((await receiverEnd).problem, PROBLEM.CANCELLED);
+
+  const downloads = path.join(receiverDirectory, 'nearby');
+  assert.deepEqual(fs.existsSync(downloads) ? fs.readdirSync(downloads) : [], []);
+  await receiver.setVisible(false);
+});
+
+/*
+ * A transfer that ends while the bytes are still arriving, three ways.
+ *
+ * Found by hand, cancelling a 200 MB transfer in the real app: the `.part` stream was destroyed
+ * while writes to it were still in flight, and each of those writes then failed with an 'error'
+ * nobody listened for -- an uncaught exception in the main process, and a native error dialog over
+ * a frozen transfer. Every way a transfer can end mid-DATA reaches the same destroy, so all three are
+ * here, each large enough that the stream is still busy when the end arrives.
+ */
+async function endMidTransfer(label, stop) {
+  const senderDirectory = scratch(`${label}-send`);
+  const receiverDirectory = scratch(`${label}-receive`);
+  const total = 24 * 1024 * 1024;
+  const { file } = sampleFile(senderDirectory, total);
+  const receiver = new Nearby({ directory: receiverDirectory });
+  const sender = new Nearby({ directory: senderDirectory });
+  await receiver.setVisible(true);
+
+  // An unhandled 'error' anywhere would end this process; catching it here turns that into a
+  // failure this test can name.
+  const uncaught = [];
+  const onUncaught = (error) => uncaught.push(error.code ?? error.message);
+  process.on('uncaughtException', onUncaught);
+
+  let stoppedAt = null;
+  receiver.on('receive-offer', () => receiver.acceptIncoming());
+  receiver.on('receive-progress', ({ received }) => {
+    if (stoppedAt !== null) return;
+    stoppedAt = received;
+    stop({ receiver, sender });
+  });
+  receiver.on('receive-complete', () => receiver.importFinished(null));
+  const receiverEnd = new Promise((resolve) => receiver.once('receive-finished', resolve));
+  const senderEnd = new Promise((resolve) => sender.once('send-finished', resolve));
+  sender.on('send-code', () => sender.confirmSendCode(true));
+  await sender.send({
+    filePath: file,
+    counts: { people: 1, relationships: 0, photos: 0 },
+    link: { address: '127.0.0.1', port: receiver.server.port, deviceId: receiver.identity.deviceId, keyFingerprint: null, token: null },
+  });
+
+  const [receiverProblem, senderProblem] = await Promise.all([receiverEnd, senderEnd]);
+  // A beat for any write still in flight to come back and fail, which is the moment that crashed.
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  process.off('uncaughtException', onUncaught);
+  await receiver.setVisible(false);
+
+  const downloads = path.join(receiverDirectory, 'nearby');
+  return {
+    receiverProblem,
+    senderProblem,
+    uncaught,
+    stoppedEarly: stoppedAt !== null && stoppedAt < BigInt(total),
+    left: fs.existsSync(downloads) ? fs.readdirSync(downloads) : [],
+  };
+}
+
+test('the receiver can stop a transfer while the bytes are arriving, and nothing breaks', async () => {
+  const r = await endMidTransfer('cancel-bytes', ({ receiver }) => receiver.cancelIncoming());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.ok(r.stoppedEarly, 'the transfer finished before the Cancel landed');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CANCELLED);
+  assert.equal(r.senderProblem?.problem, PROBLEM.CANCELLED);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
+test('a sender that aborts while its bytes are arriving leaves nothing behind', async () => {
+  const r = await endMidTransfer('abort-bytes', ({ sender }) => sender.cancelSend());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CANCELLED);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
+test('a sender that simply vanishes mid-transfer leaves nothing behind', async () => {
+  // No ABORT, no goodbye: the connection just goes, the way a phone walking out of range does.
+  const r = await endMidTransfer('vanish-bytes', ({ sender }) => sender.outgoing?.socket.destroy());
+  assert.deepEqual(r.uncaught, [], 'a write after the stream was destroyed escaped as an exception');
+  assert.equal(r.receiverProblem?.problem, PROBLEM.CONNECTION_LOST);
+  assert.deepEqual(r.left, [], `left behind: ${r.left.join(', ')}`);
+});
+
 test('sending to an address off this network is refused before a socket opens', async () => {
   const directory = scratch('refuse');
   const { file } = sampleFile(directory, 1024);
@@ -206,6 +420,27 @@ test('sending to an address off this network is refused before a socket opens', 
     }),
     /refusing to connect/,
   );
+});
+
+test('a typed address is held to the same rule as a scanned one', () => {
+  // The fallback is not a way round "nothing here ever connects to the internet".
+  assert.deepEqual(parseTypedAddress('192.168.1.20:49813'), { address: '192.168.1.20', port: 49813 });
+  assert.deepEqual(parseTypedAddress(' 10.0.0.7:1 '), { address: '10.0.0.7', port: 1 });
+  assert.deepEqual(parseTypedAddress('169.254.3.4:65535'), { address: '169.254.3.4', port: 65535 });
+  for (const refused of [
+    '8.8.8.8:53', // public
+    '127.0.0.1:5000', // a harness's address, not a device in the room
+    '192.168.1.20', // no port
+    '192.168.1.20:0',
+    '192.168.1.20:70000',
+    '192.168.01.20:80', // a leading zero some parsers read as octal
+    'quiet-heron.local:80', // names are resolved by something else, somewhere else
+    '[fe80::1]:80',
+    '',
+    null,
+  ]) {
+    assert.equal(parseTypedAddress(refused), null, `accepted ${refused}`);
+  }
 });
 
 test('the device id is not the tree id', () => {

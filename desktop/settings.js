@@ -15,7 +15,12 @@
  *   changing channel clears the skipped version, because "a version skipped on one channel means
  *   nothing on the other: leaving it behind would silently hide the first release the reader has
  *   just asked to be offered".
+ *
+ * Nearby sharing has no rule of that kind, on purpose: switching it off does not forget the name.
+ * A remembered update result is a cache that can go stale; a name is something somebody chose.
  */
+
+const { sanitise: sanitiseName } = require('./nearby/names');
 
 /**
  * Off until switched on, deliberately, for the two that reach the network.
@@ -37,9 +42,19 @@ const DEFAULTS = Object.freeze({
   lastCheckedAt: 0,
   /** A version the reader has dismissed; they are not asked about it again. */
   skippedVersion: null,
+  /**
+   * Nearby sharing, the third setting that reaches a network, and off for the same reason as the
+   * other two. Off means more than "hidden": nothing is constructed, no socket is bound, and the
+   * device id is not even minted until somebody switches this on.
+   */
+  nearbySharing: false,
+  /**
+   * What this machine calls itself to other devices nearby, or null for the generated name. Never
+   * the hostname -- see `nearby/names.js` -- because a default of "priya-laptop" would broadcast a
+   * real person's name to a whole cafe without ever saying so.
+   */
+  nearbyName: null,
 });
-
-
 
 /** The settings this app knows about, and what counts as a value for each. */
 const SHAPE = {
@@ -50,6 +65,14 @@ const SHAPE = {
   betaReleases: (v) => v === true,
   lastCheckedAt: (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0),
   skippedVersion: (v) => (typeof v === 'string' && v.trim() ? v.trim() : null),
+  nearbySharing: (v) => v === true,
+  /*
+   * Sanitised here as well as by the facade, and by the same function, because this is the copy
+   * that is written to disk and read back on every launch. A name that went in with a bidirectional
+   * override in it would otherwise come back out with one -- and that override is the one character
+   * that lets a device draw itself as somebody else's.
+   */
+  nearbyName: (v) => (typeof v === 'string' ? sanitiseName(v) : null),
 };
 
 /**
