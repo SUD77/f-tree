@@ -200,8 +200,9 @@ today, the other about this release. Only the automatic check honours a skip; as
 always gets an answer, because a question deserves one.
 
 The three settings that reach a network — the two update switches and nearby sharing — are off until
-switched on. This app makes no request of any kind unless somebody has asked it to, and a default of
-"on" would quietly make that untrue for everybody who never opened the menu. Betas and checking are separate settings rather than three
+switched on. Nothing leaves the device except when you deliberately send it, to a device you can see,
+on a network you are already on, with no account and nothing in between. A default of "on" would
+quietly make that untrue for everybody who never opened the menu. Betas and checking are separate settings rather than three
 states of one, because they answer different questions — whether the app may ask GitHub anything,
 and which answer it will accept — so betas with checking off makes no request at all, and the
 checkbox is greyed rather than merely useless.
@@ -275,6 +276,11 @@ test fails when a reason in `nearby/problems.js` has no sentence. The page asks 
 
 The device name is set in Preferences and committed when the field is left, never per keystroke,
 because it is broadcast. The default is generated (*Quiet Heron*), never the hostname.
+
+On a machine with several networks — Wi-Fi beside Docker bridges, Hyper-V switches or a VPN —
+discovery announces on every real LAN adapter, each from itself and to its own subnet's broadcast,
+and skips the virtual ones (`nearby/interfaces.js`). The address on the receive screen and in its QR
+code is the adapter the system routes the local network through, never a container bridge.
 
 ### The QR code, and the file that is not ours
 
@@ -451,9 +457,11 @@ offered to run; a mismatch deletes the file and installs nothing. On Windows the
 launched from the app. On Linux the AppImage is downloaded and revealed — a `.deb` needs `apt` and
 an AppImage is the reader's file to put where they want it, so the app does not pretend otherwise.
 
-**This is the one thing that reaches the internet,** and it is made from the main process. Nearby
-sharing is the other thing that uses a network, and it never leaves the local one (below). The window
-stays refused outright in both cases, so nothing the page contains can ever call out.
+**The updater asks GitHub about releases and nothing else, and only when switched on;** the request
+is made from the main process. Beyond that, nothing leaves the device except when you deliberately
+send it, to a device you can see, on a network you are already on, with no account and nothing in
+between — nearby sharing, below. The window stays refused outright either way, so nothing the page
+contains can ever call out.
 
 ## What it deliberately does not have
 
