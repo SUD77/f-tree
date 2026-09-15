@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
  * ```
  * adb shell am broadcast -a com.vibethroughcode.ftree.SEED \
  *     -n com.vibethroughcode.ftree/.debug.SeedReceiver --es mode family
+ *     (or `--es mode birthdays`: the same family, with days falling in the next few weeks)
  * adb shell am broadcast -a com.vibethroughcode.ftree.SEED \
  *     -n com.vibethroughcode.ftree/.debug.SeedReceiver --es mode large --ei size 2000
  * adb shell am broadcast -a com.vibethroughcode.ftree.SEED \
@@ -35,6 +36,7 @@ class SeedReceiver : BroadcastReceiver() {
                 when (mode) {
                     "clear" -> seeder.clear()
                     "large" -> seeder.large(size)
+                    "birthdays" -> seeder.family(birthdays = true)
                     else -> seeder.family()
                 }
                 Log.i("SeedReceiver", "seeded: $mode")

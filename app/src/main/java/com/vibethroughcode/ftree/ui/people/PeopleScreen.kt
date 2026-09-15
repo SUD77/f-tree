@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vibethroughcode.ftree.R
@@ -76,8 +77,16 @@ fun PeopleScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
+    var comingUpExpanded by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(searching) {
         if (searching) focusRequester.requestFocus()
+    }
+
+    // Back from a night in a pocket, "today" in the band is today again.
+    LifecycleResumeEffect(Unit) {
+        viewModel.onResume()
+        onPauseOrDispose {}
     }
 
     /*
@@ -178,12 +187,28 @@ fun PeopleScreen(
                     modifier = Modifier.align(Alignment.TopCenter).padding(32.dp),
                 )
 
-                else -> LazyVerticalGrid(
+                else -> {
+                val band = state.comingUp?.takeIf { state.query.isBlank() }
+                val listLabel = stringResource(
+                    if (state.filter == PeopleFilter.LIVING) R.string.people_filter_living else R.string.people_filter_everyone,
+                )
+                LazyVerticalGrid(
                     columns = GridCells.Fixed(readableColumns(maxWidth)),
                     modifier = Modifier.fillMaxSize().testTag(PeopleListTag),
                     // Room for the extended FAB to sit over without covering the last row.
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
+                    // Coming up is about the tree, not a search, so it goes while one is being typed.
+                    if (band != null) {
+                        comingUp(
+                            band = band,
+                            showRemembering = state.filter == PeopleFilter.EVERYONE,
+                            expanded = comingUpExpanded,
+                            onToggle = { comingUpExpanded = !comingUpExpanded },
+                            onOpenPerson = onOpenPerson,
+                        )
+                        listHeading(listLabel)
+                    }
                     items(state.people, key = { it.id }) { person ->
                         PersonRow(person = person, onClick = { onOpenPerson(person.id) })
                     }
@@ -200,6 +225,7 @@ fun PeopleScreen(
                                 .testTag(PeopleCountTag),
                         )
                     }
+                }
                 }
             }
             }
