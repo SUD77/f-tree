@@ -153,4 +153,30 @@ contextBridge.exposeInMainWorld('ftreeDesktop', {
     save: (request) => ipcRenderer.invoke('book:save', request),
     showInFolder: (path) => ipcRenderer.invoke('book:showInFolder', path),
   },
+
+  /**
+   * Birthday reminders (#154): one notification a day, shown only while this window exists.
+   *
+   * The page owns the schedule (`renderer/reminders.js`'s `dueNow` and `digest`, driven by
+   * `renderer/app.js`'s `checkReminders`) because it is the side that already holds the open tree;
+   * this side only knows how to ask the OS to show a notification and hears back when it is
+   * clicked.
+   */
+  reminders: {
+    /** Whether this desktop can show a notification at all -- asked once, at boot. */
+    supported: () => ipcRenderer.invoke('reminders:supported'),
+    /** `{ title, body, personId }`, straight from `digest()`. */
+    notify: (payload) => ipcRenderer.invoke('reminders:notify', payload),
+    /** A shown notification was clicked: the person to open, or null to land on the band instead. */
+    onOpen: (handler) => ipcRenderer.on('reminders:open', (_e, personId) => handler(personId)),
+    /**
+     * Smoke-only: moves the hour `dueNow` reads without moving the date, read from the *main*
+     * process's environment so a build somebody is using never carries it. `dueNow` itself asks for
+     * a `Date`, not an hour, so `app.js`'s `remindersClock` is what applies this before calling it --
+     * see the note there for why the harness needs it at all: "at or past nine" cannot depend on
+     * what hour a CI runner happens to be started at.
+     */
+    smokeHourOverride: process.env.FTREE_SMOKE_REMINDER_HOUR
+      ? Number(process.env.FTREE_SMOKE_REMINDER_HOUR) : null,
+  },
 });

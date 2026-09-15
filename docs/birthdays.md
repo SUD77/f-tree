@@ -44,3 +44,14 @@ reader to trip on.
 A reminder is **one alarm a day**, not one per person, and it asks the database what the day holds
 at the moment it fires. An edit, a delete or an import therefore cannot leave a stale reminder
 behind, and there is no schedule to keep in step.
+
+## The desktop: reminders follow the tree that is open
+
+The desktop has no database to ask and no background process to ask it from — see `docs/desktop.md`
+for why that is a deliberate line rather than a gap. A reminder there follows whichever tree is open
+in the window doing the asking: `desktop/renderer/reminders.js`'s `dueNow` is checked on startup, on
+a tree opening, on the window regaining focus, and on a 15-minute interval, and it is `census`,
+`upcoming` and `on` from this table's own JavaScript port that it and the "coming up" band both read
+straight off `state.tree`. Close that tree, or never open one, and there is nothing to be reminded
+about — which is the same "asks at the moment it fires" promise above, just without a database to
+put the question to.
