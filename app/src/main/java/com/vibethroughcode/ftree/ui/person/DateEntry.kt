@@ -87,19 +87,21 @@ object DateEntry {
 
     /** The slots a stored or typed string stands for. Never fails: see [DateParts]. */
     fun decode(text: String): DateParts {
+        positional(text)?.let { return it }
+        // A date written some other way, by some other program: shown as if it had been pasted, so
+        // there is something to correct, but [problem] still calls it unreadable - see there.
+        return enter(DateParts(), DateSlot.YEAR, text.trim()).parts
+    }
+
+    /** The slots for text in the field's own form, or null for text written any other way. */
+    private fun positional(text: String): DateParts? {
         val t = text.trim()
         if (t.isEmpty()) return DateParts()
-        if (t.startsWith("--")) {
-            POSITIONAL_YEARLESS.matchEntire(t.substring(2))?.let {
-                return DateParts("", it.groupValues[1], it.groupValues[2])
-            }
+        return if (t.startsWith("--")) {
+            POSITIONAL_YEARLESS.matchEntire(t.substring(2))?.let { DateParts("", it.groupValues[1], it.groupValues[2]) }
         } else {
-            POSITIONAL.matchEntire(t)?.let {
-                return DateParts(it.groupValues[1], it.groupValues[2], it.groupValues[3])
-            }
+            POSITIONAL.matchEntire(t)?.let { DateParts(it.groupValues[1], it.groupValues[2], it.groupValues[3]) }
         }
-        // A date written some other way, by some other program: read it as if it had been pasted.
-        return enter(DateParts(), DateSlot.YEAR, t).parts
     }
 
     /**
@@ -198,10 +200,13 @@ object DateEntry {
 
     /** What is wrong with a field's text, or null when it is blank or a date that can be kept. */
     fun problem(text: String): DateProblem? {
+        if (text.isBlank()) return null
+        // Everything typed into the field is in its own form, so anything else came from another
+        // program - "about 1938", "before 1938". Reading a year out of it and calling that a date
+        // would rewrite the record on the next save of that person, and "before" is not "in".
+        // Unreadable, then: kept as written until somebody retypes it.
+        if (positional(text) == null) return DateProblem.MALFORMED
         val parts = decode(settle(text))
-        // Text with no digits at all is blank only if it really is blank; otherwise it is something
-        // another program wrote, and saving must not quietly erase it.
-        if (parts.isEmpty) return if (text.isBlank()) null else DateProblem.MALFORMED
         val month = parts.month.toIntOrNull()
         val day = parts.day.toIntOrNull()
         return when {

@@ -77,7 +77,11 @@
     ["1938--17", "DAY_WITHOUT_MONTH", false],
     ["---17", "DAY_WITHOUT_MONTH", false],
     ["--04", "MONTH_ALONE", false],
-    ["not a date", "MALFORMED", false]
+    ["not a date", "MALFORMED", false],
+    ["about 1938", "MALFORMED", false],
+    ["before 1938-04", "MALFORMED", false],
+    ["1938/04/17", "MALFORMED", false],
+    [" 1938-04 ", null, false]
   ],
   "deathBeforeBirth": [
     ["1950", "1949-12-31", true],
