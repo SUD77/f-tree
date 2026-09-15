@@ -1,0 +1,135 @@
+{
+  "inline": {
+    "graph": {
+      "people": ["root", "aunt", "parent", "parent-spouse", "sib", "leaf", "cousin-a", "cousin-b", "ex-spouse", "new-spouse", "shared-child", "stepchild"],
+      "parents": [
+        ["root", "aunt"],
+        ["root", "parent"],
+        ["parent", "sib"],
+        ["parent", "leaf"],
+        ["aunt", "cousin-a"],
+        ["aunt", "cousin-b"],
+        ["sib", "shared-child"],
+        ["new-spouse", "shared-child"],
+        ["new-spouse", "stepchild"]
+      ],
+      "spouses": [
+        ["parent", "parent-spouse"],
+        ["sib", "ex-spouse"],
+        ["sib", "new-spouse"]
+      ]
+    },
+    "cases": [
+      {
+        "personId": "root",
+        "expectedIds": ["aunt", "cousin-a", "cousin-b", "ex-spouse", "leaf", "new-spouse", "parent", "parent-spouse", "root", "shared-child", "sib"]
+      },
+      {
+        "personId": "aunt",
+        "expectedIds": ["aunt", "cousin-a", "cousin-b"]
+      },
+      {
+        "personId": "leaf",
+        "expectedIds": ["leaf"]
+      },
+      {
+        "personId": "sib",
+        "expectedIds": ["ex-spouse", "new-spouse", "shared-child", "sib"]
+      }
+    ]
+  },
+  "sampleFamily": [
+    {
+      "personId": "010f8fbd-d537-59d5-89fa-673641f8e97c",
+      "expectedIds": ["010f8fbd-d537-59d5-89fa-673641f8e97c", "29d077f4-bc01-5982-8478-981e5772493f", "3cb89b44-3faa-55a1-8773-e6c064639109", "50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "54f8e096-fca7-5748-99a5-03fd3d3cd9e7", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "cb65799a-0b50-5675-9ff1-db73cfa9f35d", "d29598ff-504f-5264-b752-291e52eccac3", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e", "efc855bb-9f1c-5160-ac16-04e6f407d618", "f5b2ceaf-2e76-538e-93c9-38a0a40718ff"]
+    },
+    {
+      "personId": "09ff7421-d5dd-54d7-9f49-975134f28ce3",
+      "expectedIds": ["09ff7421-d5dd-54d7-9f49-975134f28ce3"]
+    },
+    {
+      "personId": "29d077f4-bc01-5982-8478-981e5772493f",
+      "expectedIds": ["29d077f4-bc01-5982-8478-981e5772493f"]
+    },
+    {
+      "personId": "3cb89b44-3faa-55a1-8773-e6c064639109",
+      "expectedIds": ["3cb89b44-3faa-55a1-8773-e6c064639109", "50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e", "efc855bb-9f1c-5160-ac16-04e6f407d618"]
+    },
+    {
+      "personId": "50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "b5134571-fd87-5e2c-9768-bcf38a229f04", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "54f8e096-fca7-5748-99a5-03fd3d3cd9e7",
+      "expectedIds": ["010f8fbd-d537-59d5-89fa-673641f8e97c", "29d077f4-bc01-5982-8478-981e5772493f", "3cb89b44-3faa-55a1-8773-e6c064639109", "50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "54f8e096-fca7-5748-99a5-03fd3d3cd9e7", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "cb65799a-0b50-5675-9ff1-db73cfa9f35d", "d29598ff-504f-5264-b752-291e52eccac3", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e", "efc855bb-9f1c-5160-ac16-04e6f407d618", "f5b2ceaf-2e76-538e-93c9-38a0a40718ff"]
+    },
+    {
+      "personId": "671a8793-b501-5a7d-90c4-d500f4f3b222",
+      "expectedIds": ["671a8793-b501-5a7d-90c4-d500f4f3b222"]
+    },
+    {
+      "personId": "7d7d0608-b391-5b6a-b908-02899a3f817e",
+      "expectedIds": ["7d7d0608-b391-5b6a-b908-02899a3f817e"]
+    },
+    {
+      "personId": "85d77c46-0802-5c9f-aa51-3ec4362821bc",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "85d77c46-0802-5c9f-aa51-3ec4362821bc", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d0e62627-9fe2-5ea1-a6cd-67264c2b8c67", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "9da892d9-1f6a-5722-a331-83459c48d5dd",
+      "expectedIds": ["9da892d9-1f6a-5722-a331-83459c48d5dd"]
+    },
+    {
+      "personId": "af7512ec-bf88-5ad3-9e57-7ad880040da2",
+      "expectedIds": ["af7512ec-bf88-5ad3-9e57-7ad880040da2"]
+    },
+    {
+      "personId": "b39b5192-3866-547b-ad73-2c134add9449",
+      "expectedIds": ["b39b5192-3866-547b-ad73-2c134add9449"]
+    },
+    {
+      "personId": "b5134571-fd87-5e2c-9768-bcf38a229f04",
+      "expectedIds": ["b5134571-fd87-5e2c-9768-bcf38a229f04"]
+    },
+    {
+      "personId": "c8b43a49-e31d-57c4-a60a-3a4991d80520",
+      "expectedIds": ["c8b43a49-e31d-57c4-a60a-3a4991d80520"]
+    },
+    {
+      "personId": "cb65799a-0b50-5675-9ff1-db73cfa9f35d",
+      "expectedIds": ["cb65799a-0b50-5675-9ff1-db73cfa9f35d"]
+    },
+    {
+      "personId": "ce508c32-3e4e-5685-9185-f6da2c50e3ac",
+      "expectedIds": ["ce508c32-3e4e-5685-9185-f6da2c50e3ac"]
+    },
+    {
+      "personId": "d0e62627-9fe2-5ea1-a6cd-67264c2b8c67",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "85d77c46-0802-5c9f-aa51-3ec4362821bc", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d0e62627-9fe2-5ea1-a6cd-67264c2b8c67", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "d29598ff-504f-5264-b752-291e52eccac3",
+      "expectedIds": ["29d077f4-bc01-5982-8478-981e5772493f", "d29598ff-504f-5264-b752-291e52eccac3", "efc855bb-9f1c-5160-ac16-04e6f407d618"]
+    },
+    {
+      "personId": "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "d5e1e637-4b0f-5857-8090-03097c3c5781",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "e4274d7d-aa29-55a6-a4ad-082e379a5c4e",
+      "expectedIds": ["50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "b5134571-fd87-5e2c-9768-bcf38a229f04", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e"]
+    },
+    {
+      "personId": "efc855bb-9f1c-5160-ac16-04e6f407d618",
+      "expectedIds": ["29d077f4-bc01-5982-8478-981e5772493f", "3cb89b44-3faa-55a1-8773-e6c064639109", "50e8a1e0-106e-5a6f-a4c7-4f1fe9f09f92", "671a8793-b501-5a7d-90c4-d500f4f3b222", "af7512ec-bf88-5ad3-9e57-7ad880040da2", "b5134571-fd87-5e2c-9768-bcf38a229f04", "d29598ff-504f-5264-b752-291e52eccac3", "d3f12fd3-d68c-5629-b5c0-3ae68ce1f22f", "d5e1e637-4b0f-5857-8090-03097c3c5781", "e4274d7d-aa29-55a6-a4ad-082e379a5c4e", "efc855bb-9f1c-5160-ac16-04e6f407d618"]
+    },
+    {
+      "personId": "f5b2ceaf-2e76-538e-93c9-38a0a40718ff",
+      "expectedIds": ["cb65799a-0b50-5675-9ff1-db73cfa9f35d", "f5b2ceaf-2e76-538e-93c9-38a0a40718ff"]
+    }
+  ]
+}
