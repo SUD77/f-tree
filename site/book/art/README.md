@@ -7,6 +7,7 @@ and the umbrella issue is #239.
 ```
 art/
   style-frames/        the approved look (#240): kit.mjs, motifs.mjs, frames.mjs, render.sh
+    approved/          the frames as Ankit approved them on 2026-09-16: the visual contract
   src/papercut/        authored SVG sources, not shipped (#247, #253, #254)
     scenes/  avatars/  frames/  motifs/  ornaments/
     swatches.json      authoring colour → palette token

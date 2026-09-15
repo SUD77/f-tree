@@ -59,7 +59,8 @@
           "!preview.html",
           "!art/src${/*}",
           "!art/style-frames${/*}",
-          "!art/README.md"
+          "!art/README.md",
+          "!CLAUDE.md"
         ]
       },
       {
