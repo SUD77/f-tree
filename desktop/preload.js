@@ -130,4 +130,27 @@ contextBridge.exposeInMainWorld('ftreeDesktop', {
     canSend: (can) => ipcRenderer.send('nearby:canSend', can),
     onEvent: (handler) => ipcRenderer.on('nearby:event', (_e, event) => handler(event)),
   },
+
+  /**
+   * The family book (#200, #207): a designed PDF, composed and previewed entirely on this page
+   * (`renderer/book.js`, `site/book/`), turned into an actual PDF by a hidden, network-refused
+   * window this side prints from Chromium's own pipeline.
+   */
+  book: {
+    /**
+     * The templates and the policy file, as JSON.
+     *
+     * Read from the staged `site/book/` rather than fetched: the page cannot `fetch()` over
+     * `file://`, and asking the main process for bytes it already has on disk is simpler than
+     * teaching the renderer a second way to reach the filesystem.
+     */
+    assets: () => ipcRenderer.invoke('book:assets'),
+    /**
+     * Prints the given pages -- already-fitted SVG, outerHTML, photographs already as `data:`
+     * URLs -- to a PDF the reader chooses where to save. `{ path }`, or `{ canceled: true }`, or
+     * `{ error }` with a message the dialog can show as its own.
+     */
+    save: (request) => ipcRenderer.invoke('book:save', request),
+    showInFolder: (path) => ipcRenderer.invoke('book:showInFolder', path),
+  },
 });

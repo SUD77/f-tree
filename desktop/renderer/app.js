@@ -42,9 +42,10 @@ import {
   normaliseDateTyping,
 } from './person-draft.js';
 import { createAutosave, describeWriteFailure } from './autosave.js';
-import { relateIcon, prefsIcon } from './icons.js';
+import { relateIcon, prefsIcon, bookIcon } from './icons.js';
 import { createNearby } from './nearby.js';
 import { qrMatrix, qrSvg } from './qr-picture.js';
+import { createBook } from './book.js';
 
 const { PARENT, SPOUSE, SIBLING } = RelationshipType;
 
@@ -299,6 +300,7 @@ function rebuild({ refit = false } = {}) {
   renderEmptyInvitation();
   reflectDirty();
   updateZoom();
+  paintBookAvailability();
 
   /*
    * An edit can change the answer, so an open question is asked again.
@@ -349,6 +351,19 @@ function renderCounts() {
     ? 'Nobody yet'
     : `${count(people, 'person', 'people')} · `
       + `${count(state.tree.relationships.length, 'connection', 'connections')}`;
+}
+
+/**
+ * The book's entry points -- the toolbar button here, the menu item in main.js, "Family book from
+ * {name}" in the person panel -- are disabled with a title that says why on an empty tree, in
+ * Android's own words: there is no family yet for a book to be about.
+ */
+function paintBookAvailability() {
+  const button = $('book-btn');
+  if (!button) return;
+  const empty = !state.tree || state.tree.people.length === 0;
+  button.disabled = empty;
+  button.title = empty ? 'Add someone to the tree first' : 'Make a family book (Ctrl+P)';
 }
 
 /* ------------------------------------------------------------------ everyone, as a list */
@@ -1338,7 +1353,7 @@ function renderPanel() {
   body.replaceChildren();
   body.append(personForm(person), relativesSection(person));
   // Not for somebody still being added: a blank person has no family to be asked about yet.
-  if (!isFresh(person)) body.append(relateRow(person));
+  if (!isFresh(person)) body.append(relateRow(person), bookRow(person));
   paintPanelState();
 }
 
@@ -1664,6 +1679,27 @@ function relateRow(person) {
   button.append(words);
   button.title = `How is ${displayName(person)} related to somebody else?`;
   button.addEventListener('click', () => relateFrom(person.id));
+  row.append(button);
+  return row;
+}
+
+/**
+ * "Family book from {first name}" (#200, #207), the branch entry point -- next to "How are we
+ * related?" for the same reason: both start from the person already open rather than asking the
+ * reader to find them again in a fresh dialog.
+ */
+function bookRow(person) {
+  const row = document.createElement('div');
+  row.className = 'relate-row';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'relate-from';
+  button.append(bookIcon(16));
+  const words = document.createElement('span');
+  words.textContent = `Family book from ${displayName(person).split(/\s+/)[0]}`;
+  button.append(words);
+  button.title = `Make a family book from ${displayName(person)}’s branch`;
+  button.addEventListener('click', () => bookDialog?.open(person.id));
   row.append(button);
   return row;
 }
@@ -2614,8 +2650,11 @@ function wireChrome() {
   $('choose').addEventListener('click', () => shell?.chooseTree());
   $('add-person').addEventListener('click', addPerson);
 
-  // The two the bar gained when Undo, Redo and Save left it (#150). Their glyphs come from icons.js,
-  // which the panel, the list and the compact view draw theirs from too.
+  // Next to the two the bar gained when Undo, Redo and Save left it (#150). Their glyphs come
+  // from icons.js, which the panel, the list and the compact view draw theirs from too.
+  $('book-btn').append(bookIcon(18));
+  $('book-btn').addEventListener('click', () => bookDialog?.open());
+  paintBookAvailability();
   $('relate-btn').append(relateIcon(19));
   $('relate-btn').addEventListener('click', () => {
     if ($('relate').hidden) { setView('chart'); openRelate(); } else closeRelate();
@@ -2717,6 +2756,7 @@ function wireShell() {
     if (command === 'file:import') { importTree(); return; }
     if (command === 'nearby:send') { if (state.tree) nearbyDialog?.open('send'); return; }
     if (command === 'nearby:receive') { nearbyDialog?.open('receive'); return; }
+    if (command === 'book:open') { bookDialog?.open(); return; }
     if (command === 'file:save') { save(); return; }
     if (command === 'file:flush') { flushForClose(); return; }
     if (command === 'file:saveForClose') {
@@ -2740,6 +2780,38 @@ function wireShell() {
       releaseTree().then((released) => { if (released) closeTree(); });
     }
   });
+}
+
+/*
+ * The family book dialog, lent what it needs of this page and nothing more: the open tree's own
+ * document, a name for a person, a stored photograph's bytes, and the settings path that records
+ * usage. It decides nothing about layout or policy itself -- see renderer/book.js.
+ */
+let bookDialog = null;
+
+function wireBook() {
+  if (!shell?.book) return;
+  bookDialog = createBook({
+    shell,
+    hooks: {
+      getDocument: () => (state.tree ? state.tree.toExchange() : null),
+      personName: (id) => {
+        const person = state.tree?.person(id);
+        return person ? displayName(person) : null;
+      },
+      // The bytes are already in memory (state.photos, read from the archive on open) -- there is
+      // no file on disk to go back to, since saving rewrites the whole archive.
+      photoBytes: async (path) => state.photos.get(path) ?? null,
+      getSettings: () => prefs,
+      setBookUsage: (next) => setPref('bookUsage', next),
+      onSaved: (fileName, path) => {
+        toast(`Saved “${fileName}”`, 'good', {
+          action: { label: 'Show in folder', run: () => shell.book.showInFolder(path) },
+        });
+      },
+    },
+  });
+  if (shell.smoke) window.__bookForTest = () => ({ open: bookDialog.isOpen });
 }
 
 /*
@@ -2836,6 +2908,7 @@ async function boot() {
   wireShell();
   wireKeys();
   wireNearby();
+  wireBook();
 
   /*
    * Settings before the first draw.

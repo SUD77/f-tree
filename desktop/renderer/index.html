@@ -106,6 +106,13 @@
         <button type="button" class="tool" id="fit">Fit</button>
       </div>
 
+      <!--
+        A designed PDF of the tree (#200, #207). Beside Find a relation, on the same footing: both
+        take the whole tree as their subject rather than one person's edit, which is why neither
+        lives in the person panel alone.
+      -->
+      <button type="button" class="icon" id="book-btn" aria-label="Make a family book"
+              title="Make a family book (Ctrl+P)"></button>
       <!-- Android's own mark and words for it (`relation_find`), so the two shells say the same. -->
       <button type="button" class="icon" id="relate-btn" aria-label="Find a relation"
               title="Find a relation (R)" aria-pressed="false"></button>
@@ -283,6 +290,74 @@
     <div class="review-foot">
       <p class="review-outcome" id="nearby-status" role="status" aria-live="polite"></p>
       <div class="review-actions" id="nearby-actions"></div>
+    </div>
+  </dialog>
+
+  <!-- ------------------------------------------------------------ the family book -->
+  <!--
+    A designed, printable PDF of the tree (#200, #207): a cover, the whole family, the family in
+    numbers, a page per generation, an index to find yourself in, and a closing page. The preview
+    *is* the file -- these are the very SVG pages a hidden window turns into the PDF, so what is
+    seen here is what gets saved, never an approximation of it.
+
+    The review dialog's box again, widened: this is the one screen in the app that wants to show a
+    whole page at something like its printed shape, beside the choices that shape it.
+  -->
+  <dialog class="review book" id="book" aria-labelledby="book-title" aria-describedby="book-lead">
+    <div class="review-head" id="book-head" tabindex="-1">
+      <h2 class="review-title" id="book-title">Make a family book</h2>
+      <p class="review-lead" id="book-lead">A designed PDF of the tree, made on this machine.</p>
+    </div>
+    <div class="review-body book-body" id="book-body">
+      <div class="book-preview" id="book-preview" aria-label="The book's pages, page by page"></div>
+      <div class="book-options" id="book-options">
+        <section class="prefs-group">
+          <h3 class="prefs-heading">Template</h3>
+          <div class="book-templates" id="book-templates" role="group" aria-label="Template"></div>
+        </section>
+
+        <section class="prefs-group">
+          <h3 class="prefs-heading">Title</h3>
+          <div class="book-title-row">
+            <label class="sr-only" for="book-title-input">Title</label>
+            <input type="text" id="book-title-input" class="prefs-control book-title-input"
+                   autocomplete="off" spellcheck="false">
+            <button type="button" class="btn quiet" id="book-title-reset" hidden>Reset</button>
+          </div>
+        </section>
+
+        <!-- Only when the dialog was opened from a person: everyone else never sees a choice with
+             one option in it. -->
+        <section class="prefs-group" id="book-who-group" hidden>
+          <h3 class="prefs-heading">Who's in it</h3>
+          <div class="segmented book-who" id="book-who" role="group" aria-label="Who's in it">
+            <button type="button" data-scope="everyone" aria-pressed="true">Everyone</button>
+            <button type="button" data-scope="branch" aria-pressed="false"></button>
+          </div>
+        </section>
+
+        <section class="prefs-group">
+          <div class="prefs-row">
+            <label class="prefs-label" for="book-photos">Photographs</label>
+            <input type="checkbox" id="book-photos" class="prefs-check">
+            <p class="prefs-note" id="book-photos-note"></p>
+          </div>
+          <div class="prefs-row">
+            <label class="prefs-label" for="book-living-dates">Full dates for living people</label>
+            <input type="checkbox" id="book-living-dates" class="prefs-check">
+            <p class="prefs-note">When off, living people show only the year they were born.</p>
+          </div>
+        </section>
+
+        <p class="book-decision" id="book-decision" hidden></p>
+      </div>
+    </div>
+    <div class="review-foot">
+      <p class="review-outcome" id="book-status" role="status" aria-live="polite"></p>
+      <div class="review-actions">
+        <button type="button" class="btn quiet" id="book-cancel">Cancel</button>
+        <button type="button" class="btn primary" id="book-save">Save PDF&hellip;</button>
+      </div>
     </div>
   </dialog>
 
