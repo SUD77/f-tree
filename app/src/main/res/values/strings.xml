@@ -592,6 +592,8 @@
     <string name="book_screen_title">Family book</string>
     <string name="book_back">Back</string>
     <string name="book_template">Template</string>
+    <!-- Under a festival template that is in season, in the template choices. -->
+    <string name="book_this_season">This season</string>
     <string name="book_title_label">Title</string>
     <string name="book_title_reset">Reset</string>
     <string name="book_who">Who\'s in it</string>

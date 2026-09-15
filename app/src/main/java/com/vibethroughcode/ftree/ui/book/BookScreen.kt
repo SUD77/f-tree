@@ -377,6 +377,14 @@ private fun Options(state: BookUiState, viewModel: BookViewModel) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (template.featured) {
+                    Text(
+                        stringResource(R.string.book_this_season),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

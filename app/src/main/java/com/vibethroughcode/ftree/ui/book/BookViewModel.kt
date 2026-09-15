@@ -40,7 +40,8 @@ import java.time.LocalDate
 
 /** What the reader has chosen on the book screen. */
 data class BookOptions(
-    val templateId: String = "heirloom",
+    /** Set from the catalogue when the screen opens: the template in season, or the first listed. */
+    val templateId: String = "",
     /** Null means "the title the book derives" - the family's own surname. */
     val title: String? = null,
     val branch: Boolean = false,
@@ -48,7 +49,7 @@ data class BookOptions(
     val livingDates: Boolean = false,
 )
 
-data class TemplateChoice(val id: String, val name: String, val cover: Picture?)
+data class TemplateChoice(val id: String, val name: String, val featured: Boolean, val cover: Picture?)
 
 data class BookUiState(
     val loading: Boolean = true,
@@ -108,6 +109,7 @@ class BookViewModel(
     private val options = MutableStateFlow(_state.value.options)
     private var document: JsonElement? = null
     private var templateJson: Map<String, JsonObject> = emptyMap()
+    private var tierOf: Map<String, String> = emptyMap()
     private var photoOf: Map<String, String?> = emptyMap()
     private val photoCache = mutableMapOf<Pair<String, Int>, Bitmap>()
     private var photos: Map<String, Bitmap> = emptyMap()
@@ -122,11 +124,13 @@ class BookViewModel(
             photoOf = people.associate { it.id to it.photoId }
             val branchOf = scopePersonId?.let { id -> people.firstOrNull { it.id == id }?.name?.trim()?.split(Regex("\\s+"))?.firstOrNull() }
             document = Json.parseToJsonElement(exporter.documentJson())
-            val list = templates.all()
+            val list = templates.offered(today())
             templateJson = list.associate { it.id to it.json }
+            tierOf = list.associate { it.id to it.tier }
             _state.update {
-                it.copy(branchOf = branchOf, hasPhotos = people.any { p -> p.photoId != null }, templates = list.map { t -> TemplateChoice(t.id, t.name, null) })
+                it.copy(branchOf = branchOf, hasPhotos = people.any { p -> p.photoId != null }, templates = list.map { t -> TemplateChoice(t.id, t.name, t.featured, null) })
             }
+            list.firstOrNull()?.let { first -> change { it.copy(templateId = first.id) } }
 
             // The book first, the template choices' small covers after it: the reader is looking at
             // the book, and the composer takes one request at a time.
@@ -152,7 +156,7 @@ class BookViewModel(
 
     private fun decide(opts: BookOptions): Decision = Entitlements.decide(
         policy,
-        AccessRequest(feature = FEATURE, templateId = opts.templateId, templateTier = "free", people = photoOf.size),
+        AccessRequest(feature = FEATURE, templateId = opts.templateId, templateTier = tierOf[opts.templateId] ?: "free", people = photoOf.size),
         EntitlementContext(plan = entitlements.plan, usage = mapOf(FEATURE to ledger.count(FEATURE))),
     )
 
