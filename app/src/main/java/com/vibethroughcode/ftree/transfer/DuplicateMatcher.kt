@@ -1,6 +1,6 @@
 package com.vibethroughcode.ftree.transfer
 
-import com.vibethroughcode.ftree.data.PartialDate
+import com.vibethroughcode.ftree.data.RecordedDate
 import com.vibethroughcode.ftree.data.Person
 
 /** How confident the app is that an imported person is somebody already in the tree. */
@@ -222,13 +222,15 @@ object DuplicateMatcher {
         localGraph: MatchGraph,
         settled: Map<String, PersonMatch>,
     ): MatchEvidence? {
-        val importedBirth = PartialDate.parse(record.birthDate)
-        val localBirth = PartialDate.parse(candidate.birthDate)
+        // RecordedDate rather than PartialDate: a birthday with no year still rules a match out when
+        // it disagrees ("--04-17" is nobody born 1938-05), and losing that veto is the unsafe way round.
+        val importedBirth = RecordedDate.parse(record.birthDate)
+        val localBirth = RecordedDate.parse(candidate.birthDate)
         val bothKnown = importedBirth != null && localBirth != null
         if (bothKnown && !importedBirth.isCompatibleWith(localBirth)) return null
 
-        val importedDeath = PartialDate.parse(record.deathDate)
-        val localDeath = PartialDate.parse(candidate.deathDate)
+        val importedDeath = RecordedDate.parse(record.deathDate)
+        val localDeath = RecordedDate.parse(candidate.deathDate)
         if (importedDeath != null && localDeath != null &&
             !importedDeath.isCompatibleWith(localDeath)
         ) {

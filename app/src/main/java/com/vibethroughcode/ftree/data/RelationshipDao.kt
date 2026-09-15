@@ -49,12 +49,17 @@ interface RelationshipDao {
     )
     fun observeParents(personId: String): Flow<List<Person>>
 
+    /*
+     * Eldest first, by the stored text: partial ISO dates sort correctly as strings. A birthday with
+     * no year (`--04-17`) says nothing about birth order, and `-` sorts before every digit, so it
+     * goes with the undated at the end rather than being listed as the eldest (#90).
+     */
     @Query(
         """
         SELECT p.* FROM people p
         JOIN relationships r ON r.toPersonId = p.id
         WHERE r.fromPersonId = :personId AND r.type = 'PARENT'
-        ORDER BY CASE WHEN p.birthDate IS NULL THEN 1 ELSE 0 END, p.birthDate
+        ORDER BY CASE WHEN p.birthDate IS NULL OR p.birthDate LIKE '--%' THEN 1 ELSE 0 END, p.birthDate
         """
     )
     fun observeChildren(personId: String): Flow<List<Person>>

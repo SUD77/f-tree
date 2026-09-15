@@ -50,8 +50,8 @@ Two rules shape the layout of the code:
 A **graph of people and typed edges**, because real families are not trees.
 
 `people` — every descriptive field is optional. A null name *is* the unknown-person mechanism.
-Dates are partial ISO-8601 (`1938`, `1938-04`, `1938-04-17`), so nobody has to invent a day they do
-not know, and no separate "approximate" flag is needed: the precision is the statement. Age is
+Dates are partial ISO-8601 (`1938`, `1938-04`, `1938-04-17`), plus `--04-17` for a birthday with no
+known year, so nobody has to invent a day they do not know, and no separate "approximate" flag is needed: the precision is the statement. Age is
 derived, never stored. `photoId` is a bare file name, never a path, so a photo survives a reinstall.
 
 `relationships` — `PARENT` (directed, parent → child), `SPOUSE` and `SIBLING` (symmetric). Symmetric

@@ -127,6 +127,24 @@ test('dates of differing precision still agree', () => {
   assert.strictEqual(result.get('i1').tier, MatchTier.WEAK);
 });
 
+test('a birthday with no year still rules out a match when it disagrees (#90)', () => {
+  const result = match({
+    imported: [{ id: 'i1', name: 'Ankit Kumar', birthDate: '--04-17' }],
+    local: [{ id: 'l1', name: 'Ankit Kumar', birthDate: '1990-05-01' }],
+  });
+  // Read as "no date", this veto was lost; it is the unsafe way round.
+  assert.strictEqual(result.get('i1').tier, MatchTier.NONE);
+});
+
+test('a birthday with no year agrees with a year that could hold it (#90)', () => {
+  const result = match({
+    imported: [{ id: 'i1', name: 'Ankit Kumar', birthDate: '--04-17' }],
+    local: [{ id: 'l1', name: 'Ankit Kumar', birthDate: '1990' }],
+  });
+  assert.strictEqual(result.get('i1').tier, MatchTier.WEAK);
+  assert.strictEqual(result.get('i1').evidence.datesAgree, true);
+});
+
 test('conflicting death dates also rule out a match', () => {
   const result = match({
     imported: [{ id: 'i1', name: 'Raj Kumar', birthDate: '1938', deathDate: '2010' }],

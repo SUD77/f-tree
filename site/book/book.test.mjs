@@ -289,3 +289,22 @@ test('the composer runs without a DOM, a clock or a locale', () => {
     }
   }
 });
+
+/*
+ * #90: a birthday with no year (`--04-17`). The living keep only a year, so without one there is
+ * nothing to print -- and never "Born null". The departed keep the day, but not as a range, which
+ * would read as one spring when the birthday's year is simply not known.
+ */
+import { lifeLine as lifeLineOf } from './family.js';
+
+test('a living person with a birthday but no year says nothing rather than "Born null"', () => {
+  const p = { birthDate: '--04-17', deceased: false };
+  assert.equal(lifeLineOf(p), '');
+  assert.equal(lifeLineOf(p, { livingDates: true }), 'Born 17 April');
+});
+
+test('the departed with a yearless birthday are not given a range', () => {
+  assert.equal(lifeLineOf({ birthDate: '--04-17', deathDate: '1978-05-03', deceased: true }),
+    'Born 17 April · Died 3 May 1978');
+  assert.equal(lifeLineOf({ birthDate: '1905', deathDate: '1978', deceased: true }), '1905 – 1978');
+});

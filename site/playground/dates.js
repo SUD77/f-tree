@@ -63,12 +63,67 @@ export class PartialDate {
 
   /** True when the two could describe the same day, allowing for differing precision. */
   isCompatibleWith(other) {
+    if (other instanceof YearlessDate) return other.isCompatibleWith(this);
     return this.earliest() <= other.latest() && other.earliest() <= this.latest();
   }
 
   toString() {
     return this.serialize();
   }
+}
+
+/**
+ * A day and month with no year (#90): "her birthday is 17 April; nobody remembers the year".
+ *
+ * A port of `YearlessDate` in `data/PartialDate.kt`. Stored as `--04-17`, the ISO 8601 / vCard form
+ * for exactly this. It is deliberately *not* a `PartialDate` and has no `earliest()`: age, seniority
+ * and ordering are questions about when, and a yearless date must read as unknown to them rather than
+ * as a date in the year 0 -- which is what `null * 10000` would quietly make of it.
+ */
+export class YearlessDate {
+  constructor(month, day) {
+    this.month = month;
+    this.day = day;
+  }
+
+  serialize() {
+    return `--${String(this.month).padStart(2, '0')}-${String(this.day).padStart(2, '0')}`;
+  }
+
+  /**
+   * The same day of the year, or a calendar date whose known parts agree with it -- and not a year
+   * without a 29 February when that is the day.
+   */
+  isCompatibleWith(other) {
+    if (other instanceof YearlessDate) return other.month === this.month && other.day === this.day;
+    if (other.month != null && other.month !== this.month) return false;
+    if (other.day != null && other.day !== this.day) return false;
+    return !(this.month === 2 && this.day === 29 && daysIn(other.year, 2) === 28);
+  }
+
+  toString() {
+    return this.serialize();
+  }
+}
+
+const YEARLESS = /^--(\d{2})-(\d{2})$/;
+
+/**
+ * A stored birth or death date of either kind, or null when it is neither.
+ *
+ * Use this where a date is shown or compared for identity; use `parsePartialDate` where the question
+ * is *when*, so a birthday without a year stays unknown there.
+ */
+export function parseRecordedDate(value) {
+  const partial = parsePartialDate(value);
+  if (partial) return partial;
+  const match = YEARLESS.exec(String(value ?? '').trim());
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  // Leap year 2000, so 29 February is a day of the year like any other.
+  if (month < 1 || month > 12 || day < 1 || day > daysIn(2000, month)) return null;
+  return new YearlessDate(month, day);
 }
 
 /**

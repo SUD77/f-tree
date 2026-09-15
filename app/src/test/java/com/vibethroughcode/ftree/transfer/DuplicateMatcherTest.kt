@@ -162,6 +162,28 @@ class DuplicateMatcherTest {
     }
 
     @Test
+    fun `a birthday with no year still rules out a match when it disagrees`() {
+        val result = match(
+            imported = listOf(PersonRecord(id = "i1", name = "Ankit Kumar", birthDate = "--04-17")),
+            local = listOf(Person(id = "l1", name = "Ankit Kumar", birthDate = "1990-05-01")),
+        )
+
+        // #90: read as "no date", this veto was lost, which is the unsafe way round.
+        assertEquals(MatchTier.NONE, result.getValue("i1").tier)
+    }
+
+    @Test
+    fun `a birthday with no year agrees with a year that could hold it`() {
+        val result = match(
+            imported = listOf(PersonRecord(id = "i1", name = "Ankit Kumar", birthDate = "--04-17")),
+            local = listOf(Person(id = "l1", name = "Ankit Kumar", birthDate = "1990")),
+        )
+
+        assertEquals(MatchTier.WEAK, result.getValue("i1").tier)
+        assertTrue(result.getValue("i1").evidence.datesAgree)
+    }
+
+    @Test
     fun `conflicting death dates also rule out a match`() {
         val result = match(
             imported = listOf(

@@ -7,7 +7,7 @@
  * the app derives it: stored siblings go stale the moment a parent is added.
  */
 
-import { parsePartialDate } from './dates.js';
+import { parsePartialDate, parseRecordedDate, YearlessDate } from './dates.js';
 
 const PARENT = 'PARENT';
 const SPOUSE = 'SPOUSE';
@@ -201,8 +201,13 @@ function buildComponents(graph) {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
-/** Mirrors PartialDate.display: 1938, April 1938, 17 April 1938 - never more precise than known. */
+/**
+ * Mirrors PartialDate.display: 1938, April 1938, 17 April 1938 - never more precise than known.
+ * A birthday with no year (#90) reads 17 April.
+ */
 export function displayDate(value) {
+  const yearless = parseRecordedDate(value);
+  if (yearless instanceof YearlessDate) return `${yearless.day} ${MONTHS[yearless.month - 1]}`;
   const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value ?? '');
   if (!m) return null;
   const [, y, mo, d] = m;

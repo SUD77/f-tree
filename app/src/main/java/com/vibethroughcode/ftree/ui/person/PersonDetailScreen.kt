@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vibethroughcode.ftree.R
-import com.vibethroughcode.ftree.data.PartialDate
+import com.vibethroughcode.ftree.data.RecordedDate
 import com.vibethroughcode.ftree.data.Person
 import com.vibethroughcode.ftree.data.RelativeKind
 import com.vibethroughcode.ftree.ui.FTreeViewModels
@@ -318,8 +318,9 @@ private fun PersonHeader(person: Person, modifier: Modifier = Modifier) {
 /** Dates and age in the mono voice: these are the records, not the person. */
 @Composable
 private fun LifeLine(person: Person) {
-    val born = PartialDate.parse(person.birthDate)
-    val died = PartialDate.parse(person.deathDate)
+    // RecordedDate, so a birthday with no year still reads "Born 17 April".
+    val born = RecordedDate.parse(person.birthDate)
+    val died = RecordedDate.parse(person.deathDate)
     val age = person.age()
 
     val lines = buildList {

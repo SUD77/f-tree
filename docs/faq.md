@@ -112,7 +112,8 @@ half-siblings, adoptive and step relationships and unknown ancestors are all ord
 ### Do I have to know exact dates?
 
 No. Dates are partial ISO-8601 — `1938`, `1938-04`, or `1938-04-17` — so nobody has to invent a day
-they do not know. There is no separate "approximate" flag because the precision *is* the statement
+they do not know, and a birthday whose year nobody remembers is kept as just that. Type the digits
+and the hyphens are already there; leave the year blank for a birthday alone. There is no separate "approximate" flag because the precision *is* the statement
 about what is known.
 
 ### How does the relation finder work?
