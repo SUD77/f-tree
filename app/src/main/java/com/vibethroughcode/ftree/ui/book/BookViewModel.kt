@@ -191,6 +191,9 @@ class BookViewModel(
                 it.copy(loading = false, composing = false, book = book, pages = pages, estimateBytes = estimate(book))
             }
         } catch (failure: BookFailure) {
+            // Written to the device's own log, which never leaves it: the one trace of a failed
+            // layout that "Report a problem" can ask a reader to copy.
+            android.util.Log.w("FTreeBook", "could not compose the book", failure)
             _state.update { it.copy(loading = false, composing = false, failure = failure) }
         }
     }

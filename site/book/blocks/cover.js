@@ -133,7 +133,7 @@ export function cover(ctx) {
     items.push(...t.items);
     bottom = t.bottom;
   }
-  const sentence = c.line ? fill(c.line, ctx) : standfirst(facts);
+  const sentence = c.line ? fill(facts.people === 1 ? c.line.one : c.line.other, ctx) : standfirst(facts);
   items.push(...ctx.lines(W / 2, bottom + 34, sentence, 'text', 13, P.gold, { width: 430, maxLines: 2, lead: 18, align: 'middle' }).items);
 
   if (c.ornaments.includes('lanterns')) {

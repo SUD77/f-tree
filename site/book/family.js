@@ -16,7 +16,7 @@ const year = (value) => {
   return m ? Number(m[1]) : null;
 };
 
-const DEVANAGARI = /[ऀ-ॿ]/;
+const DEVANAGARI = /[\u0900-\u097F]/;
 
 /**
  * A key for alphabetical order that is the same on every engine. Latin diacritics fold away
@@ -24,7 +24,7 @@ const DEVANAGARI = /[ऀ-ॿ]/;
  * distinct names together, the very bug #113 records for duplicate matching.
  */
 export function sortKey(name) {
-  return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 export const byKey = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -80,6 +80,18 @@ export function familyTitle(people) {
 }
 
 /**
+ * The document as either shell writes it. Android's exporter leaves out what is empty - a tree of
+ * one person has no `relationships` at all - where the desktop writes `[]`; both are the same tree.
+ */
+function normalise(doc) {
+  return {
+    ...doc,
+    people: Array.isArray(doc?.people) ? doc.people : [],
+    relationships: Array.isArray(doc?.relationships) ? doc.relationships : [],
+  };
+}
+
+/**
  * Reads the document into the book's family.
  *
  * `options.scope` is `{ kind: 'everyone' }` or `{ kind: 'branch', personId }`;
@@ -87,7 +99,7 @@ export function familyTitle(people) {
  * generations from the eldest down.
  */
 export function readFamily(doc, options = {}, allowance = {}) {
-  let graph = buildGraph(doc);
+  let graph = buildGraph(normalise(doc));
   const scope = options.scope ?? { kind: 'everyone' };
   if (scope.kind === 'branch') {
     if (!graph.people.has(scope.personId)) throw new Error(`branch: nobody with id ${scope.personId}`);
