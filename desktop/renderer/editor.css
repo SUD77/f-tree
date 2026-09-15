@@ -242,6 +242,12 @@
   outline-offset: 1px;
 }
 
+/* A field that is wrong and being fixed says one thing: the focus ring takes the error's colour
+   rather than drawing a green ring round a red border. */
+.editor .field.date-field[data-problem='true'] .date-field-box:focus-within {
+  outline-color: var(--danger);
+}
+
 .editor .date-field-input {
   /* The app's own monospace token, not the inherited serif: every glyph the same width is what
      makes a `ch`-sized slot fit "YYYY" exactly as well as "1938" (#90). */
