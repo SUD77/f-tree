@@ -3,16 +3,16 @@
  * with palette tokens, never raw colours, so the same art recolours for another template.
  */
 
-import { D, smooth, poly, resample, wobble, ellipsePts, cutShape, rng, rotateAt, r2 } from './kit.mjs';
+import { D, smooth, poly, resample, wobble, ellipsePts, cutShape, rng, rotateAt, r2, circleSub, dropSub } from './kit.mjs';
 
 export const PALETTE = {
   paper: '#F6ECDA', paperDeep: '#EAD7B5', card: '#FFF8EC',
   ink: '#2A1A33', inkSoft: '#5E4A66',
-  night: '#1C1638', deep: '#0D0A1F', glow: '#3A2352', dusk: '#7A3E63',
+  night: '#1F1840', deep: '#17122E', glow: '#3A2352', dusk: '#7A3E63',
   gold: '#F2B84B', flame: '#FFE7A6', brass: '#B9822A',
   marigold: '#F2A71B', saffron: '#E8762B', sindoor: '#C23B2E', rani: '#D6336C',
   peacock: '#0F7B7A', indigo: '#3B4A8C', leaf: '#5A8A3C', leafDeep: '#2F5A2A',
-  stone: '#D9A77A', clay: '#B5562A', skin: '#B97A52', silver: '#D9D2CA', sky: '#F3DDB8', wash: '#8DB0D8', haze: '#5A3462',
+  stone: '#D9A77A', clay: '#B5562A', skin: '#B97A52', silver: '#D9D2CA', sky: '#F3DDB8', wash: '#6F93C7', haze: '#5A3462', dayHaze: '#E9B777', dayMid: '#D99A62',
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -20,7 +20,7 @@ export const PALETTE = {
 
 /** Warm light without a soft mask: stacked translucent discs, which a PDF draws with plain alpha. */
 export function glowDiscs(p, x, y, r, { colour = 'gold', strength = 1 } = {}) {
-  for (const [k, a] of [[1, 0.05], [0.72, 0.07], [0.48, 0.1], [0.3, 0.16]]) p.circle(x, y, r * k, { fill: colour, op: a * strength });
+  for (let i = 0; i < 9; i++) { const k = 1 - i * 0.1; p.circle(x, y, r * k, { fill: colour, op: (0.03 + i * 0.006) * strength }); }
 }
 
 function drawDiya(p, s, { unknown }) {
@@ -33,8 +33,8 @@ function drawDiya(p, s, { unknown }) {
     .Q(x + 0.3 * s, y + 0.07 * s, x, y + 0.075 * s)
     .Q(x - 0.3 * s, y + 0.065 * s, x - 0.5 * s, y).Z();
   if (unknown) {
-    p.path(String(bowl), { fill: 'clay', op: 0.4 });
-    p.path(String(bowl), { stroke: 'brass', sw: s * 0.07, dash: [s * 0.1, s * 0.075] });
+    p.cut(String(bowl), 'clay', { shadow: 0.22, dx: s * 0.03, dy: s * 0.05 });
+    p.path(String(new D().M(x - 0.5 * s, y).C(x - 0.45 * s, y + 0.3 * s, x - 0.15 * s, y + 0.36 * s, x, y + 0.36 * s).C(x + 0.22 * s, y + 0.36 * s, x + 0.42 * s, y + 0.2 * s, x + 0.58 * s, y - 0.08 * s)), { stroke: 'gold', sw: s * 0.05, dash: [s * 0.09, s * 0.07] });
   } else {
     p.cut(String(bowl), 'clay', { shadow: 0.22, dx: s * 0.03, dy: s * 0.05 });
     const band = new D().M(x - 0.42 * s, y + 0.1 * s).Q(x, y + 0.26 * s, x + 0.46 * s, y + 0.06 * s)
@@ -65,9 +65,11 @@ export function floatingDiya(p, x, y, s, { unknown = false } = {}) {
   const id = unknown ? 'fdiya-u' : 'fdiya';
   p.symbol(id, (g) => {
     const S = 10;
-    // the reflection, broken by ripples
-    for (let i = 0; i < 4; i++) g.path(String(new D().M(S * 0.5 - S * (0.16 - i * 0.03), S * (0.5 + i * 0.42)).L(S * 0.5 + S * (0.16 - i * 0.03), S * (0.5 + i * 0.42))
-      .L(S * 0.5 + S * (0.12 - i * 0.025), S * (0.72 + i * 0.42)).L(S * 0.5 - S * (0.12 - i * 0.025), S * (0.72 + i * 0.42)).Z()), { fill: 'gold', op: 0.34 - i * 0.07 });
+    // the reflection: flame-coloured streaks laid across the ripples
+    for (let i = 0; i < 2; i++) {
+      const y0 = S * (0.6 + i * 0.4), half = S * (0.34 - i * 0.1);
+      g.path(String(new D().M(S * 0.5 - half, y0).Q(S * 0.5 - half * 0.4, y0 - S * 0.07, S * 0.5, y0).Q(S * 0.5 + half * 0.4, y0 + S * 0.07, S * 0.5 + half, y0)), { stroke: 'gold', sw: S * 0.06, cap: 'round', op: 0.45 - i * 0.25 });
+    }
     g.path(String(new D().M(-S * 0.85, S * 0.12).Q(0, S * 0.62, S * 0.95, S * 0.02).Q(S * 0.1, S * 0.3, -S * 0.85, S * 0.12).Z()), { fill: 'leafDeep' });
     g.path(String(new D().M(-S * 0.7, S * 0.14).Q(0, S * 0.44, S * 0.8, S * 0.06)), { stroke: 'leaf', sw: S * 0.05 });
     drawDiya(g, S * 0.8, { unknown });
@@ -76,40 +78,42 @@ export function floatingDiya(p, x, y, s, { unknown = false } = {}) {
 }
 
 /** Someone seen from behind, sitting on a step: generic figures in a scene, never a particular
- *  relative. (x, base) is where they sit; s their height. */
-export function sittingBack(p, x, base, s, kind, { fill = 'deep', rim = 'gold', drape = 'rani', flip = false } = {}) {
+ *  relative. (x, base) is where they sit; s their height. `lean` tilts them (degrees). */
+export function sittingBack(p, x, base, s, kind, { fill = 'deep', rim = 'gold', drape = 'rani', flip = false, lean = 0 } = {}) {
+  const a = (lean * Math.PI) / 180;
   p.group((g) => {
-    const k = kind === 'child' ? 0.78 : 1;
-    const S = s;
-    const torso = new D().M(-0.34 * S, 0).C(-0.37 * S, -0.22 * S, -0.31 * S, -0.5 * S, -0.21 * S, -0.58 * S)
-      .C(-0.15 * S, -0.62 * S, -0.08 * S, -0.63 * S, -0.055 * S, -0.68 * S).L(0.055 * S, -0.68 * S)
-      .C(0.08 * S, -0.63 * S, 0.15 * S, -0.62 * S, 0.21 * S, -0.58 * S).C(0.31 * S, -0.5 * S, 0.37 * S, -0.22 * S, 0.34 * S, 0).Z();
-    g.path(String(torso), { fill });
-    g.path(String(new D().M(0.21 * S, -0.58 * S).C(0.31 * S, -0.5 * S, 0.37 * S, -0.22 * S, 0.34 * S, 0)), { stroke: rim, sw: 0.9, op: 0.75 });
-    const hx = 0, hy = -0.79 * S, hrx = 0.1 * S * (kind === 'child' ? 1.12 : 1), hry = 0.12 * S * (kind === 'child' ? 1.08 : 1);
-    g.path(smooth(ellipsePts(hx, hy, hrx, hry, 18)), { fill });
-    g.path(String(new D().M(hx + hrx * 0.2, hy - hry).C(hx + hrx * 1.3, hy - hry * 0.8, hx + hrx * 1.3, hy + hry * 0.6, hx + hrx * 0.5, hy + hry * 0.95)), { stroke: rim, sw: 0.8, op: 0.7 });
+    const S = s, child = kind === 'child';
+    const P = (px, py) => [px * S, py * S];
+    // torso and arms as one cut, the arms parted from it by a fold line
+    const body = [P(-0.36, 0), P(-0.37, -0.12), P(-0.34, -0.3), P(-0.32, -0.44), P(-0.27, -0.53), P(-0.17, -0.58), P(-0.075, -0.62), P(-0.05, -0.69),
+      P(0.05, -0.69), P(0.075, -0.62), P(0.17, -0.58), P(0.27, -0.53), P(0.32, -0.44), P(0.34, -0.3), P(0.37, -0.12), P(0.36, 0)];
+    g.path(smooth(body, { tension: 0.9 }), { fill });
+    for (const sd of [-1, 1]) g.path(String(new D().M(sd * 0.22 * S, -0.52 * S).C(sd * 0.21 * S, -0.38 * S, sd * 0.24 * S, -0.2 * S, sd * 0.25 * S, -0.04 * S)), { stroke: 'night', sw: S * 0.012, op: 0.9 });
+    g.path(smooth([P(0.17, -0.58), P(0.27, -0.53), P(0.32, -0.44), P(0.34, -0.3), P(0.37, -0.12)], { closed: false }), { stroke: rim, sw: 0.9, op: 0.75 });
+    const hy = -0.8 * S, hrx = 0.092 * S * (child ? 1.12 : 1), hry = 0.112 * S * (child ? 1.06 : 1);
+    g.path(smooth(ellipsePts(0, hy, hrx, hry, 18)), { fill });
+    for (const sd of [-1, 1]) g.path(smooth(ellipsePts(sd * hrx * 0.98, hy + hry * 0.1, hrx * 0.16, hrx * 0.26, 10)), { fill });
+    g.path(String(new D().M(hrx * 0.25, hy - hry).C(hrx * 1.25, hy - hry * 0.8, hrx * 1.25, hy + hry * 0.55, hrx * 0.5, hy + hry * 0.95)), { stroke: rim, sw: 0.8, op: 0.7 });
     if (kind === 'elder') {
-      const d = new D().M(-hrx * 1.2, hy + hry * 0.1).C(-hrx * 1.35, hy - hry * 1.45, hrx * 1.35, hy - hry * 1.45, hrx * 1.2, hy + hry * 0.1)
-        .C(0.2 * S, -0.62 * S, 0.33 * S, -0.4 * S, 0.3 * S, 0).L(-0.22 * S, 0)
-        .C(-0.26 * S, -0.3 * S, -0.22 * S, -0.58 * S, -hrx * 1.2, hy + hry * 0.1).Z();
-      g.path(String(d), { fill: drape, op: 0.55 });
-      g.path(String(d), { fill: fill, op: 0.45 });
-      g.path(String(new D().M(-hrx * 1.2, hy + hry * 0.1).C(-0.22 * S, -0.58 * S, -0.26 * S, -0.3 * S, -0.22 * S, 0)), { stroke: drape, sw: S * 0.045 });
-      g.path(String(new D().M(-hrx * 1.2, hy + hry * 0.1).C(-0.22 * S, -0.58 * S, -0.26 * S, -0.3 * S, -0.22 * S, 0)), { stroke: 'gold', sw: S * 0.014 });
-      g.path(String(new D().M(-hrx * 1.2, hy + hry * 0.1).C(-hrx * 1.35, hy - hry * 1.45, hrx * 1.35, hy - hry * 1.45, hrx * 1.2, hy + hry * 0.1)), { stroke: 'gold', sw: S * 0.014, op: 0.8 });
+      // a pallu over the head: it folds at the crown and falls down the back to the step
+      const d = smooth([P(-0.115, -0.83), P(-0.09, -0.935), P(0, -0.965), P(0.09, -0.935), P(0.12, -0.84), P(0.13, -0.72), P(0.2, -0.6), P(0.3, -0.42), P(0.31, -0.18), P(0.28, 0),
+        P(-0.24, 0), P(-0.27, -0.2), P(-0.25, -0.44), P(-0.18, -0.6), P(-0.13, -0.72)], { tension: 0.9 });
+      g.path(d, { fill: drape, op: 0.5 });
+      g.path(d, { fill, op: 0.5 });
+      g.path(String(new D().M(-0.105 * S, -0.9 * S).Q(0, -0.87 * S, 0.1 * S, -0.9 * S)), { stroke: drape, sw: S * 0.012, op: 0.9 });
+      g.path(smooth([P(-0.13, -0.72), P(-0.18, -0.6), P(-0.25, -0.44), P(-0.27, -0.2), P(-0.24, 0)], { closed: false }), { stroke: drape, sw: S * 0.045 });
+      g.path(smooth([P(-0.13, -0.72), P(-0.18, -0.6), P(-0.25, -0.44), P(-0.27, -0.2), P(-0.24, 0)], { closed: false }), { stroke: 'gold', sw: S * 0.012 });
     } else if (kind === 'woman') {
-      g.circle(hx, hy + hry * 0.62, hrx * 0.46, { fill });
-      g.path(String(new D().M(0.2 * S, -0.58 * S).C(0.05 * S, -0.45 * S, -0.2 * S, -0.25 * S, -0.33 * S, 0).L(-0.12 * S, 0)
-        .C(0, -0.25 * S, 0.18 * S, -0.42 * S, 0.3 * S, -0.5 * S).Z()), { fill: drape });
-      g.path(String(new D().M(0.2 * S, -0.58 * S).C(0.05 * S, -0.45 * S, -0.2 * S, -0.25 * S, -0.33 * S, 0)), { stroke: 'gold', sw: S * 0.018 });
-    } else if (kind === 'child') {
-      for (const sd of [-1, 1]) g.circle(sd * hrx * 1.02, hy + hry * 0.25, hrx * 0.36, { fill });
-      g.path(String(new D().M(-0.3 * S, -0.1 * S).Q(0, -0.16 * S, 0.3 * S, -0.1 * S)), { stroke: drape, sw: S * 0.05 });
+      g.path(smooth(ellipsePts(0, hy + hry * 0.72, hrx * 0.5, hry * 0.36, 14)), { fill });
+      g.path(smooth([P(0.19, -0.58), P(0.06, -0.46), P(-0.14, -0.26), P(-0.3, -0.08), P(-0.32, 0), P(-0.12, 0), P(0.02, -0.2), P(0.18, -0.38), P(0.29, -0.5)], { tension: 0.9 }), { fill: drape, op: 0.85 });
+      g.path(smooth([P(0.19, -0.58), P(0.06, -0.46), P(-0.14, -0.26), P(-0.3, -0.08), P(-0.32, 0)], { closed: false }), { stroke: 'gold', sw: S * 0.014 });
+    } else if (child) {
+      g.path(smooth(ellipsePts(hrx * 0.2, hy - hry * 0.85, hrx * 0.34, hry * 0.26, 12)), { fill });
     } else {
-      g.path(String(new D().M(-0.22 * S, -0.56 * S).Q(0, -0.6 * S, 0.22 * S, -0.56 * S)), { stroke: drape, sw: S * 0.04, op: 0.9 });
+      // a shawl across the shoulders, its border catching the light
+      g.path(smooth([P(-0.3, -0.47), P(-0.2, -0.555), P(0, -0.585), P(0.2, -0.555), P(0.3, -0.47)], { closed: false }), { stroke: drape, sw: S * 0.018, op: 0.85 });
     }
-  }, { tf: [flip ? -1 : 1, 0, 0, 1, x, base] });
+  }, { tf: [Math.cos(a) * (flip ? -1 : 1), Math.sin(a), -Math.sin(a) * (flip ? -1 : 1), Math.cos(a), x, base] });
 }
 
 /** An akash kandil: the star-cut paper lantern, lit from inside, with its paper tails. */
@@ -325,11 +329,19 @@ export function archPts(x, y, w, h, { kind = 'cusped', lobes = 7, depth = 0.05 }
 export const archPath = (x, y, w, h, o) => poly(archPts(x, y, w, h, o));
 
 /** A carved jharokha frame around an arch opening; `inner` draws what is seen through it. */
-export function archFrame(p, x, y, w, h, { band = 14, kind = 'cusped', stone = 'stone', trim = 'gold', inner, eave = true, sill = true, seed = 'arch' } = {}) {
+export function archFrame(p, x, y, w, h, { band = 14, kind = 'cusped', stone = 'stone', trim = 'gold', inner, eave = true, sill = true, seed = 'arch', lace = true } = {}) {
   const opening = archPath(x, y, w, h, { kind });
   const outer = poly(archPts(x - band, y - band * 1.25, w + band * 2, h + band * 1.25, { kind: 'pointed' }));
   if (inner) p.group(inner, { clip: opening });
-  p.cut(`${outer}${opening}`, stone, { shadow: 0.22, dx: 1.6, dy: 2.2, soft: true, rule: 'evenodd' });
+  let holes = '';
+  if (lace) {
+    const line = resample(archPts(x - band * 0.56, y - band * 0.7, w + band * 1.12, h + band * 0.7, { kind: 'pointed' }).slice(1, -1), band * 0.95, false);
+    line.forEach(([hx, hy], i) => {
+      if (hy > y + h - band) return;
+      holes += i % 2 ? circleSub(hx, hy, band * 0.13) : circleSub(hx, hy, band * 0.2);
+    });
+  }
+  p.cut(`${outer}${opening}${holes}`, stone, { shadow: 0.24, dx: 1.8, dy: 2.4, soft: true, rule: 'evenodd' });
   // the carving: a second, inner band in a deeper tone, and the gold line over the clip edge
   const mid = poly(archPts(x - band * 0.45, y - band * 0.55, w + band * 0.9, h + band * 0.55, { kind: 'pointed' }));
   p.path(`${mid}${opening}`, { fill: 'clay', rule: 'evenodd', op: 0.28 });
@@ -356,29 +368,192 @@ export function lotusBud(p, x, y, s) {
   p.path(String(new D().M(x, y - s * 0.95).C(x + s * 0.2, y - s * 0.6, x + s * 0.18, y - s * 0.15, x, y - s * 0.05).C(x - s * 0.18, y - s * 0.15, x - s * 0.2, y - s * 0.6, x, y - s * 0.95).Z()), { fill: 'saffron' });
 }
 
-/** A round medallion: its content clipped to the circle, a gold line over the edge, a ring of
- *  small petals. `departed` hangs a marigold mala along its foot. */
-export function medallion(p, cx, cy, rr, { inner, petals = true, departed = false, unknown = false, seed = 'med', ground = 'card' } = {}) {
-  if (rr < 14) { petals = false; departed = false; }
-  if (petals && !unknown) {
+/** A round medallion: a cream mat, the content clipped inside it, and a thin gold bezel over the
+ *  clip edge. A photograph sits in a carved wooden ring instead, like a print on the wall. The
+ *  departed get a marigold mala hung beneath the frame - on the frame, never on the person. */
+export function medallion(p, cx, cy, rr, { inner, departed = false, unknown = false, seed = 'med', ground = 'card', photo = false, petals = false, carved = photo } = {}) {
+  const mat = carved ? Math.max(2, rr * 0.1) : 0;
+  const ring = carved ? Math.max(2.5, rr * 0.16) : 0;
+  const R = rr + mat + ring;
+  if (rr < 14) departed = false;
+  p.circle(cx + 1.6, cy + 2.2, R, { fill: 'ink', op: 0.2 });
+  if (carved) {
+    p.circle(cx, cy, R, { fill: 'clay' });
+    const n = Math.max(18, Math.round((2 * Math.PI * R) / 6));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      p.circle(cx + Math.cos(a) * (R - ring / 2), cy + Math.sin(a) * (R - ring / 2), ring * 0.2, { fill: 'saffron', op: 0.8 });
+    }
+    p.circle(cx, cy, rr + mat, { fill: 'card' });
+  } else if (petals) {
     const count = Math.max(16, Math.round((2 * Math.PI * rr) / 7));
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2;
       const ux = Math.cos(a), uy = Math.sin(a), vx = -uy, vy = ux;
       const P = (al, ac) => [cx + ux * (rr + al) + vx * ac, cy + uy * (rr + al) + vy * ac];
-      const len = rr * 0.16, wd = rr * 0.06;
+      const len = rr * 0.14, wd = rr * 0.05;
       p.path(String(new D().M(...P(0, 0)).C(...P(len * 0.3, wd), ...P(len * 0.8, wd), ...P(len, 0)).C(...P(len * 0.8, -wd), ...P(len * 0.3, -wd), ...P(0, 0)).Z()), { fill: i % 2 ? 'saffron' : 'marigold' });
     }
   }
-  p.circle(cx + 1.2, cy + 1.8, rr, { fill: 'ink', op: 0.18 });
   p.circle(cx, cy, rr, { fill: ground });
-  const clip = String(new D().M(cx - rr, cy).C(cx - rr, cy - rr * 0.552, cx - rr * 0.552, cy - rr, cx, cy - rr)
-    .C(cx + rr * 0.552, cy - rr, cx + rr, cy - rr * 0.552, cx + rr, cy).C(cx + rr, cy + rr * 0.552, cx + rr * 0.552, cy + rr, cx, cy + rr)
-    .C(cx - rr * 0.552, cy + rr, cx - rr, cy + rr * 0.552, cx - rr, cy).Z());
-  if (inner) p.group(inner, { clip });
-  if (unknown) p.circle(cx, cy, rr, { stroke: 'brass', sw: Math.max(1, rr * 0.035), dash: [rr * 0.12, rr * 0.09] });
-  else p.circle(cx, cy, rr, { stroke: 'gold', sw: Math.max(1, rr * 0.04) });
-  if (departed) mala(p, cx - rr * 0.98, cy + rr * 0.3, cx + rr * 0.98, cy + rr * 0.3, rr * 0.86, Math.max(2.2, rr * 0.075), `${seed}mala`, { leaves: 0 });
+  if (inner) p.group(inner, { clip: circleSub(cx, cy, rr) });
+  if (unknown) p.circle(cx, cy, rr, { stroke: 'brass', sw: Math.max(0.9, rr * 0.03), dash: [rr * 0.08, rr * 0.06] });
+  else p.circle(cx, cy, rr, { stroke: 'gold', sw: Math.max(0.7, rr * 0.028) });
+  if (departed) mala(p, cx - R * 1.0, cy + R * 0.2, cx + R * 1.0, cy + R * 0.2, R * 2.1, Math.max(2.2, rr * 0.075), `${seed}mala`, { leaves: 0 });
+}
+
+/** A carved niche (aala) in a wall with its lamp: the place kept for someone whose name is lost.
+ *  The niche's rim is perforated in brass - the app's own mark for a name not known. */
+export function aala(p, cx, base, w, h, { wall = 'stone', lit = true, seed = 'aala', night = false } = {}) {
+  const x = cx - w / 2, y = base - h;
+  const outer = archPts(x - w * 0.14, y - w * 0.16, w * 1.28, h + w * 0.16, { kind: 'pointed' });
+  p.cut(poly(outer), night ? 'dusk' : 'clay', { shadow: 0.25, soft: true });
+  p.path(archPath(x, y, w, h, { kind: 'cusped', lobes: 5 }), { fill: p.lin(0, y, 0, base, night ? [[0, 'night'], [0.6, 'clay'], [1, 'saffron']] : [[0, 'clay'], [0.55, 'saffron'], [1, 'gold']]) });
+  if (lit) glowDiscs(p, cx, base - h * 0.28, w * 0.95, { strength: night ? 1.6 : 1.2 });
+  p.path(poly(archPts(x - w * 0.07, y - w * 0.08, w * 1.14, h + w * 0.08, { kind: 'pointed' }).slice(1, -1), false), { stroke: 'brass', sw: Math.max(0.8, w * 0.02), dash: [w * 0.05, w * 0.035] });
+  p.cut(poly([[x - w * 0.24, base], [x + w * 1.24, base], [x + w * 1.16, base + w * 0.1], [x - w * 0.16, base + w * 0.1]]), night ? 'dusk' : 'clay', { shadow: 0.25 });
+  if (lit) diya(p, cx - w * 0.12, base - w * 0.04, w * 0.42, { unknown: true });
+}
+
+/** A mauli: the red-and-yellow thread tied at every ceremony, joining two frames. */
+export function mauli(p, x1, y1, x2, y2, sag = 6) {
+  const pts = (ph) => { const out = []; for (let i = 0; i <= 24; i++) { const t = i / 24; out.push([x1 + (x2 - x1) * t, y1 + (y2 - y1) * t + Math.sin(Math.PI * t) * sag + Math.sin(t * 40 + ph) * 0.8]); } return out; };
+  p.path(smooth(pts(0), { closed: false }), { stroke: 'sindoor', sw: 1.4, cap: 'round' });
+  p.path(smooth(pts(Math.PI), { closed: false }), { stroke: 'marigold', sw: 1.1, cap: 'round' });
+}
+
+/** A Sanjhi band along a page edge: one colour of paper, a scalloped inner edge, and keri (mango)
+ *  and lotus shapes cut through it. The cut-outs stay 6 mm inside the trim, where a home printer
+ *  can reach them. `y` is the page edge. */
+export function laceBand(p, y, depth = 28, { fill = 'clay', side = 'top', scallop = 22 } = {}) {
+  const W = 595, n = Math.round(W / scallop), sw = W / n, dir = side === 'top' ? 1 : -1;
+  const edge = y + dir * depth, outer = y - dir * 4;
+  let d = new D().M(-4, outer).L(W + 4, outer).L(W + 4, edge);
+  for (let i = n - 1; i >= 0; i--) {
+    const x0 = (i + 1) * sw, x1 = i * sw;
+    d.C(x0 - sw * 0.1, edge + dir * sw * 0.42, x1 + sw * 0.1, edge + dir * sw * 0.42, x1, edge);
+  }
+  d = String(d.L(-4, edge).Z());
+  let holes = '';
+  const cy = y + dir * Math.max(19, depth * 0.72);
+  for (let i = 0; i < n; i++) {
+    const cx = (i + 0.5) * sw;
+    if (i % 2 === 0) {
+      // a keri, the mango, pointing along the band
+      holes += String(new D().M(cx - sw * 0.24, cy).C(cx - sw * 0.24, cy - sw * 0.2, cx + sw * 0.08, cy - sw * 0.22, cx + sw * 0.22, cy - sw * 0.06)
+        .Q(cx + sw * 0.3, cy + sw * 0.02, cx + sw * 0.18, cy + sw * 0.02).C(cx + sw * 0.05, cy + sw * 0.18, cx - sw * 0.24, cy + sw * 0.2, cx - sw * 0.24, cy).Z());
+      holes += circleSub(cx - sw * 0.07, cy - sw * 0.01, sw * 0.045);
+    } else {
+      // a small lotus: three petals and a base
+      for (const ang of [-0.75, 0, 0.75]) holes += dropSub(cx + Math.sin(ang) * sw * 0.12, cy - dir * Math.cos(ang) * sw * 0.1, sw * 0.12, -dir * Math.PI / 2 + ang);
+      holes += String(new D().M(cx - sw * 0.16, cy + dir * sw * 0.08).Q(cx, cy + dir * sw * 0.18, cx + sw * 0.16, cy + dir * sw * 0.08).Q(cx, cy + dir * sw * 0.12, cx - sw * 0.16, cy + dir * sw * 0.08).Z());
+    }
+    holes += circleSub(cx + sw * 0.5, edge - dir * sw * 0.05, sw * 0.06);
+  }
+  p.cut(d + holes, fill, { shadow: 0.3, soft: true, rule: 'evenodd', dy: dir * 1.4, dx: 0.8 });
+}
+
+/** A kolam at a doorstep: chalk dots and the loop drawn round them. */
+export function kolam(p, cx, cy, r, { chalk = 'card', tilt = 0.4 } = {}) {
+  p.group((g) => {
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) g.circle(i * r * 0.5, j * r * 0.5, r * 0.07, { fill: chalk });
+    const loop = [];
+    for (let k = 0; k < 64; k++) { const t = (k / 64) * Math.PI * 2; const rr = r * (0.62 + 0.2 * Math.cos(4 * t)); loop.push([Math.cos(t) * rr, Math.sin(t) * rr]); }
+    g.path(smooth(loop), { stroke: chalk, sw: r * 0.06 });
+    g.path(smooth(ellipsePts(0, 0, r * 0.25, r * 0.25, 12)), { stroke: chalk, sw: r * 0.05 });
+  }, { tf: [1, 0, 0, tilt, cx, cy] });
+}
+
+/** A sloped chhajja eave over a window, its lower edge cut in scallops. */
+export function chhajja(p, x, y, w, fill = 'card') {
+  const n = Math.max(3, Math.round(w / 6));
+  let d = new D().M(x - 3, y).L(x + w + 3, y).L(x + w + 5, y + 5);
+  for (let i = n; i > 0; i--) { const a = x + w + 5 - ((w + 10) * (n - i)) / n, b = x + w + 5 - ((w + 10) * (n - i + 1)) / n; d.Q((a + b) / 2, y + 8.5, b, y + 5); }
+  p.cut(String(d.Z()), fill, { shadow: 0.25 });
+  for (const bx of [x + 2, x + w - 2]) p.path(String(new D().M(bx - 2, y + 5).L(bx + 2, y + 5).L(bx, y + 11).Z()), { fill });
+}
+
+/** The black water tank on an Indian roof. */
+export function waterTank(p, x, base, s) {
+  p.cut(String(new D().M(x - s * 0.5, base).L(x - s * 0.5, base - s * 0.9).Q(x, base - s * 1.05, x + s * 0.5, base - s * 0.9).L(x + s * 0.5, base).Z()), 'ink', { shadow: 0.2 });
+  for (let i = 1; i < 4; i++) p.path(String(new D().M(x - s * 0.5, base - s * 0.22 * i).Q(x, base - s * 0.22 * i + s * 0.06, x + s * 0.5, base - s * 0.22 * i)), { stroke: 'inkSoft', sw: 0.6 });
+  p.rect(x - s * 0.15, base - s * 1.08, s * 0.3, s * 0.1, { fill: 'inkSoft' });
+}
+
+/** A line of washing between two roofs. */
+export function clothesline(p, x1, y1, x2, y2, seed, colours = ['rani', 'marigold', 'card', 'peacock', 'saffron']) {
+  const rand = rng(seed);
+  const cx = (x1 + x2) / 2, cy = Math.max(y1, y2) + 8;
+  p.path(String(new D().M(x1, y1).Q(cx, cy, x2, y2)), { stroke: 'inkSoft', sw: 0.5 });
+  const n = Math.round((x2 - x1) / 16);
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * cx + t * t * x2, y = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * cy + t * t * y2;
+    const w = 6 + rand() * 5, h = 8 + rand() * 10;
+    p.cut(poly([[x - w / 2, y], [x + w / 2, y], [x + w / 2 - 0.6, y + h], [x - w / 2 + 0.6, y + h]]), colours[i % colours.length], { shadow: 0.15 });
+  }
+}
+
+/** A string of festival lights (ladi), each bulb a coloured point with a little light round it. */
+export function ladi(p, x1, y1, x2, y2, sag, { colours = ['gold', 'rani', 'marigold', 'peacock', 'flame'], step = 9, cord = 'inkSoft' } = {}) {
+  const cx = (x1 + x2) / 2, cy = Math.max(y1, y2) + sag;
+  p.path(String(new D().M(x1, y1).Q(cx, cy, x2, y2)), { stroke: cord, sw: 0.5, op: 0.8 });
+  const n = Math.round(Math.hypot(x2 - x1, y2 - y1) / step);
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * cx + t * t * x2, y = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * cy + t * t * y2;
+    const c = colours[i % colours.length];
+    p.circle(x, y + 2, 3.4, { fill: c, op: 0.18 });
+    p.circle(x, y + 2, 1.5, { fill: c });
+  }
+}
+
+/** A child seen from behind, standing, a phuljhadi (sparkler) held up and throwing stars. */
+export function sparklerChild(p, x, base, s, { cloth = 'rani', hair = 'ink', flip = false, girl = true } = {}) {
+  p.group((g) => {
+    const S = s;
+    g.cut(String(new D().M(-0.14 * S, -0.52 * S).C(-0.2 * S, -0.3 * S, -0.22 * S, -0.12 * S, -0.2 * S, -0.02 * S).L(0.2 * S, -0.02 * S).C(0.22 * S, -0.12 * S, 0.2 * S, -0.3 * S, 0.14 * S, -0.52 * S).Z()), cloth, { shadow: 0.2 });
+    for (const sd of [-1, 1]) g.rect(sd * 0.09 * S - 0.035 * S, -0.04 * S, 0.07 * S, 0.04 * S, { fill: 'skin' });
+    g.path(String(new D().M(0.13 * S, -0.5 * S).Q(0.28 * S, -0.62 * S, 0.3 * S, -0.8 * S)), { stroke: cloth, sw: 0.075 * S, cap: 'round' });
+    g.path(String(new D().M(-0.13 * S, -0.5 * S).Q(-0.18 * S, -0.36 * S, -0.16 * S, -0.26 * S)), { stroke: cloth, sw: 0.07 * S, cap: 'round' });
+    g.cut(smooth(ellipsePts(0, -0.66 * S, 0.12 * S, 0.13 * S, 16)), hair, { shadow: 0.2 });
+    if (girl) g.path(String(new D().M(-0.02 * S, -0.58 * S).Q(-0.05 * S, -0.44 * S, 0.01 * S, -0.34 * S)), { stroke: hair, sw: 0.05 * S, cap: 'round' });
+    const sx = 0.3 * S, sy = -0.84 * S;
+    g.path(String(new D().M(0.3 * S, -0.78 * S).L(sx + 0.04 * S, sy - 0.12 * S)), { stroke: 'inkSoft', sw: 0.8 });
+    const tx = sx + 0.04 * S, ty = sy - 0.14 * S;
+    glowDiscs(g, tx, ty, 0.36 * S, { strength: 1.4 });
+    const rand = rng(`spark${x}`);
+    for (let i = 0; i < 18; i++) {
+      const a = rand() * Math.PI * 2, l = 0.06 * S + rand() * 0.14 * S;
+      g.path(String(new D().M(tx, ty).L(tx + Math.cos(a) * l, ty + Math.sin(a) * l)), { stroke: i % 3 ? 'gold' : 'flame', sw: 0.6, cap: 'round' });
+    }
+    g.circle(tx, ty, 0.03 * S, { fill: 'card' });
+  }, { tf: [flip ? -1 : 1, 0, 0, 1, x, base] });
+}
+
+/** Someone at a window, seen from behind and a little turned: shoulders, a collar, the back of the
+ *  head and both ears. A hero with no photograph looks out at the view, never at us. */
+export function backBust(p, cx, base, s, kind, { cloth = 'indigo', hair = 'ink', drape = 'marigold' } = {}) {
+  const hx = cx + s * 0.015, hy = base - s * 0.62, hrx = s * 0.145, hry = s * 0.172;
+  const sw = s * 0.5;
+  p.cut(smooth([[cx - sw, base], [cx - sw * 0.98, base - s * 0.16], [cx - sw * 0.8, base - s * 0.31], [cx - s * 0.2, base - s * 0.39], [cx - s * 0.085, base - s * 0.42],
+    [cx + s * 0.085, base - s * 0.42], [cx + s * 0.2, base - s * 0.39], [cx + sw * 0.8, base - s * 0.31], [cx + sw * 0.98, base - s * 0.16], [cx + sw, base]], { tension: 0.9 }), cloth, { shadow: 0.25, soft: true });
+  for (const sd of [-1, 1]) p.path(String(new D().M(cx + sd * sw * 0.62, base - s * 0.33).C(cx + sd * sw * 0.66, base - s * 0.2, cx + sd * sw * 0.72, base - s * 0.1, cx + sd * sw * 0.74, base)), { stroke: 'ink', sw: s * 0.008, op: 0.3 });
+  p.path(String(new D().M(cx - s * 0.075, base - s * 0.5).L(cx + s * 0.075, base - s * 0.5).L(cx + s * 0.09, base - s * 0.4).L(cx - s * 0.09, base - s * 0.4).Z()), { fill: 'skin' });
+  p.cut(String(new D().M(cx - s * 0.12, base - s * 0.405).Q(cx, base - s * 0.45, cx + s * 0.12, base - s * 0.405).L(cx + s * 0.13, base - s * 0.37).Q(cx, base - s * 0.405, cx - s * 0.13, base - s * 0.37).Z()), 'card', { shadow: 0.2 });
+  p.path(String(new D().M(cx - s * 0.13, base - s * 0.37).Q(cx, base - s * 0.405, cx + s * 0.13, base - s * 0.37)), { stroke: 'gold', sw: s * 0.008 });
+  for (const sd of [-1, 1]) p.cut(smooth(ellipsePts(hx + sd * hrx * 0.97, hy + hry * 0.12, hrx * 0.17, hry * 0.24, 12)), 'skin', { shadow: 0.15 });
+  p.path(smooth(ellipsePts(hx, hy, hrx, hry, 22)), { fill: 'skin' });
+  if (kind === 'woman') {
+    p.cut(smooth([[hx - hrx * 1.06, hy + hry * 0.4], [hx - hrx * 1.1, hy - hry * 0.8], [hx, hy - hry * 1.1], [hx + hrx * 1.08, hy - hry * 0.75], [hx + hrx * 1.02, hy + hry * 0.35], [hx + hrx * 0.4, hy + hry * 0.9], [hx - hrx * 0.4, hy + hry * 0.9]]), hair, { shadow: 0.2 });
+    p.cut(smooth(ellipsePts(hx, hy + hry * 0.75, hrx * 0.44, hry * 0.36, 14)), hair, { shadow: 0.25 });
+    p.cut(String(new D().M(cx + sw * 0.7, base - s * 0.34).C(cx + sw * 0.2, base - s * 0.28, cx - sw * 0.5, base - s * 0.12, cx - sw * 0.9, base).L(cx - sw * 0.4, base).C(cx, base - s * 0.1, cx + sw * 0.5, base - s * 0.2, cx + sw * 0.95, base - s * 0.24).Z()), drape, { shadow: 0.2 });
+    return;
+  }
+  // short hair cut in clumps, tapering to the nape
+  const clumps = [[-0.72, -0.35, 0.5, 0.55], [-0.28, -0.62, 0.55, 0.5], [0.24, -0.6, 0.55, 0.52], [0.7, -0.3, 0.46, 0.55], [-0.5, 0.1, 0.42, 0.42], [0.46, 0.12, 0.4, 0.4], [0, -0.1, 0.62, 0.62]];
+  const hairShape = smooth([[hx - hrx * 1.02, hy + hry * 0.2], [hx - hrx * 1.08, hy - hry * 0.55], [hx - hrx * 0.55, hy - hry * 1.04], [hx + hrx * 0.1, hy - hry * 1.1], [hx + hrx * 0.75, hy - hry * 0.92],
+    [hx + hrx * 1.06, hy - hry * 0.4], [hx + hrx * 0.98, hy + hry * 0.28], [hx + hrx * 0.55, hy + hry * 0.52], [hx + hrx * 0.22, hy + hry * 0.72], [hx, hy + hry * 0.8], [hx - hrx * 0.22, hy + hry * 0.72], [hx - hrx * 0.58, hy + hry * 0.5]], { tension: 0.9 });
+  p.cut(hairShape, hair, { shadow: 0.2 });
+  for (const [ox, oy, rx, ry] of clumps) p.path(String(new D().M(hx + hrx * (ox - rx * 0.5), hy + hry * (oy + ry * 0.35)).Q(hx + hrx * ox, hy + hry * (oy - ry * 0.4), hx + hrx * (ox + rx * 0.5), hy + hry * (oy + ry * 0.3))), { stroke: 'card', sw: s * 0.004, op: 0.1 });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -449,10 +624,14 @@ export function bust(p, cx, by, s, kind, { cloth = 'indigo', drape = 'marigold',
       .C(cx + hrx * 0.6, hy - hry * 0.65, cx - hrx * 0.6, hy - hry * 0.65, cx - hrx * 1.05, hy - hry * 0.05).Z()), { fill: hair });
   } else {
     const recede = specs ? 0.25 : 0;
+    if (specs) {
+      for (const sd of [-1, 1]) p.cut(smooth([[cx + sd * hrx * 1.06, hy + hry * 0.25], [cx + sd * hrx * 1.12, hy - hry * 0.45], [cx + sd * hrx * 0.7, hy - hry * 0.85], [cx + sd * hrx * 0.62, hy - hry * 0.5], [cx + sd * hrx * 0.88, hy + hry * 0.1]]), hair, { shadow: 0.15 });
+      for (let i = 0; i < 3; i++) p.path(String(new D().M(cx - hrx * 0.5 + i * hrx * 0.5, hy - hry * 0.98).Q(cx - hrx * 0.3 + i * hrx * 0.5, hy - hry * 1.1, cx - hrx * 0.1 + i * hrx * 0.5, hy - hry * 0.96)), { stroke: hair, sw: s * 0.012, cap: 'round' });
+    } else {
     const cap = new D().M(cx - hrx * 1.04, hy - hry * (0.05 + recede)).C(cx - hrx * 1.1, hy - hry * 1.3, cx + hrx * 1.2, hy - hry * 1.25, cx + hrx * 1.04, hy - hry * (0.1 + recede))
       .C(cx + hrx * 0.7, hy - hry * (0.72 + recede * 0.4), cx - hrx * 0.2, hy - hry * (0.55 + recede * 0.6), cx - hrx * 1.04, hy - hry * (0.05 + recede)).Z();
     p.cut(String(cap), hair, { shadow: 0.25, dx: s * 0.004, dy: s * 0.012 });
-    if (kind === 'boy') p.path(String(new D().M(cx - hrx * 0.1, hy - hry * 1.02).Q(cx + hrx * 0.05, hy - hry * 1.4, cx + hrx * 0.4, hy - hry * 1.25).Q(cx + hrx * 0.2, hy - hry * 1.05, cx - hrx * 0.1, hy - hry * 1.02).Z()), { fill: hair });
+    }
   }
   if (specs) {
     for (const sd of [-1, 1]) p.circle(cx + sd * hrx * 0.42, hy + hry * 0.02, hrx * 0.28, { stroke: 'ink', sw: Math.max(0.5, s * 0.012), op: 0.85 });
@@ -480,7 +659,8 @@ export function avatarFor(person, { now = 2026 } = {}) {
 // ---------------------------------------------------------------------------------------------
 // Architecture and landscape
 
-export function shikhara(p, x, base, w, h, fill, { flag = true, rib = 'ink', seed = 'sh' } = {}) {
+export function shikhara(p, x, base, w, h, fill, { flag = false, rib = 'ink', seed = 'sh' } = {}) {
+  flag = false;
   const body = [[x - w / 2, base], [x - w * 0.5, base - h * 0.35], [x - w * 0.42, base - h * 0.62], [x - w * 0.24, base - h * 0.84], [x - w * 0.1, base - h * 0.9],
     [x + w * 0.1, base - h * 0.9], [x + w * 0.24, base - h * 0.84], [x + w * 0.42, base - h * 0.62], [x + w * 0.5, base - h * 0.35], [x + w / 2, base]];
   p.cut(smooth(wobble(resample(body, 5), w * 0.006, seed), { tension: 0.9 }), fill, { shadow: 0.22 });
@@ -523,7 +703,7 @@ export function umbrella(p, x, base, w, fill = 'marigold', rim = 'saffron') {
 
 /** A haveli facade: parapet with kangura merlons, rows of windows (arched, shuttered, latticed), a
  *  balcony, pots on the sills, and an arched door - with a mandana border if asked for. */
-export function haveli(p, x, base, w, h, fill, { trim = 'card', door = 'peacock', seed = 'hv', lit = false, jharokha = true, windows = 2, mandanaDoor = false, shutter = 'peacock' } = {}) {
+export function haveli(p, x, base, w, h, fill, { trim = 'card', door = 'peacock', seed = 'hv', lit = false, jharokha = true, windows = 2, mandanaDoor = false, shutter = 'peacock', roof = null } = {}) {
   const rand = rng(seed);
   const top = base - h;
   p.cut(cutShape([[x, base], [x, top + 8], [x + w, top + 8], [x + w, base]], 0.5, seed, 12), fill, { shadow: 0.2, soft: true });
@@ -537,7 +717,7 @@ export function haveli(p, x, base, w, h, fill, { trim = 'card', door = 'peacock'
   const dw = Math.min(w * 0.34, 42), dh = Math.min(h * 0.3, dw * 1.6);
   const rowsSpace = h - dh - 34;
   const rows = Math.max(1, Math.min(3, Math.floor(rowsSpace / 52)));
-  const styles = lit ? ['arch', 'arch', 'arch'] : ['arch', 'shutter', 'jaali'];
+  const styles = lit ? ['arch', 'arch', 'arch'] : ['arch', 'jaali', 'arch'];
   for (let r = 0; r < rows; r++) {
     const wy = top + 24 + r * 52, wh = 26, ww = 17;
     if (r > 0) p.path(String(new D().M(x + 3, wy - 12).L(x + w - 3, wy - 12)), { stroke: trim, sw: 1.4, op: 0.6 });
@@ -555,8 +735,15 @@ export function haveli(p, x, base, w, h, fill, { trim = 'card', door = 'peacock'
       }
       if (lit) { p.path(archPath(cx - ww / 2, wy, ww, wh, { kind: 'cusped', lobes: 5 }), { fill: 'flame', op: 0.85 }); continue; }
       windowCut(p, cx - ww / 2, wy, ww, wh, styles[r % 3], { frame: trim, shutter, glass: 'ink' });
+      if (r === 1 && !lit) chhajja(p, cx - ww / 2 - 2, wy - 8, ww + 4, trim);
       if ((i + r) % 3 === 1) pot(p, cx, wy + wh + 2, 11);
     }
+  }
+  if (roof === 'chhatri') chhatri(p, x + w * 0.78, top + 2, 26, fill);
+  if (roof === 'eave') {
+    const ey = base - dh - 30;
+    p.cut(poly([[x - 4, ey], [x + w + 4, ey], [x + w + 10, ey + 9], [x - 10, ey + 9]]), trim, { shadow: 0.3 });
+    for (let i = 0; i < 5; i++) { const bx = x + 8 + i * ((w - 16) / 4); p.cut(String(new D().M(bx - 3, ey + 9).L(bx + 3, ey + 9).Q(bx + 2, ey + 18, bx, ey + 20).Q(bx - 2, ey + 18, bx - 3, ey + 9).Z()), trim, { shadow: 0.2 }); }
   }
   // the door
   const dx = x + w / 2 - dw / 2;
@@ -705,7 +892,9 @@ export function profile(p, cx, base, s, kind, { fill = 'indigo', hair = 'ink', r
     p.circle(cx + 0.04 * s, base - 0.55 * s, 0.012 * s, { fill: 'gold' });
     p.cut(smooth([P(0.21, -0.3), P(0.05, -0.2), P(-0.1, -0.06), P(-0.2, 0), P(0.1, 0), P(0.3, -0.12), P(0.4, -0.18)], { tension: 0.9 }), drape, { shadow: 0.2 });
   } else {
-    p.cut(smooth([P(0.21, -0.72), P(0.14, -0.83), P(0.0, -0.865), P(-0.14, -0.8), P(-0.2, -0.66), P(-0.17, -0.52), P(-0.12, -0.53), P(-0.08, -0.64), P(0.04, -0.72), P(0.15, -0.73)]), hair, { shadow: 0.2 });
+    p.cut(smooth([P(0.215, -0.705), P(0.18, -0.79), P(0.1, -0.848), P(-0.02, -0.852), P(-0.13, -0.8), P(-0.19, -0.69), P(-0.18, -0.56), P(-0.13, -0.5), P(-0.1, -0.57), P(-0.07, -0.64), P(0.0, -0.69), P(0.08, -0.7), P(0.15, -0.69)], { tension: 0.9 }), hair, { shadow: 0.2 });
+    for (let i = 0; i < 4; i++) p.path(String(new D().M(cx + (0.16 - i * 0.07) * s, base - (0.8 - i * 0.012) * s).Q(cx + (0.08 - i * 0.07) * s, base - (0.83 - i * 0.01) * s, cx + (0.0 - i * 0.07) * s, base - (0.78 - i * 0.03) * s)), { stroke: 'card', sw: s * 0.004, op: 0.28 });
+    p.path(String(new D().M(cx + 0.02 * s, base - 0.66 * s).Q(cx + 0.03 * s, base - 0.6 * s, cx + 0.015 * s, base - 0.57 * s)), { stroke: hair, sw: s * 0.018, cap: 'round' });
     p.path(String(new D().M(cx + 0.12 * s, base - 0.345 * s).Q(cx + 0.02 * s, base - 0.3 * s, cx + 0.03 * s, base - 0.22 * s)), { stroke: 'gold', sw: s * 0.01 });
   }
 }

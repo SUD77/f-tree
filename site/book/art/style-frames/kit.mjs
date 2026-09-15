@@ -104,6 +104,19 @@ export function ellipsePts(cx, cy, rx, ry, n = 32, rot = 0) {
 }
 
 /** A hand-cut version of any outline. */
+/** A circle as a closed subpath, for punching holes in paper with the even-odd rule. */
+export function circleSub(cx, cy, r) {
+  const k = 0.552 * r;
+  return String(new D().M(cx - r, cy).C(cx - r, cy - k, cx - k, cy - r, cx, cy - r).C(cx + k, cy - r, cx + r, cy - k, cx + r, cy)
+    .C(cx + r, cy + k, cx + k, cy + r, cx, cy + r).C(cx - k, cy + r, cx - r, cy + k, cx - r, cy).Z());
+}
+/** A teardrop (a paisley's seed) pointing at `angle` radians, as a closed subpath. */
+export function dropSub(x, y, s, angle) {
+  const ux = Math.cos(angle), uy = Math.sin(angle), vx = -uy, vy = ux;
+  const P = (a, c) => [x + ux * a + vx * c, y + uy * a + vy * c];
+  return String(new D().M(...P(s, 0)).C(...P(s * 0.3, s * 0.42), ...P(-s * 0.55, s * 0.4), ...P(-s * 0.55, 0)).C(...P(-s * 0.55, -s * 0.4), ...P(s * 0.3, -s * 0.42), ...P(s, 0)).Z());
+}
+
 export const cutShape = (pts, amp, seed, step = 6) => smooth(wobble(resample(pts, step), amp, seed));
 
 // ---------------------------------------------------------------------------------------------
@@ -130,7 +143,7 @@ export class Page {
   circle(cx, cy, r, o = {}) { return this.push(`<circle cx="${r2(cx)}" cy="${r2(cy)}" r="${r2(r)}"${this.attrs(o)}/>`); }
   rect(x, y, w, h, o = {}) { return this.push(`<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}"${o.r ? ` rx="${r2(o.r)}"` : ''}${this.attrs(o)}/>`); }
   /** A cut-paper layer: its shadow first (the same shape, offset, in ink), then the paper. */
-  cut(d, fill, { shadow = 0.18, dx = 1.1, dy = 1.6, op, shadowFill = 'ink', soft = false, rule } = {}) {
+  cut(d, fill, { shadow = 0.22, dx = 1.7, dy = 2.3, op, shadowFill = 'ink', soft = false, rule } = {}) {
     const ev = rule === 'evenodd' ? ' fill-rule="evenodd"' : '';
     if (shadow && soft) {
       // the lightbox shadow: three offsets, fading - a paper layer standing off the one behind it
