@@ -12,7 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +53,7 @@ const val ComingUpTag = "coming-up"
 const val ComingUpToggleTag = "coming-up-toggle"
 const val ComingUpEmptyTag = "coming-up-empty"
 const val RememberingTag = "coming-up-remembering"
+const val ComingUpBellTag = "coming-up-bell"
 fun comingUpRowTag(occasion: Occasion): String = "coming-up-${occasion.person.id}-${occasion.kind.name.lowercase()}"
 
 /** How many of each group show before "Show all": enough to answer "anyone soon?" at a glance. */
@@ -67,6 +73,8 @@ fun LazyGridScope.comingUp(
     expanded: Boolean,
     onToggle: () -> Unit,
     onOpenPerson: (String) -> Unit,
+    remindersOn: Boolean = false,
+    onReminders: (() -> Unit)? = null,
 ) {
     val remembering = if (showRemembering) band.remembering else emptyList()
     val folded = band.birthdays.size > FOLDED || remembering.size > FOLDED
@@ -78,6 +86,20 @@ fun LazyGridScope.comingUp(
             label = stringResource(R.string.coming_up_title),
             trailing = stringResource(R.string.coming_up_window),
             modifier = Modifier.testTag(ComingUpTag),
+            action = onReminders?.let { open ->
+                {
+                    // The switch where the need is felt: filled when reminders are on, outlined when not.
+                    IconButton(onClick = open, modifier = Modifier.testTag(ComingUpBellTag)) {
+                        Icon(
+                            if (remindersOn) Icons.Filled.Notifications else Icons.Outlined.NotificationsNone,
+                            contentDescription = stringResource(
+                                if (remindersOn) R.string.coming_up_reminders_on else R.string.coming_up_reminders_off,
+                            ),
+                            tint = if (remindersOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
         )
     }
     if (band.birthdays.isEmpty()) {
@@ -140,11 +162,17 @@ fun LazyGridScope.listHeading(label: String) {
 
 /** A ruled label in the mono voice — the compact view's band heading, so the app has one kind of heading. */
 @Composable
-private fun RuledHeading(label: String, modifier: Modifier = Modifier, trailing: String? = null) {
+private fun RuledHeading(
+    label: String,
+    modifier: Modifier = Modifier,
+    trailing: String? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp),
+            // An icon button brings its own 48dp of room, so the row gives back what it would pad.
+            .padding(start = 20.dp, end = if (action != null) 8.dp else 20.dp, top = if (action != null) 2.dp else 14.dp, bottom = if (action != null) 0.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -158,6 +186,7 @@ private fun RuledHeading(label: String, modifier: Modifier = Modifier, trailing:
         if (trailing != null) {
             Text(text = trailing, style = FTreeText.recordSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        action?.invoke()
     }
 }
 

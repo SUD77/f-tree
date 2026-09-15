@@ -70,6 +70,8 @@ fun PeopleScreen(
     onOpenPerson: (String) -> Unit,
     onAddPerson: () -> Unit,
     modifier: Modifier = Modifier,
+    remindersOn: Boolean = false,
+    onReminders: () -> Unit = {},
     viewModel: PeopleViewModel = viewModel(factory = FTreeViewModels.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -206,6 +208,8 @@ fun PeopleScreen(
                             expanded = comingUpExpanded,
                             onToggle = { comingUpExpanded = !comingUpExpanded },
                             onOpenPerson = onOpenPerson,
+                            remindersOn = remindersOn,
+                            onReminders = onReminders,
                         )
                         listHeading(listLabel)
                     }

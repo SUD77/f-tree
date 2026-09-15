@@ -18,6 +18,8 @@ import com.vibethroughcode.ftree.nearby.NearbyIdentity
 import com.vibethroughcode.ftree.nearby.NearbyPreferences
 import com.vibethroughcode.ftree.nearby.NearbyRepository
 import com.vibethroughcode.ftree.nearby.NearbyTransport
+import com.vibethroughcode.ftree.reminders.ReminderPreferences
+import com.vibethroughcode.ftree.reminders.Reminders
 import com.vibethroughcode.ftree.transfer.BranchShare
 import com.vibethroughcode.ftree.transfer.CardShare
 import com.vibethroughcode.ftree.transfer.TreeExporter
@@ -96,6 +98,11 @@ class AppContainer(context: Context) {
             installer = UpdateInstaller(context.applicationContext),
         )
     }
+
+    val reminderPreferences: ReminderPreferences by lazy { ReminderPreferences(context) }
+
+    /** Birthday reminders (#154). Nothing is scheduled unless [ReminderPreferences.enabled] is on. */
+    val reminders: Reminders by lazy { Reminders(context, reminderPreferences, familyRepository) }
 
     val nearbyPreferences: NearbyPreferences by lazy { NearbyPreferences(context) }
     val nearbyIdentity: NearbyIdentity by lazy { NearbyIdentity(context) }

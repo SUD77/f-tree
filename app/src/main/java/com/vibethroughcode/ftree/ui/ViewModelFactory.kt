@@ -53,6 +53,8 @@ object FTreeViewModels {
                 nearbyPreferences = app.container.nearbyPreferences,
                 nearbyIdentity = app.container.nearbyIdentity,
                 nearbyRepository = app.container.nearbyRepository,
+                reminderPreferences = app.container.reminderPreferences,
+                reminders = app.container.reminders,
             )
         }
         initializer {

@@ -15,6 +15,7 @@
 -keep class com.vibethroughcode.ftree.data.SiblingKind { *; }
 -keep class com.vibethroughcode.ftree.data.DeletionMode { *; }
 -keep class com.vibethroughcode.ftree.data.KinshipLanguage { *; }
+-keep class com.vibethroughcode.ftree.reminders.ReminderLead { *; }
 
 -keepclassmembers enum * {
     public static **[] values();
