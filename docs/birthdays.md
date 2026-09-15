@@ -45,6 +45,37 @@ A reminder is **one alarm a day**, not one per person, and it asks the database 
 at the moment it fires. An edit, a delete or an import therefore cannot leave a stale reminder
 behind, and there is no schedule to keep in step.
 
+## The reminder
+
+Off until somebody turns it on, and the same on both shells:
+
+- **09:00 on the morning, at most one note, however many people share the day.** One person gets
+  a title that names them ("Asha Devi turns 60 today") and a line under it saying when they were
+  born. Several get a count ("3 birthdays today") and one line each.
+- **When:** on the day, or the day before.
+- **Remembrance days** are a second switch, off by default. "Coming up" always lists them, but a
+  note about somebody who has died is a different thing to receive, and nobody should get one by
+  default.
+- **Switching on after nine counts today as told.** Nobody gets a note about what the list is
+  already showing them; tomorrow's note is the first.
+- **The switch says who it leaves out:** "Covers 42 people. 106 have no day and month recorded."
+
+### On Android
+
+- **Permission is asked for at the moment the switch is turned on, and never before.** The switch
+  moves only once Android says yes. If Android says no, the switch stays off and says why. After
+  the second refusal Android stops asking, so the switch offers the system page where that can be
+  undone.
+- **One inexact alarm** (`AlarmManager.set`). It needs no exact-alarm permission and adds no
+  dependency. `reminders/` is the only package that schedules anything, just as `update/` is the
+  only one that opens a socket.
+- **A morning is never skipped.** After a restart, an app update or a change of clock, the owed
+  note is sent late rather than not at all. The receiver for those broadcasts
+  (`ReminderRestartReceiver`) is declared disabled and switched on only with the reminders, so
+  `RECEIVE_BOOT_COMPLETED` does nothing for anyone who has not asked for reminders.
+- **On a locked phone** the note says only "A birthday today". A family's names and ages are nobody
+  else's business.
+
 ## The desktop: reminders follow the tree that is open
 
 The desktop has no database to ask and no background process to ask it from — see `docs/desktop.md`

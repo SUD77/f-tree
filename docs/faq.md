@@ -58,15 +58,18 @@ through **nearby sharing**. Nothing is transmitted automatically — nearby shar
 until you open its screen, and the receiver has to accept, by name, before a single byte of family
 data arrives.
 
-The app declares six permissions. Two, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, exist only for
+The app declares eight permissions. Two, `INTERNET` and `REQUEST_INSTALL_PACKAGES`, exist only for
 the **opt-in updater**; `UpdateRepository` refuses to make a request while the preference is false,
 so "no network unless you ask for it" is a property of the code rather than of the interface. Three
 more, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` and `ACCESS_NETWORK_STATE`, exist only for
-nearby sharing and do nothing while both of its screens are closed; all five of these are normal
-permissions that never prompt, and none is in the location family. The sixth, `CAMERA`, is the only
-one that asks, and only if you choose to scan a nearby code — typing it works everywhere the camera
-would. `update/` and `nearby/` are deliberately the only packages in the app that open a socket, so
-both claims are checkable by reading them.
+nearby sharing and do nothing while both of its screens are closed. `RECEIVE_BOOT_COMPLETED` exists
+only for **birthday reminders**: it sets the morning's reminder again after the phone restarts, and
+the one receiver that uses it is disabled until reminders are switched on. Those six are normal
+permissions that never prompt, and none is in the location family. Two ask: `CAMERA`, only if you
+choose to scan a nearby code — typing it works everywhere the camera would — and
+`POST_NOTIFICATIONS`, only at the moment you turn birthday reminders on. `update/` and `nearby/`
+are deliberately the only packages in the app that open a socket, and `reminders/` the only one
+that schedules anything, so each claim is checkable by reading them.
 
 ### Is there analytics or crash reporting?
 
