@@ -322,6 +322,65 @@ Kotlin's own test cases so a divergence fails a test rather than surprising some
 
 Installers are around 100MB. That is what Electron costs.
 
+## The family book
+
+**File › Make a family book…**, `Ctrl+P`, the toolbar's book icon beside Find a relation, or
+**Family book from {first name}** in a person's panel (#200, #207) open a large dialog that
+composes a designed PDF of the tree entirely on this machine. It is the desktop half of
+[the family book](family-book.md); read that page first for the format, the composer and what the
+dialog must show — this section is the Electron-specific half: how the same JavaScript composer
+that runs in Android's hidden WebView turns into a real PDF here.
+
+**The preview is the file.** `renderer/book.js` imports `site/book/compose.js` and `svg.js` as
+ordinary ES modules — the same files `site/book/preview.html` uses in a browser — composes a `Book`
+from the open tree, and paints every page's SVG straight into a scrolling column. Every option
+(template, title, who's in it, photographs, full dates) recomposes the whole book, debounced by
+150ms, so what is on screen is never an approximation of what gets saved.
+
+**`printToPDF`, in a hidden, refused-network window.** Saving hands the *already-fitted* SVG pages
+(`outerHTML`, after `svg.js`'s `fitText` has run against the loaded fonts) to `book:save`, which
+writes them into a small HTML document — `@page { size: 595pt 842pt; margin: 0 }`, one `<div
+class="page">` per page with `break-after: page`, and `.page:last-child { break-after: auto }` so
+Chromium's print pipeline never adds a stray trailing blank page — and loads that document into a
+`BrowserWindow` that is never shown: `show: false`, `sandbox: true`, no preload, and the *same*
+partition the main window's session uses, so it inherits `refuseTheNetwork` rather than needing a
+second copy of it. It renders a template's own art and a family's own names, which is exactly the
+content that refusal exists for. `backgroundThrottling: false` matters here specifically: Chromium
+throttles a backgrounded page's timers by default, and without this the wait for
+`document.fonts.ready` below can stall in a way that is intermittent and hard to reproduce.
+
+**Fonts, and the Devanagari gotcha.** The three book fonts (`docs/fonts.md`) are inlined as `data:`
+URLs the same way Literata and JetBrains Mono are (`bookFontCss`, beside `localFontCss`) — read
+once from the same `app/src/main/res/font/` directory the existing `*.ttf` packaging glob already
+copies. `document.fonts.ready` resolving is not proof a font's Devanagari shaping data has actually
+loaded — a font can report ready before that finishes — so the print window also awaits
+`document.fonts.load` for each face against a real Devanagari sample, not only the Latin family
+name, before `printToPDF` is called.
+
+**Photographs never touch the composer.** It only ever asks for `{id, px}` — a person and a size.
+The renderer resolves that itself: it reads the archive's own bytes for that person's stored photo,
+draws them onto a `<canvas>` at the requested size, and hands back a `data:image/jpeg` URL at
+quality 0.86. That is also why the desktop's PDFs come out smaller than Android's lossless ones —
+acceptable, and said plainly in `docs/family-book.md`.
+
+**The policy gate runs before every compose**, exactly as [premium.md](premium.md) describes it:
+`plan → decide → compose(allowance)`. A cheap first read of the family (`readFamily` with no
+allowance) gets the generation count and the population `decide()` needs; whatever it grants —
+Allowed, Limited, or Locked — is what `composeBook` actually receives, and a Limited or Locked
+decision shows its reason in the dialog. `settings.bookUsage` is `UsageLedger`'s desktop half
+(`desktop/settings.js`), and it is only ever incremented after a save actually succeeds.
+
+**Saving** reuses `desktop/atomic.js`'s `writeTreeFile` for the PDF's bytes, not a second
+temp-then-rename implementation — the function is bytes-onto-a-path, not tree-specific despite its
+name, and getting crash safety right once is the point.
+
+**Smoke-tested end to end**, behind `FTREE_SMOKE_BOOK`: opens the dialog from the menu, checks
+every shipped template offers a chip, sets a Devanagari title and saves it to a real PDF
+(`FTREE_SMOKE_BOOK_SAVE_TO`, the save dialog's own narrow seam), then reads that PDF back and
+checks it starts with `%PDF`, that its page count matches the book's, that `/FontFile2` is present
+and `/Type3` is absent — static, embedded, selectable fonts, never the outline form Skia's PDF
+backend can fall back to for a variable font — and that the file stays well under the 10MB budget.
+
 ## Layout
 
 | | |
@@ -329,9 +388,11 @@ Installers are around 100MB. That is what Electron costs.
 | `desktop/main.js` | the shell: window, menu, file dialogs, the session file, the smoke test |
 | `desktop/preload.js` | the only bridge between page and machine, and a deliberately short one |
 | `desktop/nearby/` | nearby sharing's protocol and sockets, main process only, behind `nearby/index.js` |
+| `desktop/renderer/book.js` | the family book dialog: compose, preview, and hand fitted pages to `book:save` |
 | `desktop/renderer/vendor/qr.js` | the QR encoder, vendored unedited — see *The QR code* above |
 | `desktop/build/icon.png` | the mark from the website, at 512px |
 | `site/playground/*` | the viewer, carried into the package as a resource |
+| `site/book/*` | the book's composer and SVG painter, carried into the package as a resource |
 
 The page reaches the machine only through the names in `preload.js`. A tree is somebody's family,
 and the reason the app never uploads it is the reason that list is short and explicit rather than

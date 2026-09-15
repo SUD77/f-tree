@@ -63,4 +63,31 @@ export function prefsIcon(size = 15) {
   return el;
 }
 
+/*
+ * An open book: two leaves either side of the spine, stroked to match the bar's other stroked
+ * marks (the gear, the moon and the sun) rather than filled like the relation arrows, which read
+ * as a single glyph and would be lost next to it at the same weight.
+ */
+const BOOK_PATHS = [
+  'M12 5.2c-1.7-1.3-4-1.9-6.4-1.9-.7 0-1.2.5-1.2 1.2v12.6c0 .7.5 1.1 1.1 1.1 2.2 0 4.4.6 6 1.8',
+  'M12 5.2c1.7-1.3 4-1.9 6.4-1.9.7 0 1.2.5 1.2 1.2v12.6c0 .7-.5 1.1-1.1 1.1-2.2 0-4.4.6-6 1.8',
+  'M12 5.2v14.8',
+];
+
+/** The family book's own mark, on the toolbar, in the File menu, and on its dialog. */
+export function bookIcon(size = 17) {
+  const el = svg(size);
+  el.setAttribute('fill', 'none');
+  el.setAttribute('stroke', 'currentColor');
+  el.setAttribute('stroke-width', '1.7');
+  el.setAttribute('stroke-linecap', 'round');
+  el.setAttribute('stroke-linejoin', 'round');
+  for (const d of BOOK_PATHS) {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', d);
+    el.append(path);
+  }
+  return el;
+}
+
 export { RELATE_PATH };

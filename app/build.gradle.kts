@@ -247,6 +247,21 @@ tasks.withType<Test>().configureEach {
         .optional()
 
     /*
+     * `PolicyCasesTest` reads `site/book/policy.json` and `site/book/policy-cases.json` by a
+     * project-relative path, the same way it reads `entitlement/Entitlements.kt` through the
+     * compiled classpath and `CrossLanguageTransferTest` reads `sample-family.ftree` above --
+     * these two files are genuine inputs even though Gradle has no other reason to know that a
+     * plain JSON file feeds a JVM test. Without this, editing only the shared table would leave
+     * the task up to date and the new case would pass by not running.
+     */
+    inputs.files(
+        rootProject.file("site/book/policy.json"),
+        rootProject.file("site/book/policy-cases.json"),
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("policyCasesInputs")
+        .optional()
+
+    /*
      * The other half of the same problem, for `branchFrom`.
      *
      * `BranchCasesTest` checks this module's `FamilyGraph.branchFrom` against `branch-cases.json`,
@@ -260,21 +275,6 @@ tasks.withType<Test>().configureEach {
         rootProject.file("site/playground/model.js"),
     ).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("branchCrossLanguageInputs")
-        .optional()
-
-    /*
-     * `PolicyCasesTest` reads `site/book/policy.json` and `site/book/policy-cases.json` by a
-     * project-relative path, the same way it reads `entitlement/Entitlements.kt` through the
-     * compiled classpath and `CrossLanguageTransferTest` reads `sample-family.ftree` above --
-     * these two files are genuine inputs even though Gradle has no other reason to know that a
-     * plain JSON file feeds a JVM test. Without this, editing only the shared table would leave
-     * the task up to date and the new case would pass by not running.
-     */
-    inputs.files(
-        rootProject.file("site/book/policy.json"),
-        rootProject.file("site/book/policy-cases.json"),
-    ).withPathSensitivity(PathSensitivity.RELATIVE)
-        .withPropertyName("policyCasesInputs")
         .optional()
 
     /*
