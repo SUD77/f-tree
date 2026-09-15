@@ -19,6 +19,7 @@ family tree is modelled once you accept that families are not trees.
 - [Accessibility](#accessibility)
 - [Updating in place](#updating-in-place)
 - [Nearby sharing](#nearby-sharing)
+- [The family book](#the-family-book)
 - [Design decisions worth knowing](#design-decisions-worth-knowing)
 
 ---
@@ -313,6 +314,48 @@ layout — is written down in full in [nearby-protocol.md](nearby-protocol.md), 
 independent implementations, this app's Kotlin and the desktop app's JavaScript, have to agree on
 it byte for byte rather than merely close enough.
 
+## The family book
+
+The book (#200) is the app's first designed, printable output, and it is deliberately built as
+**one JS composer, run directly on the desktop and inside a hidden WebView on Android**, rather
+than as two implementations of the same layout. Full spec in
+[family-book.md](family-book.md); this is the shape of it, and why it is shaped that way.
+
+`site/book/compose.js` reads a `.ftree` document and hands back a **Book**: a versioned display
+list of pages, each a flat list of drawing primitives (`rect`, `path`, `text`, `image`, `group`)
+with every coordinate, line break and font already decided. A painter draws exactly what it is
+given and decides nothing — that split is what makes the phone and the laptop produce the same
+book from the same tree, and it is why a new template (Diwali, say) is data plus at most a new
+composer block, never a change to either painter.
+
+**Porting the layout to Kotlin was rejected on purpose.** A second implementation of line
+breaking, generation packing and Devanagari-safe text measurement would drift from the JavaScript
+one the moment either changed, in a feature whose entire premise is that both shells produce
+identical bytes. Android instead hosts the same `compose.js` inside a `WebView` nobody ever
+shows — `BookComposer` (`app/src/main/java/com/vibethroughcode/ftree/book/BookComposer.kt`) loads
+it from the app's own assets, blocks the network at three independent points (a `WebViewClient`
+that answers every request itself, `setBlockNetworkLoads`, and a page-level Content-Security-Policy
+allowing only its own origin), and uses it purely as a script engine: call in with the tree and
+the options, get a `Book` back as JSON. It is the same trade the desktop makes with Electron
+(see [desktop.md](desktop.md#why-electron-and-not-the-apps-own-code)) — a second runtime, once,
+instead of a second implementation kept in step by hand forever.
+
+**The two native painters** turn that one `Book` into pixels, and nothing else:
+`site/book/svg.js` on the desktop (SVG, printed through a hidden `BrowserWindow`'s `printToPDF`),
+and `app/src/main/java/com/vibethroughcode/ftree/book/BookPainter.kt` on Android (`Canvas`,
+drawn into both the preview and a `PdfDocument` via `BookPrinter.kt`). Both painters take the same
+one liberty the format allows: a line of text measured wider than the composer's width is shrunk,
+never grown, which only ever happens on a Devanagari conjunct the composer's advance tables
+under-measure by a few per cent.
+
+**Determinism is the property that makes any of this trustworthy.** The composer takes `now` as
+an argument rather than reading the clock, sorts names by a fold of their own characters rather
+than a locale collation, and rounds every coordinate to 0.01pt — so the same tree produces the
+same `Book` in Node, in Electron, and inside an Android `WebView` built on a different Chromium.
+`site/book/*.test.mjs` holds a golden hash per fixture and template (`golden.txt`); a composer
+change that shifts a single coordinate fails there before it ever reaches a painter, on either
+shell.
+
 ---
 
 ## Design decisions worth knowing
@@ -353,5 +396,6 @@ it byte for byte rather than merely close enough.
 - [Nearby sharing: the protocol](nearby-protocol.md)
 - [The data model, field by field](data-model.md)
 - [Hindi kinship terms](kinship-hindi.md)
+- [The family book, in full](family-book.md)
 - [Building, testing and releasing](building.md)
 - [The website and the browser viewer](site.md)

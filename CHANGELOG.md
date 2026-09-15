@@ -10,6 +10,29 @@ betas leading up to a stable release are folded into that release's entry here.
 
 ## [Unreleased]
 
+**A family book: the whole tree, designed and printable, made to be handed around.**
+
+- **The family book, on Android (0.10.0-beta.1) and desktop (0.8.0-beta.1) — a beta feature.** A
+  PDF built entirely on the device: a cover made from the family's own shape — designed to read at
+  the size a chat app shows a document's thumbnail — everyone in the family, a page of facts about
+  it, a generation at a time, an index that gives every named person their page, and a closing
+  page with a QR code back to the site.
+- **Two templates, one evergreen.** Heirloom, always available, and a Diwali edition —
+  *शुभ दीपावली* — that moves to the front of the list and opens first in the weeks around the
+  festival, and stays listed, just not featured, the rest of the year.
+- **Private by default.** Living people show only the year they were born; a switch turns on full
+  dates for them. People no longer with us always show their full dates.
+- Names — a title, a family name, anyone's recorded name — print correctly in Devanagari, on both
+  shells, from the same subset fonts.
+- Android gets **Share**, the same button the relationship card uses, and **Save to device**;
+  desktop gets **Save PDF…**, then a toast offering **Show in folder**.
+- A file-size estimate and a hard budget keep a book with photographs small enough to still move
+  through a chat app, on both shells.
+- The groundwork for a policy switch (#156): one place that will decide what a reader may do with
+  the book. Today it grants everything, to everyone, for free — see
+  [the policy switch](docs/premium.md) for the principle this is built to keep: *gate
+  presentation, never data*.
+
 **Send a tree to a device you can see, without a cable or a cloud.**
 
 - **Nearby sharing, on Android and desktop — a beta feature.** Two devices on the same Wi-Fi find

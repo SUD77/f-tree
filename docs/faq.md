@@ -175,6 +175,64 @@ file. It needs a **native speaker** more than a developer.
 
 ---
 
+## The family book
+
+### What is the family book?
+
+A designed, printable PDF of your tree — a cover, everyone in the family on one page, a page of
+facts about the family, a page per generation, an index to find yourself in, and a closing page.
+It is made on your phone or your laptop, the same as everything else in f-tree: no account, no
+upload, nothing sent anywhere until you choose to share the file yourself. See
+[docs/family-book.md](family-book.md) for the full design.
+
+### Why do living people show only a birth year?
+
+Privacy by default. A book is meant to be handed around, including to people outside your
+immediate household, and a full birthdate for someone still living is more than most family
+records need to share that widely. There is a switch, off by default, that shows full dates for
+the living too. People no longer with us always show their full dates — there is nothing left to
+protect by hiding them, and a memorial page with only a year reads as withholding rather than
+caring.
+
+### Why might the file be a few megabytes if it has photographs?
+
+Portraits. The book screen shows an estimate — something like *About 3.4 MB* — before you save or
+share, and it updates as you turn photographs on or off. Android embeds them losslessly, which is
+what keeps a written record crisp on a screen or a print, and is also why an Android-made book can
+come out a little larger than a desktop-made one, which uses ordinary JPEG compression instead;
+both stay comfortably under a 10 MB budget so the file still moves through a chat app. Turning
+photographs off drops the estimate to a few hundred kilobytes: pages, names and dates only.
+
+### What is "Made with f-tree" and the QR code on the last page?
+
+The book's only advertisement for itself, and it is deliberately small: a line of text on every
+page, and a closing page with a QR code to the site and the words *Is someone missing? Add them*.
+Anyone who receives the book and wants to fix a mistake or add someone new can scan it and land on
+the app that made it. Nothing about the book's contents depends on this — it costs nothing to
+remove by hand, and a future premium tier could plausibly drop it for a paying reader without
+touching a single fact in the book (see [gate presentation, never data](premium.md)).
+
+### Why does Diwali show up first sometimes?
+
+The catalogue lists every template all year, but features whichever one is in season — currently
+just Diwali, for the weeks around it — by moving it to the front of the list and opening the book
+on it. Outside that window it is still there, just not first. The evergreen Heirloom template
+never leaves the list and is what a book opens on the rest of the year.
+
+### Does making a book send anything anywhere?
+
+No. It is composed and drawn entirely on your device, exactly like every other screen in f-tree.
+Nothing leaves your phone or your laptop until *you* choose **Share** or **Save PDF…** and send
+the resulting file somewhere yourself — the same rule as an exported `.ftree`.
+
+### Can names in the book be in Devanagari?
+
+Yes. The book's three fonts (docs/fonts.md) are subset to cover Latin and Devanagari together, so
+a title, a family name or anyone's recorded name can be typed in हिन्दी and prints correctly —
+never as a missing-glyph box — on both the phone and the laptop.
+
+---
+
 ## Sharing and merging
 
 ### Is nearby sharing sync?

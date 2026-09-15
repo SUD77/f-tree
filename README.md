@@ -68,6 +68,7 @@ f-tree is built around those gaps instead of around a form you have to fill in c
 | 📴 **No account, no cloud.** | No login, no backend, no sync, no analytics. Every permission the app declares exists only for the opt-in updater or for nearby sharing, and neither touches the network until you ask it to. |
 | 🤝 **Sharing that merges, never overwrites.** | Send one branch as a small file over WhatsApp. The recipient imports it and it *merges* into their tree. The worst an import can do is add a duplicate you can then merge. |
 | 📶 **Nearby sharing.** | Send a tree straight to a device you can see, over the Wi-Fi you are already on — no account, no server, nothing in between. Both screens show the same six digits, so you know it went to the right one. |
+| 📖 **A family book, made to send.** | A designed, printable PDF — a cover, everyone in the family, a page of facts, a generation at a time, and an index to find yourself in. Made on your own phone or laptop, in Heirloom or a Diwali edition. [Read more →](docs/family-book.md) |
 
 <br>
 
@@ -157,6 +158,12 @@ ordered pairs; the rest read their answer off the chain.
 Every card carries a portrait — the square you framed, or a coloured initial when there is no
 photograph. Photographs can be switched off on a very large tree without a single card moving.
 
+**A family book, ready to send**
+
+A designed PDF — a cover built from the family's own shape, everyone in it, a page of facts, a
+generation at a time, and an index so anyone can find themselves. Made entirely on the device,
+in the evergreen Heirloom template or a Diwali edition. [Full design →](docs/family-book.md)
+
 </td><td width="50%" valign="top">
 
 **Export and import as one `.ftree` file**
@@ -225,7 +232,9 @@ owner accepts.
 | 📦 [**The `.ftree` format**](docs/ftree-format.md) | The file spec, what travels when you share a branch, and the merge rules |
 | 🗂️ [**Data model**](docs/data-model.md) | Tables, fields and migrations |
 | 🇮🇳 [**Hindi kinship**](docs/kinship-hindi.md) | The term list and the rules that pick between them |
-| 🔤 [**Fonts**](docs/fonts.md) | Literata and JetBrains Mono, and why they are bundled |
+| 📖 [**The family book**](docs/family-book.md) | The designed PDF: one composer, two painters, the Book format and the template rules |
+| 💳 [**The policy switch**](docs/premium.md) | The one place the app asks what a reader may do — gate presentation, never data |
+| 🔤 [**Fonts**](docs/fonts.md) | Literata, JetBrains Mono, and the book's Rozha One and Mukta — and why they are bundled |
 | 🔨 [**Building & releasing**](docs/building.md) | Build, run, test, sign, tag, ship |
 | 🌐 [**Site & browser viewer**](docs/site.md) | The landing page and the dependency-free `.ftree` reader |
 | 🖥️ [**Desktop app**](docs/desktop.md) | Windows and Linux, one viewer in two shells, and why its releases are pre-releases |
@@ -284,8 +293,18 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 [MIT](LICENSE) — use it, change it, ship it; just keep the copyright notice.
 
-The bundled fonts (Literata, JetBrains Mono) are separately licensed under the SIL Open Font
-Licence 1.1. Their licence texts ship inside the app and are surfaced on its About screen.
+The bundled fonts (Literata, JetBrains Mono, and the family book's Rozha One and Mukta) are
+separately licensed under the SIL Open Font Licence 1.1. Their licence texts ship inside the app
+under `assets/licenses/` and are surfaced on its About screen. See [docs/fonts.md](docs/fonts.md)
+for which font does what, and why the book's fonts are static rather than variable.
+
+**Everything the app can do with your own tree is free, and stays free.** f-tree has one piece of
+groundwork for a feature that might one day cost money — a single policy switch that today always
+answers "yes, all of it" — and the rule it is built to keep is written down plainly so nobody ever
+has to relearn it under pressure: **gate presentation, never data.** Exporting, importing and
+reading your own tree, in full, stay free forever; a premium tier, if one is ever built, could only
+ever apply to a designed extra like a book template or its attribution line. See
+[docs/premium.md](docs/premium.md).
 
 <br>
 
