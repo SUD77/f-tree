@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.Gender
-import com.vibethroughcode.ftree.data.PartialDate
 import com.vibethroughcode.ftree.data.Person
 import com.vibethroughcode.ftree.data.PhotoStore
 import com.vibethroughcode.ftree.data.SquareCrop
@@ -30,9 +29,6 @@ sealed interface CropRequest {
     data class Ready(val bitmap: Bitmap) : CropRequest
     data object Unreadable : CropRequest
 }
-
-/** Why a date the user typed cannot be saved. */
-enum class DateProblem { MALFORMED, DEATH_BEFORE_BIRTH }
 
 data class PersonEditUiState(
     val name: String = "",
@@ -172,23 +168,22 @@ class PersonEditViewModel(
     }
 
     private fun validate(state: PersonEditUiState): Pair<DateProblem?, DateProblem?> {
-        val birthText = state.birthDate.trim()
-        val deathText = state.deathDate.trim()
-        val birth = PartialDate.parse(birthText)
-        val death = PartialDate.parse(deathText)
-
-        val birthProblem = if (birthText.isNotEmpty() && birth == null) DateProblem.MALFORMED else null
-        var deathProblem = if (deathText.isNotEmpty() && death == null) DateProblem.MALFORMED else null
-
-        // Only an impossible ordering counts; overlapping partial dates are left alone, because
-        // "born 1938, died 1938" is a real thing to record.
-        if (deathProblem == null && birth != null && death != null &&
-            death.latest().isBefore(birth.earliest())
-        ) {
-            deathProblem = DateProblem.DEATH_BEFORE_BIRTH
-        }
+        // The rules live in DateEntry, shared with the desktop through one table (#90).
+        val birthProblem = DateEntry.problem(state.birthDate)
+        val deathProblem = DateEntry.problem(state.deathDate)
+            ?: DateProblem.DEATH_BEFORE_BIRTH.takeIf {
+                birthProblem == null && DateEntry.isDeathBeforeBirth(state.birthDate, state.deathDate)
+            }
         return birthProblem to deathProblem
     }
+
+    /**
+     * A date as it is written to the record: settled, so a month left at "4" is kept as April rather
+     * than refused (#90). A value nobody touched that this app cannot read — written by some other
+     * program — is kept exactly as it was, not settled away to nothing.
+     */
+    private fun kept(text: String): String? =
+        (if (DateEntry.problem(text) == null) DateEntry.settle(text) else text.trim()).ifBlank { null }
 
     fun save(onSaved: (String) -> Unit) {
         val state = _uiState.value
@@ -199,8 +194,8 @@ class PersonEditViewModel(
             val updated = base.copy(
                 name = state.name.trim().ifBlank { null },
                 gender = state.gender,
-                birthDate = state.birthDate.trim().ifBlank { null },
-                deathDate = state.deathDate.trim().ifBlank { null },
+                birthDate = kept(state.birthDate),
+                deathDate = kept(state.deathDate),
                 deceased = state.deceased,
                 notes = state.notes.trim().ifBlank { null },
                 photoId = state.photoId,

@@ -44,9 +44,25 @@
     <string name="edit_gender">Gender</string>
     <string name="edit_born">Born</string>
     <string name="edit_died">Passed away</string>
-    <string name="edit_date_hint">Year, or a fuller date</string>
-    <string name="edit_date_support">1938, 1938-04, or 1938-04-17</string>
-    <string name="edit_date_invalid">Use a year like 1938, or 1938-04-17</string>
+    <!-- The date field (#90): three slots with the hyphens drawn, so a date is typed as digits.
+         The ghosts stand in each empty slot. The read-back under the field says, as it is typed,
+         which day it will be kept as, so a month and day typed the wrong way round are caught. -->
+    <string name="edit_date_ghost_year">YYYY</string>
+    <string name="edit_date_ghost_month">MM</string>
+    <string name="edit_date_ghost_day">DD</string>
+    <string name="edit_date_slot_year">%1$s, year</string>
+    <string name="edit_date_slot_month">%1$s, month</string>
+    <string name="edit_date_slot_day">%1$s, day</string>
+    <string name="edit_date_support">A year alone is fine. No year? Leave it blank.</string>
+    <string name="edit_date_readback_yearless">%1$s · year not known</string>
+    <string name="edit_date_invalid">This date could not be read. Retype it as 1938-04-17.</string>
+    <string name="edit_date_year_incomplete">A year has four digits, like 1938</string>
+    <string name="edit_date_month_range">Months run from 01 to 12</string>
+    <string name="edit_date_day_range">Days run from 01 to 31</string>
+    <string name="edit_date_day_not_in_month">%1$s has %2$d days</string>
+    <string name="edit_date_not_leap">%1$s was not a leap year</string>
+    <string name="edit_date_day_without_month">Add the month too</string>
+    <string name="edit_date_month_alone">Add the day, or the year</string>
     <string name="edit_death_before_birth">This is earlier than the birth date</string>
     <string name="edit_deceased">No longer living</string>
     <string name="edit_notes">Notes</string>
