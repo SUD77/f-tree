@@ -261,10 +261,14 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("policyCasesInputs")
         .optional()
 
-    /* `DateCasesTest` and `DateEntryTest`: the date grammar and the date field's shared tables (#90). */
+    /*
+     * `DateCasesTest` and `DateEntryTest`: the date grammar and the date field's shared tables (#90);
+     * `OccasionCasesTest`: whose birthday falls when (#230).
+     */
     inputs.files(
         rootProject.file("site/playground/date-cases.json"),
         rootProject.file("desktop/renderer/date-entry-cases.json"),
+        rootProject.file("site/playground/occasion-cases.json"),
     )
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("dateCasesInputs")
