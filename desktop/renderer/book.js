@@ -30,9 +30,10 @@ import { composeBook, estimateBytes } from '../../site/book/compose.js';
 import { paintPage, fitText } from '../../site/book/svg.js';
 import { readFamily } from '../../site/book/family.js';
 import { loadPolicy, decide } from '../../site/book/policy.js';
+import { readCatalog, listing } from '../../site/book/catalog.js';
 
 import {
-  DEFAULT_OPTIONS, withTemplate, scopeFor, todayIso, formatEstimate,
+  DEFAULT_OPTIONS, scopeFor, todayIso, formatEstimate,
   decisionAllowance, canSave, decisionMessage, nextBookUsage, bookRequest,
 } from './book-options.js';
 
@@ -114,7 +115,7 @@ export function createBook({ shell, hooks }) {
   const saveButton = $('book-save');
   const cancelButton = $('book-cancel');
 
-  /** Loaded once and kept for the life of the page: the templates and policy do not change under it. */
+  /** Loaded once and kept for the life of the page: the catalogue, templates and policy do not change under it. */
   let assets = null;
 
   const session = {
@@ -122,6 +123,8 @@ export function createBook({ shell, hooks }) {
     scopePersonId: null,
     scopePersonName: null,
     options: { ...DEFAULT_OPTIONS },
+    /** What the picker offers, worked out from the catalogue each time the dialog opens (it may be a new day). */
+    templates: [],
     derivedTitle: '',
     decision: null,
     book: null,
@@ -137,11 +140,20 @@ export function createBook({ shell, hooks }) {
   async function ensureAssets() {
     if (assets) return assets;
     const raw = await shell.book.assets();
+    const files = (Array.isArray(raw?.templates) ? raw.templates : []).filter((t) => typeof t?.id === 'string');
     assets = {
-      templates: Array.isArray(raw?.templates) ? raw.templates.filter(Boolean) : [],
+      catalog: readCatalog(raw?.catalog ?? null),
+      files: new Map(files.map((t) => [t.id, t])),
       policy: loadPolicy(raw?.policy ?? null),
     };
     return assets;
+  }
+
+  /** The catalogue's list for `today` -- what is in season first -- limited to what this build carries. */
+  function offered(today) {
+    return listing(assets.catalog, today)
+      .filter((t) => assets.files.has(t.id))
+      .map((t) => ({ ...t, template: assets.files.get(t.id) }));
   }
 
   /* ---------------------------------------------------------------- painting */
@@ -185,7 +197,7 @@ export function createBook({ shell, hooks }) {
   /** The template chips, each with a mini cover painted from page 0 of that template's own book. */
   function paintTemplates(covers) {
     templatesBox.replaceChildren();
-    for (const template of assets.templates) {
+    for (const template of session.templates) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'book-template-chip';
@@ -197,9 +209,16 @@ export function createBook({ shell, hooks }) {
 
       const name = document.createElement('span');
       name.className = 'book-template-name';
-      name.textContent = template.name ?? template.id;
-
+      name.textContent = template.name;
       button.append(cover, name);
+
+      if (template.featured) {
+        const season = document.createElement('span');
+        season.className = 'book-template-season';
+        season.textContent = 'This season';
+        button.append(season);
+      }
+
       button.addEventListener('click', () => {
         if (session.options.templateId === template.id) return;
         session.options.templateId = template.id;
@@ -271,9 +290,10 @@ export function createBook({ shell, hooks }) {
     if (token !== session.token) return;
 
     try {
-      const template = assets.templates.find((t) => t.id === session.options.templateId)
-        ?? assets.templates[0];
-      if (!template) throw new Error('no template shipped with this build');
+      const entry = session.templates.find((t) => t.id === session.options.templateId)
+        ?? session.templates[0];
+      if (!entry) throw new Error('no template shipped with this build');
+      const { template } = entry;
 
       const now = todayIso();
       const scope = scopeFor(session.options, session.scopePersonId);
@@ -294,7 +314,8 @@ export function createBook({ shell, hooks }) {
       };
 
       const request = bookRequest({
-        templateId: template.id,
+        templateId: entry.id,
+        templateTier: entry.tier,
         generations: probe.generations,
         people: probe.people.length,
       });
@@ -315,11 +336,11 @@ export function createBook({ shell, hooks }) {
       // reader's own family rather than a stock thumbnail (docs/family-book.md). A template that
       // fails to compose loses only its own chip's cover, not the dialog.
       const covers = new Map();
-      for (const other of assets.templates) {
+      for (const other of session.templates) {
         try {
-          const coverBook = other.id === template.id
+          const coverBook = other.id === entry.id
             ? book
-            : composeBook(session.doc, baseOptions, other, allowance);
+            : composeBook(session.doc, baseOptions, other.template, allowance);
           covers.set(other.id, paintPage(coverBook, 0, {
             photo: () => null, font: (key) => key, idPrefix: `tpl-${other.id}-`,
           }));
@@ -392,9 +413,12 @@ export function createBook({ shell, hooks }) {
     session.doc = doc;
     session.scopePersonId = scopePersonId;
     session.scopePersonName = scopePersonId ? hooks.personName(scopePersonId) : null;
+    // Every opening starts on the catalogue's choice for the day -- the festival in season, else
+    // the first template -- the same rule the Android screen follows.
+    session.templates = offered(todayIso());
     session.options = {
       ...DEFAULT_OPTIONS,
-      templateId: withTemplate(assets.templates, session.options.templateId),
+      templateId: session.templates[0]?.id ?? null,
       scopeKind: scopePersonId ? 'branch' : 'everyone',
     };
     session.error = null;

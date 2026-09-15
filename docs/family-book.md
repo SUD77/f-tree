@@ -108,6 +108,33 @@ same rules are what make an on-demand download (#214) safe to add later.
 | `heirloom` | Night sky: the family as a constellation, eldest at the centre, each generation an orbit further out |
 | `diwali` | The same sky with every person a lamp, a rangoli ring, hanging lanterns, *शुभ दीपावली* |
 
+### The catalogue
+
+`templates/catalog.json` lists the templates a release offers, in order. Each entry has `id` (the
+file is `templates/<id>.json`), `name`, the template `format` it needs, the `tier` the policy
+switch matches on, and optional `featured` windows, one per year, both days included:
+
+```json
+{ "id": "diwali", "name": "Diwali", "format": 1, "tier": "free",
+  "featured": { "2026": ["2026-10-18", "2026-11-15"], "2027": ["2027-10-08", "2027-11-05"] } }
+```
+
+- **Listed all year, featured in season.** Inside a window the template is listed first, marked
+  *This season*, and the book opens on it. Outside, it keeps its catalogue place. A year with no
+  window is not featured. That is how the list runs out, and nothing fails. A window may cross the
+  new year. Diwali's windows run from three weeks before the festival to a week after. They are
+  written up to 2030 and need extending before then.
+- **Every opening starts on the day's choice.** Neither shell remembers the last template picked.
+  The book opens on what is in season, otherwise the first template.
+- **Newer formats stay hidden.** An entry whose `format` is newer than the composer reads is left
+  out, so an older app never offers a book it would draw half-right. An entry that cannot be read
+  is dropped on its own, and a missing template file is skipped.
+- **One rule, two ports.** `catalog.js` and Android's `BookCatalog.kt` are held to one table,
+  `catalog-cases.json`. Neither reads a clock: the shell passes the reader's local date in.
+
+To add a template: add its file, add one entry here, and add a case to `catalog-cases.json` if it
+has a season. No screen changes.
+
 ## What the composer promises
 
 - **Deterministic.** No clock (`options.now` is required), no locale (names sort by a fold of

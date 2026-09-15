@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULT_OPTIONS, withTemplate, scopeFor, todayIso, formatEstimate,
+  DEFAULT_OPTIONS, scopeFor, todayIso, formatEstimate,
   decisionAllowance, canSave, decisionMessage, nextBookUsage, bookRequest,
 } from './book-options.js';
 
@@ -11,18 +11,6 @@ test('DEFAULT_OPTIONS opens on the whole tree, without photos left off or dates 
   assert.equal(DEFAULT_OPTIONS.photos, true);
   assert.equal(DEFAULT_OPTIONS.livingDates, false);
   assert.equal(DEFAULT_OPTIONS.titleOverride, null);
-});
-
-test('withTemplate keeps a template that still exists', () => {
-  const templates = [{ id: 'heirloom' }, { id: 'diwali' }];
-  assert.equal(withTemplate(templates, 'diwali'), 'diwali');
-});
-
-test('withTemplate falls back to the catalogue\'s first entry', () => {
-  const templates = [{ id: 'heirloom' }, { id: 'diwali' }];
-  assert.equal(withTemplate(templates, 'gone'), 'heirloom');
-  assert.equal(withTemplate(templates, null), 'heirloom');
-  assert.equal(withTemplate([], 'anything'), null);
 });
 
 test('scopeFor is everyone unless a branch was asked for and a person is known', () => {
@@ -108,4 +96,8 @@ test('bookRequest carries the free tier and the family\'s own shape', () => {
     generations: 5,
     people: 42,
   });
+});
+
+test('bookRequest carries the tier the catalogue gives the template', () => {
+  assert.equal(bookRequest({ templateId: 'x', templateTier: 'premium', generations: 1, people: 1 }).templateTier, 'premium');
 });

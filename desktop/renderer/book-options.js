@@ -18,12 +18,6 @@ export const DEFAULT_OPTIONS = Object.freeze({
   livingDates: false,
 });
 
-/** The chosen template if it still exists among what shipped, otherwise the catalogue's first. */
-export function withTemplate(templates, preferredId) {
-  if (templates.some((t) => t.id === preferredId)) return preferredId;
-  return templates[0]?.id ?? null;
-}
-
 /**
  * `options.scope`, the shape `composeBook` and `decide()` both read.
  *
@@ -105,6 +99,6 @@ export function nextBookUsage(usage, feature) {
 }
 
 /** The `decide()` request for the whole-book export, built from what the family actually has. */
-export function bookRequest({ templateId, generations, people }) {
-  return { feature: 'book.export', templateId, templateTier: 'free', generations, people };
+export function bookRequest({ templateId, templateTier = 'free', generations, people }) {
+  return { feature: 'book.export', templateId, templateTier, generations, people };
 }

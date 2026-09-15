@@ -261,6 +261,15 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("policyCasesInputs")
         .optional()
 
+    /* The same again for `BookCatalogTest`: the catalogue's shared table, and the format it gates on. */
+    inputs.files(
+        rootProject.file("site/book/catalog-cases.json"),
+        rootProject.file("site/book/templates/catalog.json"),
+        rootProject.file("site/book/template.js"),
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("catalogCasesInputs")
+        .optional()
+
     /*
      * The other half of the same problem, for `branchFrom`.
      *

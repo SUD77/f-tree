@@ -1112,19 +1112,26 @@ ipcMain.handle('tree:last', async () => {
 ipcMain.handle('book:assets', async () => {
   const readJson = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
   try {
-    const [heirloom, diwali, policy] = await Promise.all([
-      readJson(path.join(BOOK_DIR, 'templates', 'heirloom.json')),
-      readJson(path.join(BOOK_DIR, 'templates', 'diwali.json')),
+    const [catalog, policy] = await Promise.all([
+      readJson(path.join(BOOK_DIR, 'templates', 'catalog.json')),
       readJson(path.join(BOOK_DIR, 'policy.json')),
     ]);
-    return { templates: [heirloom, diwali], policy };
+    // The catalogue names the templates; the page (site/book/catalog.js) decides which to offer on
+    // the day. An id is checked before it names a file, so an entry can only ever reach
+    // templates/<id>.json, and one whose file is missing is left out rather than failing the rest.
+    const ids = (Array.isArray(catalog?.templates) ? catalog.templates : [])
+      .map((t) => t?.id)
+      .filter((id) => typeof id === 'string' && /^[a-z][a-z0-9-]{1,31}$/.test(id));
+    const templates = (await Promise.all(ids.map((id) =>
+      readJson(path.join(BOOK_DIR, 'templates', `${id}.json`)).catch(() => null)))).filter(Boolean);
+    return { catalog, templates, policy };
   } catch (error) {
     // `decide()` treats a policy it cannot read as Allowed, not Locked (docs/premium.md) -- the
     // same principle applies here: a staging mistake must not quietly take the feature away, so an
     // empty catalogue is what the dialog sees, and it says so, rather than the page hanging on a
     // rejected promise it never expected.
     console.warn(`f-tree: could not read the book's templates or policy — ${error.message}`);
-    return { templates: [], policy: null };
+    return { catalog: null, templates: [], policy: null };
   }
 });
 
