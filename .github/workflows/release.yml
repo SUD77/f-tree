@@ -27,6 +27,11 @@ jobs:
 
       # Installs cmdline-tools and accepts the SDK licences; AGP resolves the platform itself.
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's default is "tools platform-tools". The runner image's cmdline-tools 16.0
+          # no longer carries the long-retired "tools" package, so asking for it fails the whole
+          # step. AGP installs the platform and build-tools it needs on its own.
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
 
