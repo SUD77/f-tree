@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import { openArchive, parseDocument } from '../playground/archive.js';
 import { buildGraph, branchFrom } from '../playground/model.js';
-import { composeBook } from './compose.js';
+import { composeBook, estimateBytes } from './compose.js';
 import { validateBook } from './format.js';
 import { validateTemplate } from './template.js';
 import { paintPage } from './svg.js';
@@ -150,6 +150,16 @@ test('photographs are asked for at a size the PDF can afford, and only when want
   const none = composeBook(doc, { now: NOW, photos: false }, TEMPLATES.heirloom);
   assert.equal(none.photos.length, 0);
   assert.ok(!JSON.stringify(none).includes('"t":"image"'));
+});
+
+test('a family of photographs stays within the budget a chat app can carry', async () => {
+  const doc = JSON.parse(read('fixtures/large.json'));
+  for (const p of doc.people) p.photo = `photos/${p.id}.jpg`;
+  const book = composeBook(doc, { now: NOW }, TEMPLATES.heirloom);
+  assert.equal(book.photos.length, doc.people.length);
+  assert.ok(estimateBytes(book, { lossless: true }) < 10_000_000, `${estimateBytes(book, { lossless: true })} bytes`);
+  for (const p of book.photos) assert.ok(p.px >= 96);
+  assert.ok(estimateBytes(book, { lossless: false }) < estimateBytes(book, { lossless: true }));
 });
 
 test('the file name is the family, not "export"', async () => {
