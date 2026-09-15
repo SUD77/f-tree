@@ -10,6 +10,7 @@
 | [**FAQ**](faq.md) | Where the data lives, what leaves the phone, how sharing and merging behave, and what happens when you update |
 | [**The `.ftree` format**](ftree-format.md) | The export file, what travels when you share a branch, and the merge rules — including how to read one yourself |
 | [**Hindi kinship**](kinship-hindi.md) | The terms, and the rules that pick between five words English calls "uncle" |
+| [**Birthdays and remembrance days**](birthdays.md) | Whose day is coming up, who is left out and why, and what the reminder does |
 
 ## For people working on it
 

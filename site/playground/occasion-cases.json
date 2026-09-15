@@ -1,0 +1,225 @@
+{
+  "format": 1,
+  "about": "Which birthdays and remembrance days fall in a window, and in what order (#230, #154). Read by occasions.test.mjs and by the app's OccasionCasesTest.kt, so the phone, the desktop and anything else that lists a family's coming days give one answer. A person is [id, name, birthDate, deathDate, deceased]. An expected occasion is [id, kind, date, daysAway, years].",
+  "upcoming": [
+    {
+      "why": "A living person's full birthday, today and later in the window, with the age they turn.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["asha", "Asha", "1966-09-15", null, false],
+        ["ravi", "Ravi", "1990-10-01", null, false]
+      ],
+      "expect": [
+        ["asha", "BIRTHDAY", "2026-09-15", 0, 60],
+        ["ravi", "BIRTHDAY", "2026-10-01", 16, 36]
+      ]
+    },
+    {
+      "why": "A birthday with no year (#90) is a birthday like any other, with no age to state.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["meera", "Meera", "--09-20", null, false]],
+      "expect": [["meera", "BIRTHDAY", "2026-09-20", 5, null]]
+    },
+    {
+      "why": "A year alone or a year and month has no day to fall on, so it is not an occasion.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["year", "Year", "1950", null, false],
+        ["month", "Month", "1950-09", null, false],
+        ["none", "None", null, null, false]
+      ],
+      "expect": []
+    },
+    {
+      "why": "Text that is not a real date is not a birthday: an impossible day, and words.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["feb30", "Feb", "1938-02-30", null, false],
+        ["about", "About", "about 1938-09-16", null, false],
+        ["month13", "Thirteen", "--13-01", null, false]
+      ],
+      "expect": []
+    },
+    {
+      "why": "The window runs into the new year.",
+      "today": "2026-12-20", "days": 30,
+      "people": [["jan", "Jan", "1980-01-05", null, false]],
+      "expect": [["jan", "BIRTHDAY", "2027-01-05", 16, 47]]
+    },
+    {
+      "why": "29 February falls on 28 February in a year without one, keeping it in the person's own month.",
+      "today": "2027-02-20", "days": 30,
+      "people": [
+        ["leap", "Leap", "2000-02-29", null, false],
+        ["leapless", "Leapless", "--02-29", null, false]
+      ],
+      "expect": [
+        ["leap", "BIRTHDAY", "2027-02-28", 8, 27],
+        ["leapless", "BIRTHDAY", "2027-02-28", 8, null]
+      ]
+    },
+    {
+      "why": "In a leap year it is the day itself.",
+      "today": "2028-02-20", "days": 30,
+      "people": [["leap", "Leap", "2000-02-29", null, false]],
+      "expect": [["leap", "BIRTHDAY", "2028-02-29", 9, 28]]
+    },
+    {
+      "why": "Just past a 28 February that stood in for the 29th, the next is the following February's real one.",
+      "today": "2027-03-01", "days": 366,
+      "people": [["leap", "Leap", "2000-02-29", null, false]],
+      "expect": [["leap", "BIRTHDAY", "2028-02-29", 365, 28]]
+    },
+    {
+      "why": "The day of birth itself is not a birthday; the first one is a year later.",
+      "today": "2026-09-15", "days": 400,
+      "people": [
+        ["baby", "Baby", "2026-09-20", null, false],
+        ["born", "Born", "2026-09-15", null, false]
+      ],
+      "expect": [
+        ["born", "BIRTHDAY", "2027-09-15", 365, 1],
+        ["baby", "BIRTHDAY", "2027-09-20", 370, 1]
+      ]
+    },
+    {
+      "why": "The window is today and the days after it: 30 days is today plus 29.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["last", "Last", "1970-10-14", null, false],
+        ["out", "Out", "1970-10-15", null, false],
+        ["gone", "Gone", "1970-09-14", null, false]
+      ],
+      "expect": [["last", "BIRTHDAY", "2026-10-14", 29, 56]]
+    },
+    {
+      "why": "One day is exactly the morning's reminder.",
+      "today": "2026-09-15", "days": 1,
+      "people": [
+        ["asha", "Asha", "1966-09-15", null, false],
+        ["ravi", "Ravi", "1990-09-16", null, false]
+      ],
+      "expect": [["asha", "BIRTHDAY", "2026-09-15", 0, 60]]
+    },
+    {
+      "why": "Somebody who would turn more than 110 is almost surely no longer living with no record of it: left out rather than wished a happy 111th. 110 itself is kept.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["hundredten", "Oldest", "1916-09-20", null, false],
+        ["hundredeleven", "Older", "1915-09-20", null, false]
+      ],
+      "expect": [["hundredten", "BIRTHDAY", "2026-09-20", 5, 110]]
+    },
+    {
+      "why": "The departed are remembered, on the day they were born and the day they died. Known to have died without a date still counts.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["dada", "Dada", "1936-09-20", null, true],
+        ["nani", "Nani", "1940-01-01", "2014-09-18", false],
+        ["late", "Late", null, "--09-25", true]
+      ],
+      "expect": [
+        ["nani", "DEATH_ANNIVERSARY", "2026-09-18", 3, 12],
+        ["dada", "BIRTH_REMEMBRANCE", "2026-09-20", 5, 90],
+        ["late", "DEATH_ANNIVERSARY", "2026-09-25", 10, null]
+      ]
+    },
+    {
+      "why": "A death date alone says they died, even with no deceased flag: the birthday becomes a remembrance.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["ba", "Ba", "1950-09-16", "--03-01", false]],
+      "expect": [["ba", "BIRTH_REMEMBRANCE", "2026-09-16", 1, 76]]
+    },
+    {
+      "why": "Past 100 years a remembrance still comes round, without a number nobody would say aloud.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["great", "Great", "1900-09-20", "1905-09-21", false]],
+      "expect": [
+        ["great", "BIRTH_REMEMBRANCE", "2026-09-20", 5, null],
+        ["great", "DEATH_ANNIVERSARY", "2026-09-21", 6, null]
+      ]
+    },
+    {
+      "why": "Exactly 100 keeps its number.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["century", "Century", "1926-09-20", "1990-01-01", false]],
+      "expect": [["century", "BIRTH_REMEMBRANCE", "2026-09-20", 5, 100]]
+    },
+    {
+      "why": "A death in the last few days of this year is not yet an anniversary.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["recent", "Recent", "1950-01-01", "2026-09-17", false]],
+      "expect": []
+    },
+    {
+      "why": "Born and died on the same day of the year: both are kept, the birthday first.",
+      "today": "2026-09-15", "days": 30,
+      "people": [["same", "Same", "1930-09-16", "2000-09-16", true]],
+      "expect": [
+        ["same", "BIRTH_REMEMBRANCE", "2026-09-16", 1, 96],
+        ["same", "DEATH_ANNIVERSARY", "2026-09-16", 1, 26]
+      ]
+    },
+    {
+      "why": "On one day, the living come first, then remembrance; within a kind, names folded to lower case, then id.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["z", "zoya", "1990-09-16", null, false],
+        ["b", "bina", "1990-09-16", null, false],
+        ["a2", "Asha", "1991-09-16", null, false],
+        ["a1", "Asha", "1992-09-16", null, false],
+        ["d", "Aarti", "1940-09-16", null, true]
+      ],
+      "expect": [
+        ["a1", "BIRTHDAY", "2026-09-16", 1, 34],
+        ["a2", "BIRTHDAY", "2026-09-16", 1, 35],
+        ["b", "BIRTHDAY", "2026-09-16", 1, 36],
+        ["z", "BIRTHDAY", "2026-09-16", 1, 36],
+        ["d", "BIRTH_REMEMBRANCE", "2026-09-16", 1, 86]
+      ]
+    },
+    {
+      "why": "Somebody with no name has nobody to wish: a placeholder is not listed.",
+      "today": "2026-09-15", "days": 30,
+      "people": [
+        ["unnamed", null, "1966-09-16", null, false],
+        ["blank", "  ", "1966-09-16", null, false]
+      ],
+      "expect": []
+    }
+  ],
+  "next": [
+    {
+      "why": "Nothing in the window: the soonest living birthday within a year, for the line that says when the next one is.",
+      "today": "2026-09-15",
+      "people": [
+        ["later", "Later", "1990-02-01", null, false],
+        ["soon", "Soon", "--11-03", null, false],
+        ["dada", "Dada", "1936-10-01", null, true]
+      ],
+      "expect": ["soon", "BIRTHDAY", "2026-11-03", 49, null]
+    },
+    {
+      "why": "No living birthday at all has no next one.",
+      "today": "2026-09-15",
+      "people": [["dada", "Dada", "1936-10-01", null, true]],
+      "expect": null
+    }
+  ],
+  "census": [
+    {
+      "why": "Who a reminder can cover, and who it cannot and why: the living, named, with or without a day and month, and those presumed departed.",
+      "today": "2026-09-15",
+      "people": [
+        ["full", "Full", "1966-01-02", null, false],
+        ["yearless", "Yearless", "--03-04", null, false],
+        ["year", "Year", "1966", null, false],
+        ["none", "None", null, null, false],
+        ["ancient", "Ancient", "1890-05-06", null, false],
+        ["gone", "Gone", "1930-01-01", null, true],
+        ["unnamed", null, "1990-01-01", null, false]
+      ],
+      "expect": { "covered": 2, "noDay": 2, "presumedDeparted": 1 }
+    }
+  ]
+}
