@@ -22,7 +22,9 @@
  */
 
 import { openArchive, parseDocument, ArchiveError } from '../../site/playground/archive.js';
-import { buildGraph, displayName, lifespan, initials, relationsOf } from '../../site/playground/model.js';
+import {
+  buildGraph, displayName, lifespan, initials, relationsOf, displayDate,
+} from '../../site/playground/model.js';
 import { layoutArchive } from '../../site/playground/layout.js';
 import { Chart } from '../../site/playground/chart.js';
 import { compactFamily } from '../../site/playground/compact.js';
@@ -39,8 +41,11 @@ import { sentenceFor, unrelatedWording, paintSentence, nameNode, hindiFor } from
 import { decode, encode, asImageUrl, freeName, squareCrop } from './photo.js';
 import {
   DateProblem, draftFrom, withChange, dateProblems, isDirty, fieldsFrom, isBlankPerson,
-  normaliseDateTyping,
 } from './person-draft.js';
+import {
+  DateSlot, encode as encodeDate, decode as decodeDate, enter as enterDate, backspace as backspaceDate,
+  settle as settleDate, isFinal as isFinalDate, maxDays as maxDaysInMonth,
+} from './date-entry.js';
 import { createAutosave, describeWriteFailure } from './autosave.js';
 import { relateIcon, prefsIcon, bookIcon } from './icons.js';
 import { createNearby } from './nearby.js';
@@ -1296,18 +1301,46 @@ const REFUSALS = {
   DUPLICATE_ID: 'Somebody with that id is already here.',
 };
 
-/** Android's own words for each date problem, so the two shells say the same thing. */
-const DATE_PROBLEMS = {
-  [DateProblem.MALFORMED]: 'Use a year like 1938, or 1938-04-17',
-  [DateProblem.DEATH_BEFORE_BIRTH]: 'This is earlier than the birth date',
-};
+/** Full month names, for "April has 30 days" (#90). Not exported by `model.js`, so kept here. */
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
 
-/** Which draft field each input edits. */
+/**
+ * Android's own words for each date problem, so the two shells say the same thing (#90).
+ *
+ * A function rather than a lookup table: `DAY_NOT_IN_MONTH` names the month, and `NOT_A_LEAP_YEAR`
+ * names the year, so both need the field's own text alongside the problem.
+ */
+function dateProblemMessage(prob, value) {
+  const parts = decodeDate(value);
+  switch (prob) {
+    case DateProblem.YEAR_INCOMPLETE: return 'A year has four digits, like 1938';
+    case DateProblem.MONTH_OUT_OF_RANGE: return 'Months run from 01 to 12';
+    case DateProblem.DAY_OUT_OF_RANGE: return 'Days run from 01 to 31';
+    case DateProblem.DAY_NOT_IN_MONTH: {
+      const month = Number(parts.month);
+      return `${MONTH_NAMES[month - 1] ?? ''} has ${maxDaysInMonth(month)} days`;
+    }
+    case DateProblem.NOT_A_LEAP_YEAR: return `${parts.year} was not a leap year`;
+    case DateProblem.DAY_WITHOUT_MONTH: return 'Add the month too';
+    case DateProblem.MONTH_ALONE: return 'Add the day, or the year';
+    case DateProblem.MALFORMED: return 'This date could not be read. Retype it as 1938-04-17.';
+    case DateProblem.DEATH_BEFORE_BIRTH: return 'This is earlier than the birth date';
+    default: return '';
+  }
+}
+
+/*
+ * Which draft field each input edits.
+ *
+ * `f-birth` and `f-death` are deliberately absent (#90): those ids now name the *year* slot of a
+ * segmented field, and a keystroke there is a fragment, not the date -- routing it through this
+ * generic map would write "193" into `birthDate` mid-type. Their keystrokes reach the draft through
+ * `commitDate` in `personForm` instead, which knows to encode all three slots together.
+ */
 const FIELD_KEYS = {
   'f-name': 'name',
   'f-gender': 'gender',
-  'f-birth': 'birthDate',
-  'f-death': 'deathDate',
   'f-deceased': 'deceased',
   'f-notes': 'notes',
 };
@@ -1393,17 +1426,38 @@ function paintPanelState() {
   status.dataset.tone = dirty ? 'dirty' : 'done';
 
   /*
-   * A problem is shown once the field has been left, or once Save has been pressed -- not while
-   * the first digit of a year is being typed. It clears the moment it is fixed.
+   * A problem is shown once it is final -- the slot it is about is complete, per `isFinal` -- or
+   * once the field has been left (the whole group, not one slot) or Save has been pressed. Anywhere
+   * short of that, the field shows its read-back instead: what the date will be kept as, so typing
+   * "1938-04" reads back "April 1938" rather than sitting there looking unfinished.
    */
   const problems = dateProblems(draft.values);
-  for (const [key, inputId] of [['birthDate', 'f-birth'], ['deathDate', 'f-death']]) {
-    const input = $(inputId);
-    if (!input) continue;
-    const shown = draft.showProblems || draft.touched.has(key) ? problems[key] : null;
-    input.setAttribute('aria-invalid', String(Boolean(shown)));
-    input.closest('.field').dataset.problem = String(Boolean(shown));
-    paintProblem($(`${inputId}-error`), shown ? DATE_PROBLEMS[shown] : '');
+  for (const [key, id] of [['birthDate', 'f-birth'], ['deathDate', 'f-death']]) {
+    const wrap = $(id)?.closest('.field');
+    const fieldStatus = $(`${id}-error`);
+    if (!wrap || !fieldStatus) continue;
+    const value = String(draft.values[key] ?? '');
+    const prob = problems[key];
+    const final = prob != null && isFinalDate(prob, value);
+    const left = draft.showProblems || draft.touched.has(key);
+    const shown = prob != null && (final || left);
+
+    for (const input of wrap.querySelectorAll('input')) input.setAttribute('aria-invalid', String(shown));
+    wrap.dataset.problem = String(shown);
+
+    if (shown) {
+      fieldStatus.dataset.tone = 'error';
+      paintProblem(fieldStatus, dateProblemMessage(prob, value));
+    } else if (value.trim() === '') {
+      fieldStatus.dataset.tone = 'info';
+      paintProblem(fieldStatus, '');
+    } else {
+      fieldStatus.dataset.tone = 'info';
+      const settled = settleDate(value);
+      const readBack = displayDate(settled);
+      const text = readBack == null ? '' : settled.startsWith('--') ? `${readBack} · year not known` : readBack;
+      paintProblem(fieldStatus, text);
+    }
   }
 
   reflectDirty();
@@ -1427,6 +1481,182 @@ function paintProblem(box, message) {
     last = match.index + match[0].length;
   }
   box.append(message.slice(last));
+}
+
+/** The order the three slots sit in, and each one's neighbour, for the arrow keys and Backspace. */
+const DATE_SLOT_ORDER = [DateSlot.YEAR, DateSlot.MONTH, DateSlot.DAY];
+
+/**
+ * The segmented date field: `YYYY`, a drawn hyphen, `MM`, a drawn hyphen, `DD` (#90).
+ *
+ * One box that looks like the app's other text fields, holding three plain inputs with the borders
+ * taken off them -- `date-entry.js` owns every rule about what a keystroke does; this only turns DOM
+ * events into calls on it and paints back whatever it returns. `maxlength` alone is not enough to
+ * keep a pasted whole date out of a four-digit year box, so every insertion -- typed or pasted -- is
+ * read in `beforeinput`/`paste`, before the browser gets to touch the field itself. Only deletion is
+ * left to the browser: there is nothing `enter()` needs to decide about a digit going away, except
+ * the one case (Backspace in an empty slot) that `keydown` catches before the browser can no-op it.
+ *
+ * @returns {{element: HTMLElement, getValue: () => string, setValue: (text: string) => void}}
+ */
+function dateField({
+  label, id, value = '', describedBy = null, onChange = null, onLeave = null,
+}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field date-field';
+  wrap.setAttribute('role', 'group');
+  const labelId = `${id}-label`;
+  wrap.setAttribute('aria-labelledby', labelId);
+
+  const lab = document.createElement('label');
+  lab.id = labelId;
+  lab.textContent = label;
+  lab.htmlFor = id;
+  wrap.append(lab);
+
+  const box = document.createElement('div');
+  box.className = 'date-field-box';
+  wrap.append(box);
+
+  const status = document.createElement('p');
+  status.className = 'field-error';
+  status.id = `${id}-error`;
+  status.setAttribute('aria-live', 'polite');
+  wrap.append(status);
+
+  const described = [status.id, describedBy].filter(Boolean).join(' ');
+
+  const slotInputs = {};
+  const specs = [
+    [DateSlot.YEAR, id, 4, 'YYYY', `${label}, year`],
+    [DateSlot.MONTH, `${id}-month`, 2, 'MM', `${label}, month`],
+    [DateSlot.DAY, `${id}-day`, 2, 'DD', `${label}, day`],
+  ];
+  for (const [slot, slotId, maxLength, placeholder, ariaLabel] of specs) {
+    if (slot !== DateSlot.YEAR) {
+      const sep = document.createElement('span');
+      sep.className = 'date-field-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = '-';
+      box.append(sep);
+    }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = slotId;
+    input.className = 'date-field-input';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.maxLength = maxLength;
+    input.placeholder = placeholder;
+    input.setAttribute('aria-label', ariaLabel);
+    if (described) input.setAttribute('aria-describedby', described);
+    input.dataset.slot = slot;
+    box.append(input);
+    slotInputs[slot] = input;
+  }
+
+  const currentParts = () => ({
+    year: slotInputs[DateSlot.YEAR].value,
+    month: slotInputs[DateSlot.MONTH].value,
+    day: slotInputs[DateSlot.DAY].value,
+  });
+  const writeParts = (parts) => {
+    slotInputs[DateSlot.YEAR].value = parts.year;
+    slotInputs[DateSlot.MONTH].value = parts.month;
+    slotInputs[DateSlot.DAY].value = parts.day;
+  };
+  const focusSlot = (slot, where) => {
+    const input = slotInputs[slot];
+    input.focus();
+    const pos = where === 'start' ? 0 : input.value.length;
+    input.setSelectionRange(pos, pos);
+  };
+
+  /** Writes what `date-entry.js` decided, moves the caret where it said, and tells the draft. */
+  const apply = (edit) => {
+    writeParts(edit.parts);
+    focusSlot(edit.focus, 'end');
+    onChange?.(encodeDate(edit.parts));
+  };
+
+  /** A slot's text is about to become `prospective`, typed or pasted -- read as one keystroke. */
+  const type = (slot, prospective) => apply(enterDate(currentParts(), slot, prospective));
+
+  for (const [slot] of specs) {
+    const input = slotInputs[slot];
+
+    input.addEventListener('beforeinput', (event) => {
+      // Deletion is left to the browser -- see the function's doc comment -- except the one case
+      // `keydown` below owns: Backspace with nothing in the slot to delete.
+      if (event.inputType?.startsWith('delete')) return;
+      event.preventDefault();
+      const insert = event.data ?? '';
+      if (!insert) return;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      type(slot, input.value.slice(0, start) + insert + input.value.slice(end));
+    });
+
+    // A paste can carry a whole date -- "17/04/1938" -- into a four-digit box; handled here so the
+    // browser never gets to truncate it at `maxlength` first.
+    input.addEventListener('paste', (event) => {
+      event.preventDefault();
+      const text = event.clipboardData?.getData('text') ?? '';
+      if (!text) return;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      type(slot, input.value.slice(0, start) + text + input.value.slice(end));
+    });
+
+    // A deletion the browser already made to *this* slot: nothing for `enter()` to decide, so just
+    // carry the new digits into the draft.
+    input.addEventListener('input', (event) => {
+      if (!event.inputType?.startsWith('delete')) return;
+      onChange?.(encodeDate(currentParts()));
+    });
+
+    input.addEventListener('keydown', (event) => {
+      const index = DATE_SLOT_ORDER.indexOf(slot);
+      if (event.key === 'Backspace' && input.value === '') {
+        event.preventDefault();
+        apply(backspaceDate(currentParts(), slot));
+      } else if (event.key === 'ArrowLeft' && index > 0
+        && input.selectionStart === 0 && input.selectionEnd === 0) {
+        event.preventDefault();
+        focusSlot(DATE_SLOT_ORDER[index - 1], 'end');
+      } else if (event.key === 'ArrowRight' && index < DATE_SLOT_ORDER.length - 1
+        && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) {
+        event.preventDefault();
+        focusSlot(DATE_SLOT_ORDER[index + 1], 'start');
+      }
+    });
+  }
+
+  // A click on the box's own padding -- not on a slot -- focuses the slot a person would expect to
+  // keep typing into: the year if nothing is written yet, otherwise wherever the date trails off.
+  box.addEventListener('click', (event) => {
+    if (event.target.tagName === 'INPUT') return;
+    const parts = currentParts();
+    if (parts.year === '' && parts.month === '' && parts.day === '') focusSlot(DateSlot.YEAR, 'end');
+    else if (parts.month !== '' || parts.day !== '') focusSlot(DateSlot.DAY, 'end');
+    else focusSlot(DateSlot.MONTH, 'end');
+  });
+
+  // Leaving the *group* -- not one slot for another inside it -- is what reveals a problem that
+  // is not yet final and what the phone calls "touched".
+  wrap.addEventListener('focusout', (event) => {
+    if (event.relatedTarget && wrap.contains(event.relatedTarget)) return;
+    onLeave?.();
+  });
+
+  writeParts(decodeDate(value ?? ''));
+
+  return {
+    element: wrap,
+    getValue: () => encodeDate(currentParts()),
+    setValue: (text) => writeParts(decodeDate(text ?? '')),
+  };
 }
 
 function field({
@@ -1504,29 +1734,44 @@ function personForm(person) {
   form.append(gender);
 
   /*
-   * The two dates side by side, with one hint under both (#147).
+   * The two dates side by side, with one hint under both (#147), each a segmented field of its own
+   * (#90): `YYYY`-`MM`-`DD` with the hyphens drawn, not typed, so there is no separator key to hunt
+   * for and a year alone -- or a day and month with none, a birthday nobody remembers the year of --
+   * is exactly as easy to leave as to fill in.
    *
-   * The placeholders are real dates rather than a format string: `1948` shows that a year alone is
-   * a whole answer, and `2019-03-14` shows the fullest shape and the separator. One hint under the
-   * pair says the same thing to both, rather than printing it twice or leaving one field bare.
+   * `commitDate` is where a keystroke in either field joins the same path every other field's edit
+   * takes: into the draft, and only into the draft, until Save. It also carries the two rules that
+   * tie a death to its date -- typing one ticks "no longer living", and unticking that clears the
+   * date -- onto whichever of the pair did not just change, the same defensive re-sync `onEdit`
+   * below does for every other field.
    */
-  form.append(field({
-    label: 'Born', id: 'f-birth', value: values.birthDate, placeholder: '1948',
-    validated: true, describedBy: 'f-dates-hint',
-  }));
-  form.append(field({
-    label: 'Passed away', id: 'f-death', value: values.deathDate, placeholder: '2019-03-14',
-    validated: true, describedBy: 'f-dates-hint',
-  }));
+  const commitDate = (key, value) => {
+    if (!state.draft) return;
+    state.draft.values = withChange(state.draft.values, key, value);
+    $('f-deceased').checked = state.draft.values.deceased;
+    if (deathField.getValue() !== state.draft.values.deathDate) {
+      deathField.setValue(state.draft.values.deathDate);
+    }
+    paintPanelState();
+  };
+  const touchDate = (key) => {
+    state.draft?.touched.add(key);
+    paintPanelState();
+  };
+  const birthField = dateField({
+    label: 'Born', id: 'f-birth', value: values.birthDate, describedBy: 'f-dates-hint',
+    onChange: (value) => commitDate('birthDate', value), onLeave: () => touchDate('birthDate'),
+  });
+  const deathField = dateField({
+    label: 'Passed away', id: 'f-death', value: values.deathDate, describedBy: 'f-dates-hint',
+    onChange: (value) => commitDate('deathDate', value), onLeave: () => touchDate('deathDate'),
+  });
+  form.append(birthField.element, deathField.element);
   const hint = document.createElement('p');
   hint.className = 'field-hint dates-hint';
   hint.id = 'f-dates-hint';
-  hint.textContent = 'A year alone is fine. Spaces become dashes.';
+  hint.textContent = 'A year alone is fine. No year? Leave it blank.';
   form.append(hint);
-  for (const id of ['f-birth', 'f-death']) {
-    const input = form.querySelector(`#${id}`);
-    input.spellcheck = false;
-  }
 
   const check = document.createElement('label');
   check.className = 'check';
@@ -1552,33 +1797,19 @@ function personForm(person) {
     const key = FIELD_KEYS[event.target.id];
     if (!key || !state.draft) return;
 
-    let value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
-    if (key === 'birthDate' || key === 'deathDate') {
-      const typed = normaliseDateTyping(value, event.target.selectionStart ?? value.length);
-      if (typed.value !== value) {
-        event.target.value = typed.value;
-        event.target.setSelectionRange(typed.caret, typed.caret);
-      }
-      value = typed.value;
-    }
-
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     state.draft.values = withChange(state.draft.values, key, value);
     // A death date ticks "no longer living", and unticking it clears the date: show both at once.
+    // The date fields' own keystrokes reach the draft through `commitDate` above, not here, but
+    // unticking the checkbox is a plain `change` on `f-deceased` and has to clear the death field.
     $('f-deceased').checked = state.draft.values.deceased;
-    if ($('f-death').value !== state.draft.values.deathDate) {
-      $('f-death').value = state.draft.values.deathDate;
+    if (deathField.getValue() !== state.draft.values.deathDate) {
+      deathField.setValue(state.draft.values.deathDate);
     }
     paintPanelState();
   };
   form.addEventListener('input', onEdit);
   form.addEventListener('change', onEdit);
-
-  form.addEventListener('focusout', (event) => {
-    const key = FIELD_KEYS[event.target.id];
-    if (key !== 'birthDate' && key !== 'deathDate') return;
-    state.draft?.touched.add(key);
-    paintPanelState();
-  });
 
   // Enter keeps the edit, as a form does; in the notes, where Enter is a new line, Ctrl+Enter does.
   form.addEventListener('keydown', (event) => {

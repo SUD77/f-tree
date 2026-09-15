@@ -12,7 +12,6 @@ import assert from 'node:assert';
 
 import {
   DateProblem, draftFrom, withChange, dateProblems, canSave, isDirty, fieldsFrom, isBlankPerson,
-  normaliseDateTyping,
 } from './person-draft.js';
 
 const blank = draftFrom({ id: 'p' });
@@ -30,11 +29,37 @@ test('the three precisions are all accepted', () => {
   }
 });
 
-test('anything else is malformed, including a day that does not exist', () => {
-  for (const date of ['38', '1938-4', '17/04/1938', '1938-13', '1938-02-30', 'about 1938', '1938-']) {
+test('a date the field can hold names its specific problem (#90)', () => {
+  const cases = [
+    ['38', DateProblem.YEAR_INCOMPLETE],
+    ['1938-13', DateProblem.MONTH_OUT_OF_RANGE],
+    ['1938-02-30', DateProblem.DAY_NOT_IN_MONTH],
+    ['1938-02-29', DateProblem.NOT_A_LEAP_YEAR],
+    ['--04', DateProblem.MONTH_ALONE],
+  ];
+  for (const [date, expected] of cases) {
+    assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate, expected, date);
+  }
+});
+
+test('a lone month or day digit settles into a real date, not an error', () => {
+  for (const date of ['1938-4', '1938-4-7', '1938-']) {
+    assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate, null, date);
+  }
+});
+
+test('a date written some other way is unreadable, never guessed at', () => {
+  // Text the field did not write came from another program. Reading a year out of "about 1938"
+  // would rewrite the record on the next save, and "before" is not "in".
+  for (const date of ['not a date', 'about 1938', 'before 1938-04', '17/04/1938', '1938/04/17']) {
     assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate,
       DateProblem.MALFORMED, date);
   }
+});
+
+test('an unreadable date nobody retyped is kept exactly as written', () => {
+  assert.strictEqual(fieldsFrom({ ...blank, birthDate: 'about 1938' }).birthDate, 'about 1938');
+  assert.strictEqual(fieldsFrom({ ...blank, birthDate: '1938-4' }).birthDate, '1938-04');
 });
 
 test('surrounding space is not a problem; the tree trims it anyway', () => {
@@ -56,9 +81,10 @@ test('overlapping partial dates are allowed -- "born 1938, died 1938" is real', 
   }
 });
 
-test('a malformed date is reported as malformed, not also as out of order', () => {
-  const problems = dateProblems({ ...blank, birthDate: '1950', deathDate: '19x' });
-  assert.strictEqual(problems.deathDate, DateProblem.MALFORMED);
+test('a death field with a problem of its own is reported that way, not also as out of order', () => {
+  // An incomplete year is the death field's own problem, so DEATH_BEFORE_BIRTH is never asked.
+  const problems = dateProblems({ ...blank, birthDate: '1950', deathDate: '19' });
+  assert.strictEqual(problems.deathDate, DateProblem.YEAR_INCOMPLETE);
 });
 
 /* ------------------------------------------------------------------ a death and its date */
@@ -119,49 +145,15 @@ test('blank means nothing recorded at all, a photograph included', () => {
 
 /* ------------------------------------------------------------------ typing a date (#90) */
 
-const typed = (value, caret) => normaliseDateTyping(value, caret);
-
-test('a space, a slash or a full stop becomes a hyphen', () => {
-  assert.strictEqual(typed('1938 04 17').value, '1938-04-17');
-  assert.strictEqual(typed('1938/04/17').value, '1938-04-17');
-  assert.strictEqual(typed('1938.04.17').value, '1938-04-17');
-});
-
-test('a separator can neither lead nor double up', () => {
-  assert.strictEqual(typed(' 1938').value, '1938');
-  assert.strictEqual(typed('-1938').value, '1938');
-  assert.strictEqual(typed('1938  04').value, '1938-04');
-  assert.strictEqual(typed('1938- 04').value, '1938-04');
-});
-
-test('a trailing separator survives, because the next digits are on their way', () => {
-  assert.strictEqual(typed('1938 ').value, '1938-');
-});
-
-test('anything that is not a separator is left for the validator to judge', () => {
-  // Normalising is about the separator only. Loosening what counts as a date is not its job.
-  assert.strictEqual(typed('abt 1938').value, 'abt-1938');
-  assert.strictEqual(typed('17 04 1938').value, '17-04-1938');
-});
-
-test('the caret stays where it was, allowing for anything dropped before it', () => {
-  assert.deepStrictEqual(typed('1938 ', 5), { value: '1938-', caret: 5 });
-  assert.deepStrictEqual(typed('1938--', 6), { value: '1938-', caret: 5 });
-  // A space typed in front of the year is dropped, and the caret with it.
-  assert.deepStrictEqual(typed(' 1938', 1), { value: '1938', caret: 0 });
-  // Editing in the middle: a doubled separator after the caret moves nothing before it.
-  assert.deepStrictEqual(typed('19-38--04', 2), { value: '19-38-04', caret: 2 });
-});
-
-test('a value that needs nothing done comes back unchanged', () => {
-  assert.deepStrictEqual(typed('1938-04-17', 4), { value: '1938-04-17', caret: 4 });
-  assert.deepStrictEqual(typed('', 0), { value: '', caret: 0 });
-});
+// `normaliseDateTyping` and its tests are gone: the segmented field in app.js (date-entry.js)
+// supersedes them, and date-entry.test.js holds it to date-entry-cases.json instead.
 
 test('a birthday with no year is a date, and orders nothing (#90)', () => {
   // A person holding "--04-17" must stay editable: this used to refuse even a change to the name.
   assert.deepStrictEqual(dateProblems({ ...blank, name: 'Asha', birthDate: '--04-17' }),
     { birthDate: null, deathDate: null });
   assert.strictEqual(dateProblems({ ...blank, birthDate: '--12-31', deathDate: '--01-01' }).deathDate, null);
-  assert.strictEqual(dateProblems({ ...blank, birthDate: '--02-30' }).birthDate, DateProblem.MALFORMED);
+  // 30 February: date-entry.js now names this specifically, the same as it would for a calendar
+  // date with a year (30 April 1938 is DAY_NOT_IN_MONTH too, not a bare MALFORMED).
+  assert.strictEqual(dateProblems({ ...blank, birthDate: '--02-30' }).birthDate, DateProblem.DAY_NOT_IN_MONTH);
 });

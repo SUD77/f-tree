@@ -13,13 +13,10 @@
  * longer living" pull on each other.
  */
 
-import { PartialDate, parseRecordedDate } from '../../site/playground/dates.js';
+import { DateProblem, problem, settle, isDeathBeforeBirth } from './date-entry.js';
 
-/** Why a date somebody typed cannot be kept. The Kotlin's `DateProblem`, by name. */
-export const DateProblem = Object.freeze({
-  MALFORMED: 'MALFORMED',
-  DEATH_BEFORE_BIRTH: 'DEATH_BEFORE_BIRTH',
-});
+/** Why a date somebody typed cannot be kept. The Kotlin's `DateProblem`, by name (#90). */
+export { DateProblem };
 
 /** The fields the panel edits. A photograph is not one: it is framed and kept by its own dialog. */
 export const DRAFT_FIELDS = ['name', 'gender', 'birthDate', 'deathDate', 'deceased', 'notes'];
@@ -53,27 +50,19 @@ export function withChange(draft, key, value) {
 /**
  * What is wrong with the two dates, field by field.
  *
- * Only a date that cannot be understood, or an *impossible* order, is a problem. Overlapping partial
- * dates are left alone -- "born 1938, died 1938" is a real thing to record -- so the comparison is
- * the latest the death could be against the earliest the birth could be. A blank date is not a
- * problem at all: most of a family tree is people whose dates nobody knows.
+ * Mirrors `PersonEditViewModel`: a field's own problem always wins; only once the death field has
+ * none of its own is it asked whether it comes before the birth. Overlapping partial dates are left
+ * alone -- "born 1938, died 1938" is a real thing to record -- so the comparison is the latest the
+ * death could be against the earliest the birth could be. A blank date is not a problem at all: most
+ * of a family tree is people whose dates nobody knows.
  */
 export function dateProblems(draft) {
-  const birthText = String(draft.birthDate ?? '').trim();
-  const deathText = String(draft.deathDate ?? '').trim();
-  const birth = parseRecordedDate(birthText);
-  const death = parseRecordedDate(deathText);
-
-  const problems = {
-    birthDate: birthText && !birth ? DateProblem.MALFORMED : null,
-    deathDate: deathText && !death ? DateProblem.MALFORMED : null,
-  };
-  // Only two calendar dates can be out of order: a birthday with no year (#90) orders nothing.
-  if (!problems.deathDate && birth instanceof PartialDate && death instanceof PartialDate
-    && death.latest() < birth.earliest()) {
-    problems.deathDate = DateProblem.DEATH_BEFORE_BIRTH;
-  }
-  return problems;
+  const birthText = String(draft.birthDate ?? '');
+  const deathText = String(draft.deathDate ?? '');
+  const birthProblem = problem(birthText);
+  const deathProblem = problem(deathText)
+    ?? (birthProblem == null && isDeathBeforeBirth(birthText, deathText) ? DateProblem.DEATH_BEFORE_BIRTH : null);
+  return { birthDate: birthProblem, deathDate: deathProblem };
 }
 
 /** A completely blank form is valid: it records a person whose details nobody knows yet. */
@@ -92,6 +81,19 @@ export function isDirty(draft, person) {
 }
 
 /**
+ * A date as it will be kept: settled (`1938-4` becomes `1938-04`) when it is one the field
+ * understands, or written back exactly as it stood otherwise.
+ *
+ * An unreadable value the field itself never produced -- typed by another program, or the desktop's
+ * own `normaliseDateTyping` in a tree saved before #90 -- is kept verbatim rather than erased: saving
+ * a name must not quietly lose a date nobody has fixed yet.
+ */
+const keptDate = (text) => {
+  const t = String(text ?? '');
+  return problem(t) == null ? settle(t) : t.trim();
+};
+
+/**
  * The fields to hand `Tree.updatePerson`.
  *
  * Every field is named, including the empty ones, because naming a field with an empty value is how
@@ -101,8 +103,8 @@ export function fieldsFrom(draft) {
   return {
     name: draft.name,
     gender: draft.gender || null,
-    birthDate: draft.birthDate,
-    deathDate: draft.deathDate,
+    birthDate: keptDate(draft.birthDate),
+    deathDate: keptDate(draft.deathDate),
     deceased: draft.deceased,
     notes: draft.notes,
   };
@@ -113,35 +115,4 @@ export function isBlankPerson(person) {
   if (!person) return false;
   return !person.name && !person.gender && !person.birthDate && !person.deathDate
     && !person.deceased && !person.notes && !person.photo;
-}
-
-/**
- * A date as it is typed, with any separator a person reaches for turned into the one the format uses.
- *
- * #90: the format is strict on purpose -- `1938`, `1938-04`, `1938-04-17`, because the precision is
- * the statement about how much is known -- which makes the hyphen the only separator it accepts.
- * So a space, a slash or a full stop becomes a hyphen *as it is typed*, and the parser stays exactly
- * as strict as it was. A separator cannot lead, and cannot double up: leaning on the spacebar gives
- * `1938-04`, never `1938--04` or `-1938`.
- *
- * Nothing is inserted, only replaced or dropped, so backspace goes back through a hyphen one press
- * at a time. The caret is returned because dropping a character before it would otherwise leave it
- * one place too far along.
- *
- * @param {string} value what the field holds after the keystroke
- * @param {number} caret where the caret is in `value`
- * @returns {{value: string, caret: number}}
- */
-export function normaliseDateTyping(value, caret = value.length) {
-  let out = '';
-  let at = caret;
-  for (let i = 0; i < value.length; i += 1) {
-    const char = /[\s./]/.test(value[i]) ? '-' : value[i];
-    if (char === '-' && (out === '' || out.endsWith('-'))) {
-      if (i < caret) at -= 1;
-      continue;
-    }
-    out += char;
-  }
-  return { value: out, caret: Math.max(0, at) };
 }

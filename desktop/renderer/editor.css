@@ -132,7 +132,11 @@
   opacity: 0.68;
 }
 
-.editor .field input[type='text'],
+/*
+ * The date field's three slots are excluded here (#90): they sit inside `.date-field-box`, which
+ * wears this same look on itself, and an input of its own is deliberately borderless -- see below.
+ */
+.editor .field input[type='text']:not(.date-field-input),
 .editor .field select,
 .editor .field textarea {
   font: inherit;
@@ -152,7 +156,7 @@
   line-height: 1.45;
 }
 
-.editor .field input:focus-visible,
+.editor .field input:focus-visible:not(.date-field-input),
 .editor .field select:focus-visible,
 .editor .field textarea:focus-visible {
   outline: 2px solid var(--accent);
@@ -181,8 +185,8 @@
 /*
  * A placeholder is an example, not a value.
  *
- * `1948` in the Born field must not be mistaken for somebody's birth year, so it is set in the
- * faint ink the rest of the form uses for things that are not the record itself.
+ * `YYYY` in a date slot must not be mistaken for a year, so it is set in the faint ink the rest of
+ * the form uses for things that are not the record itself.
  */
 .editor .field input::placeholder,
 .editor .field textarea::placeholder {
@@ -190,18 +194,86 @@
   opacity: .8;
 }
 
-/* What is wrong with a date, under that date, in words that say how to put it right. */
+/*
+ * Under a date field: what is wrong with it, in words that say how to put it right, once that is
+ * worth saying (#90) -- and otherwise the read-back of what it will be kept as, so typing "1938-04"
+ * confirms itself as "April 1938" rather than sitting there looking unfinished. Same element, same
+ * line, because only one of the two is ever true at once.
+ */
 .editor .field-error {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--danger);
+  color: var(--ink-faint);
 }
+
+.editor .field-error[data-tone='error'] { color: var(--danger); }
 
 .editor .field-error:empty { display: none; }
 
 .editor .field[data-problem='true'] input {
   border-color: var(--danger);
+}
+
+/*
+ * The segmented date field (#90): one box that reads as the app's other text inputs, three plain
+ * `YYYY`/`MM`/`DD` inputs inside it with their own borders taken off, and the hyphens drawn between
+ * them rather than typed. `date-entry.js` owns every rule about what a keystroke does; this is only
+ * its shape.
+ */
+.editor .date-field-box {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 7px 9px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.editor .field.date-field[data-problem='true'] .date-field-box {
+  border-color: var(--danger);
+}
+
+.editor .date-field-box:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A field that is wrong and being fixed says one thing: the focus ring takes the error's colour
+   rather than drawing a green ring round a red border. */
+.editor .field.date-field[data-problem='true'] .date-field-box:focus-within {
+  outline-color: var(--danger);
+}
+
+.editor .date-field-input {
+  /* The app's own monospace token, not the inherited serif: every glyph the same width is what
+     makes a `ch`-sized slot fit "YYYY" exactly as well as "1938" (#90). */
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: center;
+}
+
+.editor .date-field-input:focus { outline: none; }
+
+/* `ch` widths, so a `4` and a `1` take the same room and the field never reflows as it fills. */
+.editor .date-field-input[maxlength='4'] { width: 4.2ch; }
+.editor .date-field-input[maxlength='2'] { width: 2.2ch; }
+
+.editor .date-field-input::placeholder {
+  color: var(--ink-faint);
+  opacity: .8;
+}
+
+.editor .date-field-sep {
+  opacity: 0.5;
 }
 
 .editor .check {
