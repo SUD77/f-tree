@@ -37,6 +37,7 @@ const TEST_DIRS = [
   { dir: 'renderer', suffix: '.test.js' },
   { dir: 'renderer/vendor', suffix: '.test.js' },
   { dir: '../site/playground', suffix: '.test.mjs' },
+  { dir: '../site/book', suffix: '.test.mjs' },
 ];
 
 function testFiles() {

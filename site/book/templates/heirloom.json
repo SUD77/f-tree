@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "heirloom",
+  "name": "Heirloom",
+  "fonts": { "display": "book_display", "text": "book_text", "strong": "book_strong" },
+  "palette": {
+    "night": "#13213a", "deep": "#0a1424", "glow": "#22375c",
+    "gold": "#d8b25a", "goldSoft": "#a88a45", "star": "#f4ecd8", "mist": "#8a98b5",
+    "paper": "#eef1f4", "ink": "#1b2a45", "inkSoft": "#4b5a77",
+    "aged": "#e6e0d2", "card": "#ffffff", "rule": "#c9d0db",
+    "female": "#e3c9c6", "male": "#c8d3e6", "other": "#dcd5c2",
+    "clay": "#c8662a", "flame": "#ffe7a6", "petalA": "#f2a71b", "petalB": "#e0457b",
+    "lanternBody": "#e0762b", "lanternTop": "#f2b233"
+  },
+  "pages": ["cover", "tree", "numbers", "generations", "find", "closing"],
+  "cover": { "motif": "stars" }
+}

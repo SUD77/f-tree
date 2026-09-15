@@ -57,7 +57,7 @@ jobs:
       # across. They run here as well as in the desktop workflow because the engine ships to both
       # shells, and the site is the one that deploys without a desktop build in the way.
       - name: The engine's rules, ported out of the Kotlin
-        run: node --test "site/playground/*.test.mjs"
+        run: node --test "site/playground/*.test.mjs" "site/book/*.test.mjs"
 
       # Pillow, because `make_sample_tree.py` now refuses to run without it. It used to carry on and
       # write a fixture with no photographs in it, which no runner has ever had the library to draw --

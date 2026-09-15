@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "id": "diwali",
+  "name": "Diwali",
+  "fonts": { "display": "book_display", "text": "book_text", "strong": "book_strong" },
+  "palette": {
+    "night": "#1c1638", "deep": "#0d0a1f", "glow": "#3a2352",
+    "gold": "#f2b84b", "goldSoft": "#b9822a", "star": "#fff1d6", "mist": "#a597c2",
+    "paper": "#fbf3e6", "ink": "#2b1a3d", "inkSoft": "#5f4a72",
+    "aged": "#efe2cc", "card": "#fffaf2", "rule": "#e3cfae",
+    "female": "#f3cdbf", "male": "#d6cdea", "other": "#ecdcb8",
+    "clay": "#c8662a", "flame": "#ffe7a6", "petalA": "#f2a71b", "petalB": "#e0457b",
+    "lanternBody": "#e0762b", "lanternTop": "#f2b233"
+  },
+  "pages": ["cover", "tree", "numbers", "generations", "find", "closing"],
+  "cover": {
+    "motif": "lamps",
+    "greeting": "शुभ दीपावली",
+    "subtitle": "{from-family}",
+    "line": "{Count-words} lamps, one for each of us.",
+    "ornaments": ["lanterns", "rangoli"]
+  },
+  "fileSuffix": "Diwali Book"
+}

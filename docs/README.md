@@ -20,6 +20,7 @@
 | [**Data model**](data-model.md) | Tables, fields and migrations |
 | [**Nearby sharing: the protocol**](nearby-protocol.md) | The beacon, the handshake, the six digits and the frames — the contract the Kotlin and the JavaScript both have to satisfy |
 | [**Fonts**](fonts.md) | Literata and JetBrains Mono, and why they are bundled |
+| [**The family book**](family-book.md) | The designed PDF: one composer, two painters, the Book format and the template rules |
 | [**Site and browser viewer**](site.md) | The landing page and the dependency-free `.ftree` reader |
 | [**Contributing**](../CONTRIBUTING.md) | Where to start, and how a change gets reviewed |
 | [**Security policy**](../SECURITY.md) | What is in scope, and how to report privately |

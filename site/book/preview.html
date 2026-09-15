@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  The book, previewed in a browser: every template, every fixture, painted by the same SVG painter
+  the desktop prints with. For working on templates. Serve the repository root with any static
+  server (python3 -m http.server) and open /site/book/preview.html - the fonts are read from the
+  Android app's res/font, which is where the release embeds them from.
+-->
+<meta charset="utf-8">
+<title>Family book preview</title>
+<style>
+  @font-face { font-family: 'book_display'; src: url('../../app/src/main/res/font/book_display.ttf'); }
+  @font-face { font-family: 'book_text'; src: url('../../app/src/main/res/font/book_text.ttf'); }
+  @font-face { font-family: 'book_strong'; src: url('../../app/src/main/res/font/book_strong.ttf'); }
+  body { margin: 0; padding: 20px 24px 60px; background: #d9dde3; font: 14px system-ui, sans-serif; color: #1b2a45; }
+  header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  #pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  figure { margin: 0; }
+  figure svg { display: block; width: 100%; height: auto; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+  figcaption { margin-top: 6px; color: #4b5a77; }
+  #status { color: #4b5a77; }
+</style>
+<header>
+  <label>Family <select id="fixture">
+    <option value="sample">Sample family (23)</option>
+    <option value="devanagari">Devanagari family (21)</option>
+    <option value="large">Large family (180)</option>
+    <option value="remarriage">Remarriage (8)</option>
+    <option value="one-person">One person</option>
+  </select></label>
+  <label>Template <select id="template"><option>heirloom</option><option>diwali</option></select></label>
+  <label><input type="checkbox" id="living"> Full dates for the living</label>
+  <span id="status"></span>
+</header>
+<div id="pages"></div>
+<script type="module">
+  import { openArchive, parseDocument } from '../playground/archive.js';
+  import { composeBook } from './compose.js';
+  import { paintPage, fitText } from './svg.js';
+
+  const photos = new Map();
+  async function load(name) {
+    photos.clear();
+    if (name !== 'sample') return (await fetch(`fixtures/${name}.json`)).json();
+    const archive = await openArchive(await (await fetch('../playground/sample-family.ftree')).arrayBuffer());
+    const doc = parseDocument(await archive.readText('tree.json'));
+    for (const p of doc.people) {
+      if (!p.photo) continue;
+      const blob = new Blob([await archive.read(p.photo)], { type: 'image/jpeg' });
+      photos.set(p.id, URL.createObjectURL(blob));
+    }
+    return doc;
+  }
+
+  async function render() {
+    const doc = await load(document.querySelector('#fixture').value);
+    const template = await (await fetch(`templates/${document.querySelector('#template').value}.json`)).json();
+    const started = performance.now();
+    const book = composeBook(doc, { now: '2026-09-15', livingDates: document.querySelector('#living').checked }, template);
+    const composed = performance.now() - started;
+    const host = document.querySelector('#pages');
+    host.innerHTML = book.pages.map((p, i) => `<figure>${paintPage(book, i, { photo: (id) => photos.get(id) ?? null, font: (k) => k })}<figcaption>${i + 1}. ${p.label}</figcaption></figure>`).join('');
+    await document.fonts.ready;
+    const corrected = fitText(host);
+    document.querySelector('#status').textContent = `${book.fileName} · ${book.pages.length} pages · composed in ${composed.toFixed(0)} ms · ${corrected} lines shrunk to fit`;
+  }
+  for (const el of document.querySelectorAll('select, input')) el.addEventListener('change', render);
+  render();
+</script>

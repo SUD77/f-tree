@@ -1,0 +1,173 @@
+{
+ "format": "f-tree",
+ "version": 1,
+ "people": [
+  {
+   "id": "a",
+   "name": "Harish Menon",
+   "gender": "MALE",
+   "birthDate": "1950",
+   "deathDate": "2011-08-01",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "b",
+   "name": "Lata Menon",
+   "gender": "FEMALE",
+   "birthDate": "1953",
+   "deathDate": "1983-02-11",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c",
+   "name": "Rekha Menon",
+   "gender": "FEMALE",
+   "birthDate": "1958",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "d",
+   "name": "Arun Menon",
+   "gender": "MALE",
+   "birthDate": "1978",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "e",
+   "name": "Divya Menon",
+   "gender": "FEMALE",
+   "birthDate": "1981",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "f",
+   "name": "Kiran Menon",
+   "gender": "MALE",
+   "birthDate": "1987",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "g",
+   "name": null,
+   "gender": "UNSPECIFIED",
+   "birthDate": null,
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "h",
+   "name": "Isha Menon",
+   "gender": "FEMALE",
+   "birthDate": "2012-12-12",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  }
+ ],
+ "relationships": [
+  {
+   "id": "r0",
+   "from": "a",
+   "to": "b",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r1",
+   "from": "a",
+   "to": "c",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r2",
+   "from": "a",
+   "to": "d",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r3",
+   "from": "b",
+   "to": "d",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r4",
+   "from": "a",
+   "to": "e",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r5",
+   "from": "b",
+   "to": "e",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r6",
+   "from": "a",
+   "to": "f",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r7",
+   "from": "c",
+   "to": "f",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r8",
+   "from": "d",
+   "to": "g",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r9",
+   "from": "d",
+   "to": "h",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r10",
+   "from": "g",
+   "to": "h",
+   "type": "PARENT",
+   "subtype": null
+  }
+ ]
+}
