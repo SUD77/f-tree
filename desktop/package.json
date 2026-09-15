@@ -56,7 +56,10 @@
           "!*.test.mjs",
           "!golden${/*}",
           "!fixtures${/*}",
-          "!preview.html"
+          "!preview.html",
+          "!art/src${/*}",
+          "!art/style-frames${/*}",
+          "!art/README.md"
         ]
       },
       {
