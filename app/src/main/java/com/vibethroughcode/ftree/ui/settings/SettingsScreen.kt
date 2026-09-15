@@ -104,6 +104,8 @@ fun SettingsScreen(
     onNearby: (NearbyMode) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel,
+    focusReminders: Boolean = false,
+    onRemindersFocused: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val enabled by viewModel.updatesEnabled.collectAsStateWithLifecycle()
@@ -125,7 +127,7 @@ fun SettingsScreen(
         },
     ) { padding ->
     /*
-     * Settings are not one long thing; they are six short ones, and on a window wide enough for
+     * Settings are not one long thing; they are seven short ones, and on a window wide enough for
      * two they stand beside each other rather than leave half of it empty and make the reader
      * scroll past the emptiness. The scroll stays outside the columns, so however many there are
      * the page is still one thing that scrolls.
@@ -175,6 +177,8 @@ fun SettingsScreen(
                     tag = SettingsPhotosToggleTag,
                 )
             }
+
+            ReminderSettings(viewModel, focus = focusReminders, onFocused = onRemindersFocused)
 
             Column {
                 SectionRule(stringResource(R.string.settings_section_updates))
@@ -516,7 +520,7 @@ private fun RenameDeviceDialog(
  * explaining a setting is the most natural thing to press.
  */
 @Composable
-private fun SettingsSwitch(
+internal fun SettingsSwitch(
     title: String,
     body: String,
     checked: Boolean,

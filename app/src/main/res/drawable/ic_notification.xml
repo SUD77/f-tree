@@ -1,0 +1,40 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!--
+        The launcher's mark, reduced to a status-bar glyph: one colour, since Android draws only the
+        shape. The couple, the rule between them and the two children, the unnamed one still dashed
+        so the mark says the same thing at 24dp as it does on the home screen.
+    -->
+    <group
+        android:scaleX="0.4"
+        android:scaleY="0.4"
+        android:translateX="-10.4"
+        android:translateY="-9.6">
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.17"
+            android:strokeLineCap="round"
+            android:pathData="M49.34,38.69L58.65,38.69 M54,46.28L54,54.61 M36.85,54.61L71.15,54.61 M36.85,54.61L36.85,60.98 M71.15,54.61L71.15,60.98" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.17"
+            android:pathData="M41.75,31.09a7.6,7.6 0 1,0 0,15.2a7.6,7.6 0 1,0 0,-15.2" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.17"
+            android:pathData="M66.25,31.09a7.6,7.6 0 1,0 0,15.2a7.6,7.6 0 1,0 0,-15.2" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.17"
+            android:pathData="M36.85,61.71a7.6,7.6 0 1,0 0,15.2a7.6,7.6 0 1,0 0,-15.2" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4.17"
+            android:strokeLineCap="round"
+            android:pathData="M78.29,66.71A7.6,7.6 0 0,1 78.29,71.91 M75.83,75.30A7.6,7.6 0 0,1 70.88,76.91 M66.90,75.61A7.6,7.6 0 0,1 63.84,71.40 M63.84,67.22A7.6,7.6 0 0,1 66.90,63.01 M70.88,61.71A7.6,7.6 0 0,1 75.83,63.32" />
+    </group>
+</vector>

@@ -2,16 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        Every permission the app asks for, and what each one is for. The first five are normal
-        permissions: none of them prompts, and none of them is in the location family. The sixth,
-        CAMERA, is the app's only runtime permission and is optional; see its own comment below.
+        Every permission the app asks for, and what each one is for. Six are normal permissions:
+        none of them prompts, and none of them is in the location family. Two are runtime
+        permissions, both optional and both asked for only when somebody chooses the thing that
+        needs them: CAMERA and POST_NOTIFICATIONS, each with its own comment below.
 
         The first two exist solely for the optional updater, and nothing uses them until update
         checking is switched on in Settings. The next three exist solely for nearby sharing, and
         nothing uses them until somebody opens the nearby screen. Both are guarded the same way, in
         the code rather than in the interface: UpdateRepository will not make a request while its
         preference is false, and NearbyRepository will not bind a socket, join a group or send a
-        datagram while its preference is false.
+        datagram while its preference is false. The last two are for birthday reminders, and do
+        nothing until reminders are switched on; see their comment.
 
         There is still no sync, no account and no backend to have one with. What there is now is a
         way to hand one file to one device you can see, on a network you are already on, while you
@@ -38,6 +40,17 @@
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!--
+        Birthday reminders (#154), off until switched on in Settings. POST_NOTIFICATIONS is asked for
+        at the moment the switch is turned on and at no other time; refusing it leaves the switch
+        off. RECEIVE_BOOT_COMPLETED never prompts, and is used by one receiver, ReminderRestartReceiver,
+        which is declared disabled below and enabled only while reminders are on: it sets the
+        morning's alarm again after the phone restarts. No exact-alarm permission: a birthday note
+        does not need to arrive on the second.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".FTreeApplication"
@@ -148,6 +161,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_paths" />
         </provider>
+        <!-- The morning alarm's own receiver: reachable by this app's alarm and nothing else. -->
+        <receiver
+            android:name=".reminders.ReminderReceiver"
+            android:exported="false" />
+
+        <!--
+            Sets the morning's alarm again after a restart, an update of the app, or a change of
+            clock or time zone. Disabled until reminders are switched on (Reminders.enable), and
+            disabled again when they are switched off, so it cannot run for anybody who has not
+            asked for reminders. Not exported: the system still delivers its own broadcasts to it.
+        -->
+        <receiver
+            android:name=".reminders.ReminderRestartReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

@@ -25,7 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +81,11 @@ import kotlin.reflect.KClass
  * per composition, which would restart the collection on every recomposition. */
 private val nothingOpened: StateFlow<Uri?> = MutableStateFlow<Uri?>(null).asStateFlow()
 
+/** A tapped birthday note: the one person it named, or null when it named several. */
+data class ReminderTap(val personId: String?)
+
+private val noReminder: StateFlow<ReminderTap?> = MutableStateFlow<ReminderTap?>(null).asStateFlow()
+
 const val NavTreeTag = "nav-tree"
 const val NavPeopleTag = "nav-people"
 const val NavSettingsTag = "nav-settings"
@@ -118,6 +125,8 @@ private val destinations = listOf(
 fun FTreeApp(
     opened: StateFlow<Uri?> = nothingOpened,
     onOpened: () -> Unit = {},
+    reminder: StateFlow<ReminderTap?> = noReminder,
+    onReminderFollowed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -179,6 +188,23 @@ fun FTreeApp(
         transferViewModel.prepareImport(file)
         onOpened()
     }
+
+    /*
+     * A birthday note, tapped: the person it names, over People so that back leads somewhere that
+     * makes sense, or People itself when the note was about several.
+     */
+    val tappedReminder by reminder.collectAsStateWithLifecycle()
+    LaunchedEffect(tappedReminder) {
+        val tap = tappedReminder ?: return@LaunchedEffect
+        navController.switchTo(PeopleRoute)
+        tap.personId?.let { navController.navigate(PersonRoute(it)) }
+        onReminderFollowed()
+    }
+
+    // People's bell asks Settings to bring the reminders into view once it opens.
+    var focusReminders by remember { mutableStateOf(false) }
+    val remindersOn by (LocalContext.current.applicationContext as FTreeApplication)
+        .container.reminderPreferences.enabled.collectAsStateWithLifecycle()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
@@ -257,6 +283,11 @@ fun FTreeApp(
                         PeopleScreen(
                             onOpenPerson = { navController.navigate(PersonRoute(it)) },
                             onAddPerson = { navController.navigate(EditPersonRoute()) },
+                            remindersOn = remindersOn,
+                            onReminders = {
+                                focusReminders = true
+                                navController.switchTo(SettingsRoute)
+                            },
                         )
                     }
 
@@ -268,6 +299,8 @@ fun FTreeApp(
                             onImport = { importPicker.launch(arrayOf("*/*")) },
                             onNearby = nearbyViewModel::open,
                             viewModel = settingsViewModel,
+                            focusReminders = focusReminders,
+                            onRemindersFocused = { focusReminders = false },
                         )
                     }
 

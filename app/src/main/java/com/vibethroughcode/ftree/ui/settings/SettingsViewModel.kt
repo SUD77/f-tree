@@ -9,6 +9,10 @@ import com.vibethroughcode.ftree.nearby.NearbyIdentity
 import com.vibethroughcode.ftree.nearby.NearbyPreferences
 import com.vibethroughcode.ftree.nearby.NearbyRepository
 import com.vibethroughcode.ftree.nearby.wire.NearbyNames
+import com.vibethroughcode.ftree.data.OccasionCensus
+import com.vibethroughcode.ftree.reminders.ReminderLead
+import com.vibethroughcode.ftree.reminders.ReminderPreferences
+import com.vibethroughcode.ftree.reminders.Reminders
 import com.vibethroughcode.ftree.update.AvailableUpdate
 import com.vibethroughcode.ftree.update.UpdatePreferences
 import com.vibethroughcode.ftree.update.UpdateRepository
@@ -28,7 +32,41 @@ class SettingsViewModel(
     private val nearbyPreferences: NearbyPreferences,
     private val nearbyIdentity: NearbyIdentity,
     private val nearbyRepository: NearbyRepository,
+    private val reminderPreferences: ReminderPreferences,
+    private val reminders: Reminders,
 ) : ViewModel() {
+
+    val remindersEnabled: StateFlow<Boolean> = reminderPreferences.enabled
+    val reminderLead: StateFlow<ReminderLead> = reminderPreferences.lead
+    val reminderRemembrance: StateFlow<Boolean> = reminderPreferences.remembrance
+
+    /** Called only once Android has said yes; the screen asks for the permission first. */
+    fun enableReminders() {
+        reminders.enable()
+        refreshReminders()
+    }
+
+    fun disableReminders() = reminders.disable()
+
+    fun setReminderLead(value: ReminderLead) = reminderPreferences.setLead(value)
+
+    fun setReminderRemembrance(value: Boolean) = reminderPreferences.setRemembrance(value)
+
+    private val _canNotify = MutableStateFlow(reminders.canNotify())
+
+    /** False when Android will not show a note — refused, or turned off in the system's settings since. */
+    val canNotify: StateFlow<Boolean> = _canNotify.asStateFlow()
+
+    private val _census = MutableStateFlow<OccasionCensus?>(null)
+
+    /** Who a reminder covers, and who it cannot and why. Null until counted. */
+    val reminderCensus: StateFlow<OccasionCensus?> = _census.asStateFlow()
+
+    /** On resume: the tree, and what Android allows, may both have changed while Settings was away. */
+    fun refreshReminders() {
+        _canNotify.value = reminders.canNotify()
+        viewModelScope.launch { _census.value = reminders.census() }
+    }
 
     val nearbyEnabled: StateFlow<Boolean> = nearbyPreferences.enabled
 

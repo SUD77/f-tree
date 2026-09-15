@@ -387,6 +387,67 @@
         who has already decided and wants to know what they agreed to.
     -->
     <string name="settings_section_beta">Beta releases</string>
+
+    <!-- Birthday reminders (#154). The desktop uses the same words. -->
+    <string name="settings_section_reminders">Reminders</string>
+    <string name="settings_reminders_toggle">Birthday reminders</string>
+    <string name="settings_reminders_off">Off. When on, a note at 9 in the morning on a birthday — one a day, however many share it. Nothing is asked of Android until you turn this on.</string>
+    <string name="settings_reminders_on">A note at 9 in the morning on a birthday — one a day, however many share it.</string>
+    <plurals name="settings_reminders_covers">
+        <item quantity="one">Covers %1$d person.</item>
+        <item quantity="other">Covers %1$d people.</item>
+    </plurals>
+    <plurals name="settings_reminders_no_day">
+        <item quantity="one">%1$d has no day and month recorded.</item>
+        <item quantity="other">%1$d have no day and month recorded.</item>
+    </plurals>
+    <plurals name="settings_reminders_presumed">
+        <item quantity="one">%1$d would be over 110, so is taken to be no longer living.</item>
+        <item quantity="other">%1$d would be over 110, so are taken to be no longer living.</item>
+    </plurals>
+    <string name="settings_reminders_when">When</string>
+    <string name="settings_reminders_on_the_day">On the day</string>
+    <string name="settings_reminders_day_before">The day before</string>
+    <string name="settings_reminders_remembrance">Remembrance days</string>
+    <string name="settings_reminders_remembrance_body">Also the birthdays and death anniversaries of those no longer with us.</string>
+    <string name="settings_reminders_denied">Android was asked and said no, so reminders stay off.</string>
+    <string name="settings_reminders_blocked">Notifications for f-tree are turned off in Android\'s settings, so no reminder can be shown.</string>
+    <string name="settings_reminders_open_settings">Open notification settings</string>
+
+    <!-- The morning's note. -->
+    <string name="reminder_channel_name">Birthdays</string>
+    <string name="reminder_channel_description">A note on the morning of a birthday, if you turn reminders on in f-tree\'s settings.</string>
+    <string name="reminder_title_turns_today">%1$s turns %2$d today</string>
+    <string name="reminder_title_birthday_today">It\'s %1$s\'s birthday today</string>
+    <plurals name="reminder_title_birthdays_today">
+        <item quantity="one">%1$d birthday today</item>
+        <item quantity="other">%1$d birthdays today</item>
+    </plurals>
+    <string name="reminder_title_turns_tomorrow">Tomorrow: %1$s turns %2$d</string>
+    <string name="reminder_title_birthday_tomorrow">Tomorrow is %1$s\'s birthday</string>
+    <plurals name="reminder_title_birthdays_tomorrow">
+        <item quantity="one">%1$d birthday tomorrow</item>
+        <item quantity="other">%1$d birthdays tomorrow</item>
+    </plurals>
+    <string name="reminder_title_remembering_today">Remembering %1$s today</string>
+    <string name="reminder_title_remembering_tomorrow">Remembering %1$s tomorrow</string>
+    <plurals name="reminder_title_remembrance_today">
+        <item quantity="one">%1$d remembrance day today</item>
+        <item quantity="other">%1$d remembrance days today</item>
+    </plurals>
+    <plurals name="reminder_title_remembrance_tomorrow">
+        <item quantity="one">%1$d remembrance day tomorrow</item>
+        <item quantity="other">%1$d remembrance days tomorrow</item>
+    </plurals>
+    <!-- One person in the note: "Asha Devi — turns 60". -->
+    <string name="reminder_line">%1$s — %2$s</string>
+    <!-- All a locked phone shows. -->
+    <string name="reminder_public_birthday_today">A birthday today</string>
+    <string name="reminder_public_birthday_tomorrow">A birthday tomorrow</string>
+    <string name="reminder_public_remembrance_today">A day to remember today</string>
+    <string name="reminder_public_remembrance_tomorrow">A day to remember tomorrow</string>
+    <string name="coming_up_reminders_on">Birthday reminders are on</string>
+    <string name="coming_up_reminders_off">Birthday reminders</string>
     <string name="settings_beta_toggle">Offer me beta releases</string>
     <string name="settings_beta_explainer">Most people should leave this off. Betas are unfinished builds put out to be tested — they can be slow, wrong, or lose work, and a fix may take days. You will be offered them ahead of everyone else, which is the point and also the risk.</string>
     <string name="settings_beta_explainer_updates_off">Turn on “Check for updates” above first. This only changes which release the updater offers you; on its own it does nothing.</string>
@@ -396,7 +457,7 @@
     <string name="settings_beta_dialog_confirm">Offer me betas</string>
     <string name="settings_beta_dialog_cancel">Not now</string>
     <string name="settings_permissions_title">Permissions</string>
-    <string name="settings_permissions_body">Five that never ask, and one that does. Two are for the updater: internet access to ask GitHub about releases, and permission to install an update. Three are for nearby sharing: to see the Wi-Fi network, to hear other devices on it, and to check a connection exists. The camera is asked for only if you choose to scan a code, and you can always type instead. Nothing leaves the device except when you deliberately send it, to a device you can see, on a network you are already on, with no account and nothing in between.</string>
+    <string name="settings_permissions_body">Six that never ask, and two that do. Two are for the updater: internet access to ask GitHub about releases, and permission to install an update. Three are for nearby sharing: to see the Wi-Fi network, to hear other devices on it, and to check a connection exists. One is for birthday reminders: to set the morning\'s reminder again after the phone restarts. The two that ask are the camera, only if you choose to scan a code, and you can always type instead; and notifications, only when you turn birthday reminders on. Nothing leaves the device except when you deliberately send it, to a device you can see, on a network you are already on, with no account and nothing in between.</string>
 
     <!-- Nearby sharing -->
     <string name="settings_section_nearby">Nearby sharing</string>

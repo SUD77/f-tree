@@ -16,6 +16,7 @@ import com.vibethroughcode.ftree.FTreeApplication
 import com.vibethroughcode.ftree.MainActivity
 import com.vibethroughcode.ftree.data.Person
 import com.vibethroughcode.ftree.data.YearlessDate
+import com.vibethroughcode.ftree.ui.people.ComingUpBellTag
 import com.vibethroughcode.ftree.ui.people.ComingUpEmptyTag
 import com.vibethroughcode.ftree.ui.people.ComingUpTag
 import com.vibethroughcode.ftree.ui.people.ComingUpToggleTag
@@ -25,6 +26,7 @@ import com.vibethroughcode.ftree.ui.people.PeopleListTag
 import com.vibethroughcode.ftree.ui.people.PeopleSearchFieldTag
 import com.vibethroughcode.ftree.ui.people.RememberingTag
 import com.vibethroughcode.ftree.ui.person.PersonNameTag
+import com.vibethroughcode.ftree.ui.settings.SettingsRemindersToggleTag
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -156,5 +158,13 @@ class ComingUpTest {
         rule.onNode(hasContentDescription("Search")).performClick()
         rule.onNodeWithTag(PeopleSearchFieldTag).performTextInput("Asha")
         rule.waitUntil(5_000) { rule.onAllNodesWithTag(ComingUpTag).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun theBellOpensTheReminderSwitch() {
+        seed(Person(name = "Asha Devi", birthDate = born(0, 60)))
+        rule.onNodeWithTag(ComingUpBellTag).performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag(SettingsRemindersToggleTag).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(SettingsRemindersToggleTag).assertIsDisplayed()
     }
 }
