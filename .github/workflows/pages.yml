@@ -77,6 +77,14 @@ jobs:
           python3 tools/make_sample_tree.py "$RUNNER_TEMP/fixtures"
           node tools/check_layout.mjs "$RUNNER_TEMP/fixtures"
 
+      # The book's composer measures text by reading these tables, not by asking a layout engine
+      # for a size - see tools/font_metrics.mjs. A font swap that lands without regenerating them
+      # would ship a metrics table describing a font that is no longer there, so this fails the
+      # build instead of drifting silently. site/book/metrics is what this workflow deploys, so the
+      # check belongs here as much as in the desktop workflow.
+      - name: Check the book fonts' metrics tables are current
+        run: node tools/font_metrics.mjs --check
+
       # The writer is the first piece of the editor, and the only reader that matters for it is the
       # Android app's: it walks local file headers, so an archive whose sizes live in a data
       # descriptor reads as empty there. Checked against a real export, both directions.
