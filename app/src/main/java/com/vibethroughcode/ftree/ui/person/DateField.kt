@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -56,7 +57,6 @@ import com.vibethroughcode.ftree.data.YearlessDate
 import com.vibethroughcode.ftree.ui.theme.FTreeText
 import java.time.Month
 import java.time.format.TextStyle as MonthStyle
-import java.util.Locale
 
 /** Test tags for the month and day slots; the year slot carries the field's own tag. */
 fun dateSlotTag(tag: String, slot: DateSlot): String = if (slot == DateSlot.YEAR) tag else "$tag.${slot.name.lowercase()}"
@@ -245,10 +245,11 @@ fun DateField(
 @Composable
 private fun readBack(value: String, problem: DateProblem?): String? {
     if (problem != null) return null
+    val locale = LocalConfiguration.current.locales[0]
     return when (val date = RecordedDate.parse(DateEntry.settle(value))) {
         null -> null
-        is YearlessDate -> stringResource(R.string.edit_date_readback_yearless, date.display())
-        else -> date.display()
+        is YearlessDate -> stringResource(R.string.edit_date_readback_yearless, date.display(locale))
+        else -> date.display(locale)
     }
 }
 
@@ -261,7 +262,7 @@ private fun problemText(problem: DateProblem, value: String): String {
         DateProblem.DAY_OUT_OF_RANGE -> stringResource(R.string.edit_date_day_range)
         DateProblem.DAY_NOT_IN_MONTH -> {
             val month = parts.month.toInt()
-            val name = Month.of(month).getDisplayName(MonthStyle.FULL_STANDALONE, Locale.getDefault())
+            val name = Month.of(month).getDisplayName(MonthStyle.FULL_STANDALONE, LocalConfiguration.current.locales[0])
             stringResource(R.string.edit_date_day_not_in_month, name, DateEntry.maxDays(month))
         }
         DateProblem.NOT_A_LEAP_YEAR -> stringResource(R.string.edit_date_not_leap, parts.year)
