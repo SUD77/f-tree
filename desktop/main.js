@@ -1603,6 +1603,30 @@ async function runEditSmoke(win, check) {
     input.value = text;
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }, id, value);
+  /*
+   * The segmented date field (#90) reads a keystroke in `beforeinput`, before the browser touches
+   * the input -- see `date-entry.js` and `dateField` in app.js -- so a plain `input` event, as `type`
+   * above dispatches, never reaches it. This fires the same event a real keystroke or paste would,
+   * at whichever slot's id is passed: `f-birth` is the year, `f-birth-month` and `f-birth-day` the
+   * other two.
+   */
+  const typeDate = (id, text) => page((field, data) => {
+    const input = document.getElementById(field);
+    input.focus();
+    input.dispatchEvent(new InputEvent('beforeinput', {
+      inputType: 'insertText', data, bubbles: true, cancelable: true,
+    }));
+  }, id, text);
+  // Clearing a slot is deletion, which the field leaves to the browser and only resyncs afterwards
+  // (see `dateField`'s own `input` listener) -- so this plays that part too, one slot at a time.
+  const clearDate = (id) => page((year, month, day) => {
+    for (const fieldId of [year, month, day]) {
+      const input = document.getElementById(fieldId);
+      if (!input || input.value === '') continue;
+      input.value = '';
+      input.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true }));
+    }
+  }, id, `${id}-month`, `${id}-day`);
   const buttons = () => page(() => ({
     save: document.getElementById('panel-save')?.textContent ?? null,
     saveEnabled: document.getElementById('panel-save')?.disabled === false,
@@ -1617,11 +1641,11 @@ async function runEditSmoke(win, check) {
   check('and Discard, not Delete, while there is nothing to lose', panel.remove === 'Discard',
     String(panel.remove));
 
-  // A name, a date typed with spaces the way #90 asked for, and a note. The import step later needs
-  // two records that agree on enough to be a candidate and disagree on something that cannot rule
-  // the pairing out.
+  // A name, a birth year typed into the segmented field's year slot, and a note. The import step
+  // later needs two records that agree on enough to be a candidate and disagree on something that
+  // cannot rule the pairing out.
   await type('f-name', 'Shyam Lal');
-  await type('f-birth', '1938');
+  await typeDate('f-birth', '1938');
   await type('f-notes', 'Grandfather. Born in Ballia.');
   await settle(150);
 
@@ -1647,26 +1671,32 @@ async function runEditSmoke(win, check) {
   }));
   check('keeping on editing keeps every letter', seen.open && seen.name === 'Shyam Lal', seen.name);
 
-  // #90: a space is the dash, typed in, and a date that cannot be understood stops the Add.
-  await type('f-death', '19x');
+  // #90: a month out of range is a specific, final problem -- not a bare "could not be read" -- and
+  // stops the Add until it is fixed.
+  await typeDate('f-death', '1938');
+  await typeDate('f-death-month', '13');
   await page(() => document.getElementById('panel-save').click());
   await settle(200);
   seen = await page(() => ({
     error: document.getElementById('f-death-error')?.textContent ?? '',
     counts: document.getElementById('counts')?.textContent ?? '',
   }));
-  check('a date that cannot be understood is refused, in words that say how to fix it',
-    /1938-04-17/.test(seen.error), seen.error);
-  await type('f-death', '');
-  await page((id) => {
-    const input = document.getElementById(id);
-    input.value = '1938 04';
-    input.setSelectionRange(7, 7);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  }, 'f-birth');
-  seen = await page(() => document.getElementById('f-birth').value);
-  check('a space typed in a date becomes the dash', seen === '1938-04', seen);
-  await type('f-birth', '1938');
+  check('a month out of range is refused, in words that say how to fix it',
+    /Months run from 01 to 12/.test(seen.error), seen.error);
+  await clearDate('f-death');
+  // The month and day slots, typed after the year (already "1938" from above): each fills and moves
+  // the caret on to the next by itself, with nothing but digits landing in either.
+  await typeDate('f-birth-month', '04');
+  await typeDate('f-birth-day', '17');
+  seen = await page(() => ({
+    year: document.getElementById('f-birth').value,
+    month: document.getElementById('f-birth-month').value,
+    day: document.getElementById('f-birth-day').value,
+  }));
+  check('typing into the month and day slots fills them, digits only',
+    seen.year === '1938' && seen.month === '04' && seen.day === '17', JSON.stringify(seen));
+  await clearDate('f-birth');
+  await typeDate('f-birth', '1938');
   // Clearing the death date leaves "no longer living" ticked, as the phone does; untick it so the
   // record is the living grandfather the rest of this test was written against.
   await page(() => {

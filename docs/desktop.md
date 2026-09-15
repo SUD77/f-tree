@@ -95,12 +95,15 @@ their details but keeps their place so the family still joins up (`Tree.clearDet
 completely*. Somebody joined to nobody is deleted straight away. Either way the toast carries an
 **Undo** button.
 
-**Dates are checked before they are kept**, by Android's rules (`renderer/person-draft.js`): a date
-must be `1938`, `1938-04` or `1938-04-17`, and a death may not end before the birth begins.
-Overlapping partial dates are fine, since "born 1938, died 1938" is real. A space, slash or full stop
-typed in a date becomes the dash as it is typed
-([#90](https://github.com/thisisankit27/f-tree/issues/90)), so the parser stays exactly as strict as
-it was. A death date ticks *No longer living*, and unticking it clears the date.
+**Dates are typed into a segmented field**, `YYYY`-`MM`-`DD`, the hyphens drawn rather than typed
+([#90](https://github.com/thisisankit27/f-tree/issues/90), `renderer/date-entry.js`). Digits fill a
+slot and the caret moves on by itself — `19380417` fills all three in one go, and there is no
+separator key to hunt for. A year alone (`1938`) or a year and month (`1938-04`) are whole answers on
+their own. **Leaving the year blank records a birthday nobody remembers the year of** — `--04-17` — and
+a death may not end before a birth that has a year to compare it against; overlapping partial dates
+are fine, since "born 1938, died 1938" is real. Backspace in an empty slot steps back into the one
+before it, so deleting runs back through the whole date one digit at a time. A death date ticks
+*No longer living*, and unticking it clears the date.
 
 Ctrl+Z inside a text field undoes the typing, not the last change to the tree. The menu owns the
 accelerator, so without that exception it would take back a relative added a minute ago.
