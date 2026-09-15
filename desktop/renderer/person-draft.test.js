@@ -29,36 +29,37 @@ test('the three precisions are all accepted', () => {
   }
 });
 
-test('a bad date usually names a specific problem now, not a bare MALFORMED (#90)', () => {
-  // date-entry.js's `decode` reads digits generously -- "a date written some other way, by some
-  // other program" -- so most bad input still becomes *a* date, just one with something wrong with
-  // it, and the field can say what.
+test('a date the field can hold names its specific problem (#90)', () => {
   const cases = [
     ['38', DateProblem.YEAR_INCOMPLETE],
     ['1938-13', DateProblem.MONTH_OUT_OF_RANGE],
     ['1938-02-30', DateProblem.DAY_NOT_IN_MONTH],
-    // Day-first and month-first are never guessed between; read positionally instead, this becomes
-    // year 1704, month 19 -- out of range, but a specific problem rather than MALFORMED.
-    ['17/04/1938', DateProblem.MONTH_OUT_OF_RANGE],
+    ['1938-02-29', DateProblem.NOT_A_LEAP_YEAR],
+    ['--04', DateProblem.MONTH_ALONE],
   ];
   for (const [date, expected] of cases) {
     assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate, expected, date);
   }
 });
 
-test('a lone digit or a stray word around real digits settles into a real date, not an error', () => {
-  // '1938-4' pads to '1938-04'; 'about 1938' and '1938-' both settle to the year alone -- decode()
-  // extracts what digits it finds, exactly as DateEntry.kt does for text typed elsewhere.
-  for (const date of ['1938-4', 'about 1938', '1938-']) {
+test('a lone month or day digit settles into a real date, not an error', () => {
+  for (const date of ['1938-4', '1938-4-7', '1938-']) {
     assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate, null, date);
   }
 });
 
-test('only text with no digits in it at all is MALFORMED', () => {
-  for (const date of ['not a date', 'xyz']) {
+test('a date written some other way is unreadable, never guessed at', () => {
+  // Text the field did not write came from another program. Reading a year out of "about 1938"
+  // would rewrite the record on the next save, and "before" is not "in".
+  for (const date of ['not a date', 'about 1938', 'before 1938-04', '17/04/1938', '1938/04/17']) {
     assert.strictEqual(dateProblems({ ...blank, birthDate: date }).birthDate,
       DateProblem.MALFORMED, date);
   }
+});
+
+test('an unreadable date nobody retyped is kept exactly as written', () => {
+  assert.strictEqual(fieldsFrom({ ...blank, birthDate: 'about 1938' }).birthDate, 'about 1938');
+  assert.strictEqual(fieldsFrom({ ...blank, birthDate: '1938-4' }).birthDate, '1938-04');
 });
 
 test('surrounding space is not a problem; the tree trims it anyway', () => {
@@ -81,9 +82,8 @@ test('overlapping partial dates are allowed -- "born 1938, died 1938" is real', 
 });
 
 test('a death field with a problem of its own is reported that way, not also as out of order', () => {
-  // '19x' settles to '19', an incomplete year -- not MALFORMED, but still a problem of the death
-  // field's own, so DEATH_BEFORE_BIRTH is never asked.
-  const problems = dateProblems({ ...blank, birthDate: '1950', deathDate: '19x' });
+  // An incomplete year is the death field's own problem, so DEATH_BEFORE_BIRTH is never asked.
+  const problems = dateProblems({ ...blank, birthDate: '1950', deathDate: '19' });
   assert.strictEqual(problems.deathDate, DateProblem.YEAR_INCOMPLETE);
 });
 

@@ -77,17 +77,21 @@ export function encode(parts) {
 
 /** The slots a stored or typed string stands for. Never fails: see [encode]. */
 export function decode(text) {
+  // A date written some other way, by some other program: shown as if it had been pasted, so there
+  // is something to correct, but `problem` still calls it unreadable -- see there.
+  return positional(text) ?? enter(emptyParts(), DateSlot.YEAR, text.trim()).parts;
+}
+
+/** The slots for text in the field's own form, or null for text written any other way. */
+function positional(text) {
   const t = text.trim();
   if (t === '') return emptyParts();
   if (t.startsWith('--')) {
     const m = POSITIONAL_YEARLESS.exec(t.slice(2));
-    if (m) return { year: '', month: m[1] ?? '', day: m[2] ?? '' };
-  } else {
-    const m = POSITIONAL.exec(t);
-    if (m) return { year: m[1] ?? '', month: m[2] ?? '', day: m[3] ?? '' };
+    return m ? { year: '', month: m[1] ?? '', day: m[2] ?? '' } : null;
   }
-  // A date written some other way, by some other program: read it as if it had been pasted.
-  return enter(emptyParts(), DateSlot.YEAR, t).parts;
+  const m = POSITIONAL.exec(t);
+  return m ? { year: m[1] ?? '', month: m[2] ?? '', day: m[3] ?? '' } : null;
 }
 
 /**
@@ -207,10 +211,13 @@ function isLeapYear(year) {
 
 /** What is wrong with a field's text, or null when it is blank or a date that can be kept. */
 export function problem(text) {
+  if (text.trim() === '') return null;
+  // Everything typed into the field is in its own form, so anything else came from another
+  // program -- "about 1938", "before 1938". Reading a year out of it and calling that a date would
+  // rewrite the record on the next save, and "before" is not "in". Unreadable, then: kept as
+  // written until somebody retypes it.
+  if (positional(text) === null) return DateProblem.MALFORMED;
   const parts = decode(settle(text));
-  // Text with no digits at all is blank only if it really is blank; otherwise it is something
-  // another program wrote, and saving must not quietly erase it.
-  if (isEmptyParts(parts)) return text.trim() === '' ? null : DateProblem.MALFORMED;
   const month = parts.month === '' ? null : Number(parts.month);
   const day = parts.day === '' ? null : Number(parts.day);
   if (parts.year !== '' && parts.year.length < 4) return DateProblem.YEAR_INCOMPLETE;
