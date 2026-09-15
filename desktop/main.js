@@ -1146,7 +1146,9 @@ async function printBookToPdf(pages) {
    * break after it -- `.page:last-child` -- which is what stops Chromium's print pipeline adding a
    * blank trailing page when the content's last boundary already lines up with the page box.
    */
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+  // The pages are the renderer's own painted SVG, but this window still refuses to run anything in
+  // them: no script, no request - fonts and photographs arrive as data: URLs or not at all.
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"><style>
 ${fontFaces}
 @page { size: 595pt 842pt; margin: 0; }
 html, body { margin: 0; }
@@ -1230,14 +1232,19 @@ ipcMain.handle('book:save', async (event, { fileName, pages } = {}) => {
   try {
     const pdf = await printBookToPdf(pages);
     await writeTreeFile(target, pdf);
+    savedBooks.add(target);
     return { path: target };
   } catch (error) {
     return { error: error.message };
   }
 });
 
+// Only a file this session saved can be shown: the page names a path, and the main process is the
+// one that decides whether it is a path the page has any business naming.
+const savedBooks = new Set();
+
 ipcMain.handle('book:showInFolder', (event, target) => {
-  if (typeof target === 'string' && target) shell.showItemInFolder(target);
+  if (typeof target === 'string' && savedBooks.has(target)) shell.showItemInFolder(target);
 });
 
 /* ------------------------------------------------------------------ nearby sharing */
