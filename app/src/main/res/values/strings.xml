@@ -14,6 +14,27 @@
     <string name="people_count_living">%1$d living, of %2$s in your tree</string>
     <string name="people_count_living_matching">%1$d living, of %2$s matching</string>
     <string name="people_none_living">Everyone matching this is recorded as no longer living.</string>
+
+    <!-- Coming up (#230): the family's next 30 days. The desktop uses the same words. -->
+    <string name="coming_up_title">Coming up</string>
+    <string name="coming_up_window">Next 30 days</string>
+    <string name="coming_up_remembering">Remembering</string>
+    <string name="coming_up_today">Today</string>
+    <string name="coming_up_tomorrow">Tomorrow</string>
+    <string name="coming_up_turns">turns %1$d</string>
+    <string name="coming_up_birthday">birthday</string>
+    <string name="coming_up_would_have_been">would have been %1$d</string>
+    <plurals name="coming_up_years_since">
+        <item quantity="one">%1$d year since they died</item>
+        <item quantity="other">%1$d years since they died</item>
+    </plurals>
+    <string name="coming_up_death_day">the day they died</string>
+    <string name="coming_up_show_all">Show all %1$d</string>
+    <string name="coming_up_show_fewer">Show fewer</string>
+    <string name="coming_up_none_soon">No birthdays in the next 30 days. Next: %1$s, %2$s.</string>
+    <string name="coming_up_none_recorded">Birthdays appear here once someone has a day and month recorded.</string>
+    <!-- Name, what the day is, when: "Asha, turns 60, today". -->
+    <string name="coming_up_a11y">%1$s, %2$s, %3$s</string>
     <string name="people_no_matches">No one matches “%1$s”.</string>
 
     <!-- Empty state -->

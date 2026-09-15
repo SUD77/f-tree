@@ -5,6 +5,7 @@ import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.Gender
 import com.vibethroughcode.ftree.data.Person
 import com.vibethroughcode.ftree.data.RelativeKind
+import java.time.LocalDate
 
 /**
  * Sample trees for development.
@@ -20,8 +21,21 @@ class SampleData(
 
     suspend fun clear() = database.clearAllTables()
 
-    suspend fun family() {
+    /**
+     * [birthdays] gives the same family days that fall in the next few weeks, worked out from
+     * today, so "Coming up" and the morning reminder have something to show on whatever day they
+     * are being looked at: a birthday today, a yearless one tomorrow, and the departed remembered.
+     */
+    suspend fun family(birthdays: Boolean = false) {
         clear()
+        val today = LocalDate.now()
+        fun on(daysAway: Long, year: Int?): String {
+            val day = today.plusDays(daysAway)
+            return if (year == null) "--%02d-%02d".format(day.monthValue, day.dayOfMonth)
+            else "%04d-%02d-%02d".format(year, day.monthValue, day.dayOfMonth)
+        }
+        fun date(plain: String, daysAway: Long, year: Int? = plain.take(4).toInt()) =
+            if (birthdays) on(daysAway, year) else plain
 
         suspend fun add(
             name: String?,
@@ -41,27 +55,27 @@ class SampleData(
         }
 
         // Generation 1 — the edge of what is remembered.
-        val greatGrandfather = add("Shyam Lal", Gender.MALE, "1905", "1978")
+        val greatGrandfather = add("Shyam Lal", Gender.MALE, "1905", date("1978", 25))
         val greatGrandmother = add(null, Gender.FEMALE)
 
         // Generation 2
-        val grandfather = add("Raj Kumar", Gender.MALE, "1938", "2010")
-        val grandmother = add("Sushila Devi", Gender.FEMALE, "1942")
+        val grandfather = add("Raj Kumar", Gender.MALE, date("1938", 3), date("2010", 9))
+        val grandmother = add("Sushila Devi", Gender.FEMALE, date("1942", 0))
         val greatUncle = add(null, Gender.MALE)
 
         // Generation 3
-        val father = add("Vinod Kumar", Gender.MALE, "1962")
+        val father = add("Vinod Kumar", Gender.MALE, date("1962", 5))
         val mother = add("Anita Kumar", Gender.FEMALE, "1965")
         val aunt = add("Meena", Gender.FEMALE, "1968")
 
         // Generation 4
         val me = add("Ankit Kumar", Gender.MALE, "1990-05-01")
-        val sister = add("Neha Kumar", Gender.FEMALE, "1993")
-        val wife = add("Priya Sharma", Gender.FEMALE, "1992")
+        val sister = add("Neha Kumar", Gender.FEMALE, date("1993", 12))
+        val wife = add("Priya Sharma", Gender.FEMALE, if (birthdays) on(1, null) else "1992")
         val cousin = add("Rohit", Gender.MALE, "1995")
 
         // Generation 5
-        val child = add("Aarav Kumar", Gender.MALE, "2020")
+        val child = add("Aarav Kumar", Gender.MALE, date("2020", 20))
 
         listOf(greatGrandfather, greatGrandmother).forEach {
             repository.addRelative(grandfather, it, RelativeKind.PARENT)
