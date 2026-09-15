@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The book fonts (#203) are not referenced from any Kotlin or Compose code yet - the display-list
+  spec and composer that will load them (#204, #205) have not landed. isShrinkResources treats an
+  unreferenced resource as dead and drops it from a release build, which would silently strip these
+  three files from every release APK built before that code exists. This keep list is the fix: it
+  tells the shrinker these are wanted regardless of reachability. Safe to remove once #204/#205 give
+  the fonts a real reference.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@font/book_display,@font/book_text,@font/book_strong" />
