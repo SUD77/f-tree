@@ -80,3 +80,39 @@ test('a day inside a month is compatible with that month, and outside it is not'
   assert.ok(at('1938-04').isCompatibleWith(at('1938-04-17')));
   assert.ok(!at('1938-04').isCompatibleWith(at('1938-05-17')));
 });
+
+/*
+ * #90: the shared table `DateCasesTest.kt` reads too -- the four stored shapes, the English reading,
+ * and which pairs could be the same day. A birthday with no year is `--04-17`.
+ */
+import { readFileSync } from 'node:fs';
+import { parseRecordedDate, PartialDate, YearlessDate } from './dates.js';
+import { displayDate } from './model.js';
+
+const table = JSON.parse(readFileSync(new URL('./date-cases.json', import.meta.url), 'utf8'));
+
+test('every stored shape parses and reads the same as in Kotlin', () => {
+  assert.strictEqual(table.format, 1);
+  for (const c of table.parse) {
+    const parsed = parseRecordedDate(c.text);
+    if (c.kind === null) {
+      assert.strictEqual(parsed, null, `expected ${JSON.stringify(c.text)} to be refused`);
+      continue;
+    }
+    const expected = c.kind === 'calendar' ? PartialDate : YearlessDate;
+    assert.ok(parsed instanceof expected, `${c.text} should be ${c.kind}`);
+    assert.strictEqual(parsed.serialize(), c.serialized, c.text);
+    assert.strictEqual(displayDate(c.text.trim()), c.display, c.text);
+  }
+});
+
+test('compatibility agrees with the table in both directions', () => {
+  for (const [a, b, expected] of table.compatible) {
+    assert.strictEqual(parseRecordedDate(a).isCompatibleWith(parseRecordedDate(b)), expected, `${a} ~ ${b}`);
+    assert.strictEqual(parseRecordedDate(b).isCompatibleWith(parseRecordedDate(a)), expected, `${b} ~ ${a}`);
+  }
+});
+
+test('a yearless date stays unknown where the question is when', () => {
+  assert.strictEqual(parsePartialDate('--04-17'), null);
+});

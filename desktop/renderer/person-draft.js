@@ -13,7 +13,7 @@
  * longer living" pull on each other.
  */
 
-import { parsePartialDate } from '../../site/playground/dates.js';
+import { PartialDate, parseRecordedDate } from '../../site/playground/dates.js';
 
 /** Why a date somebody typed cannot be kept. The Kotlin's `DateProblem`, by name. */
 export const DateProblem = Object.freeze({
@@ -61,14 +61,16 @@ export function withChange(draft, key, value) {
 export function dateProblems(draft) {
   const birthText = String(draft.birthDate ?? '').trim();
   const deathText = String(draft.deathDate ?? '').trim();
-  const birth = parsePartialDate(birthText);
-  const death = parsePartialDate(deathText);
+  const birth = parseRecordedDate(birthText);
+  const death = parseRecordedDate(deathText);
 
   const problems = {
     birthDate: birthText && !birth ? DateProblem.MALFORMED : null,
     deathDate: deathText && !death ? DateProblem.MALFORMED : null,
   };
-  if (!problems.deathDate && birth && death && death.latest() < birth.earliest()) {
+  // Only two calendar dates can be out of order: a birthday with no year (#90) orders nothing.
+  if (!problems.deathDate && birth instanceof PartialDate && death instanceof PartialDate
+    && death.latest() < birth.earliest()) {
     problems.deathDate = DateProblem.DEATH_BEFORE_BIRTH;
   }
   return problems;

@@ -67,7 +67,8 @@ data class Person(
      */
     fun age(today: LocalDate = LocalDate.now()): Int? {
         val born = birth ?: return null
-        val end = death ?: if (deceased) return null else PartialDate(today.year, today.monthValue, today.dayOfMonth)
+        // A death date without a year (#90) still says they died, so no age is counted to today.
+        val end = death ?: if (isNoLongerLiving) return null else PartialDate(today.year, today.monthValue, today.dayOfMonth)
         return yearsBetween(born, end)
     }
 }

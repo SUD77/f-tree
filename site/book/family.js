@@ -39,13 +39,18 @@ export const byKey = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 export function lifeLine(p, { livingDates = false } = {}) {
   if (p.deceased) {
     const b = displayDate(p.birthDate), d = displayDate(p.deathDate);
-    if (b && d) return `${b} – ${d}`;
+    // A range only between two dates that both have a year: "17 April – 3 May 1978" would read as
+    // one spring when the birthday's year is simply not known (#90).
+    if (b && d && year(p.birthDate) && year(p.deathDate)) return `${b} – ${d}`;
+    if (b && d) return `Born ${b} · Died ${d}`;
     if (b) return `Born ${b}`;
     if (d) return `Died ${d}`;
     return 'Late';
   }
-  if (!p.birthDate) return '';
-  return `Born ${livingDates ? displayDate(p.birthDate) : year(p.birthDate)}`;
+  // Nothing rather than "Born null" when the record holds no year: the living keep only a year,
+  // and a birthday without one is the more private half, not a substitute for it.
+  const born = livingDates ? displayDate(p.birthDate) : year(p.birthDate);
+  return born ? `Born ${born}` : '';
 }
 
 /** The short form under a name on the tree page: years only, whatever the setting. */

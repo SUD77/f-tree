@@ -179,6 +179,21 @@ class FamilyDatabaseTest {
     }
 
     @Test
+    fun aBirthdayWithNoYearSaysNothingAboutBirthOrder() = runTest {
+        // #90: `-` sorts before every digit, so as text "--04-17" would be listed as the eldest.
+        person("me")
+        person("birthday", "Birthday only", birth = "--04-17")
+        person("youngest", "Youngest", birth = "2015")
+        person("eldest", "Eldest", birth = "2005")
+        listOf("birthday", "youngest", "eldest").forEach { parentOf("me", it) }
+
+        assertEquals(
+            listOf("Eldest", "Youngest", "Birthday only"),
+            edges.observeChildren("me").first().map { it.name },
+        )
+    }
+
+    @Test
     fun siblingsAreDerivedFromSharedParents() = runTest {
         person("father"); person("mother")
         person("me", "Me"); person("sister", "Sister")

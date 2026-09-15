@@ -261,6 +261,12 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("policyCasesInputs")
         .optional()
 
+    /* `DateCasesTest`: the date grammar's shared table (#90), read by `dates.test.mjs` too. */
+    inputs.files(rootProject.file("site/playground/date-cases.json"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("dateCasesInputs")
+        .optional()
+
     /* The same again for `BookCatalogTest`: the catalogue's shared table, and the format it gates on. */
     inputs.files(
         rootProject.file("site/book/catalog-cases.json"),

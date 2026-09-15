@@ -10,7 +10,7 @@ be written against a checked-in history.
 | `id` | TEXT PK | UUID |
 | `name` | TEXT? | **null means unknown** — the placeholder mechanism |
 | `gender` | TEXT | `MALE`/`FEMALE`/`OTHER`/`UNSPECIFIED`; only ever used to choose a word |
-| `birthDate` | TEXT? | partial ISO-8601: `1938`, `1938-04`, `1938-04-17` |
+| `birthDate` | TEXT? | partial ISO-8601: `1938`, `1938-04`, `1938-04-17`, or `--04-17` when the year is not known |
 | `deathDate` | TEXT? | same |
 | `deceased` | INT | someone can be known dead on an unknown date, so this is not derived |
 | `photoId` | TEXT? | file name within `files/photos/`, never a path |

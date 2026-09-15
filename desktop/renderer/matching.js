@@ -15,7 +15,7 @@
  * database. `matching.test.js` is the Kotlin's own test table.
  */
 
-import { parsePartialDate } from '../../site/playground/dates.js';
+import { parseRecordedDate } from '../../site/playground/dates.js';
 
 /** How confident we are that an imported person is somebody already here. */
 export const MatchTier = Object.freeze({
@@ -79,13 +79,15 @@ const evidence = ({ sameName = false, datesAgree = false, sharedRelatives = 0,
  * wrong. Dates only ever veto here; they never qualify.
  */
 function score(record, candidate, importedGraph, localGraph, settled) {
-  const importedBirth = parsePartialDate(record.birthDate);
-  const localBirth = parsePartialDate(candidate.birthDate);
+  // parseRecordedDate rather than parsePartialDate: a birthday with no year still vetoes when it
+  // disagrees ("--04-17" is nobody born 1938-05), and losing that veto is the unsafe way round.
+  const importedBirth = parseRecordedDate(record.birthDate);
+  const localBirth = parseRecordedDate(candidate.birthDate);
   const bothKnown = Boolean(importedBirth && localBirth);
   if (bothKnown && !importedBirth.isCompatibleWith(localBirth)) return null;
 
-  const importedDeath = parsePartialDate(record.deathDate);
-  const localDeath = parsePartialDate(candidate.deathDate);
+  const importedDeath = parseRecordedDate(record.deathDate);
+  const localDeath = parseRecordedDate(candidate.deathDate);
   if (importedDeath && localDeath && !importedDeath.isCompatibleWith(localDeath)) return null;
 
   const localNeighbours = localGraph.get(candidate.id) ?? new Set();

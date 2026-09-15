@@ -48,6 +48,22 @@ photos/<photoId>.jpg
 ZIP rather than one large JSON: base64-encoding a few hundred photographs would inflate them by a
 third and force the whole tree through memory to read one person's name.
 
+**Dates.** `birthDate` and `deathDate` are text in one of four shapes. The precision is itself the
+record of how much is known, so there is no separate "approximate" flag:
+
+| Shape | Means |
+|---|---|
+| `1938` | sometime in 1938 |
+| `1938-04` | sometime in April 1938 |
+| `1938-04-17` | that day |
+| `--04-17` | 17 April, year not known — the ISO 8601 / vCard form for a day of the year |
+
+The last shape arrived in Android 0.10.0-beta.2 and desktop 0.8.0-beta.2 (#90) *without* a version
+bump, on purpose. Every earlier reader refuses it as a date, treats the person's date as unknown, and
+keeps the string exactly as written, so the file still opens everywhere and nothing is lost on the way
+back. Raising `version` would have made those readers refuse every file, including the great majority
+that hold no such date. A month without a year or a day (`--04`) is not a valid date.
+
 **Compatibility.** Every field but `format` and `version` is optional, and unknown keys are ignored
 on read, so a file written by a future release still opens. Those two are always written even though
 they equal their defaults, because they are how a reader knows what it is holding. A file claiming a

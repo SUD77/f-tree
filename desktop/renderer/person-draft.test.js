@@ -157,3 +157,11 @@ test('a value that needs nothing done comes back unchanged', () => {
   assert.deepStrictEqual(typed('1938-04-17', 4), { value: '1938-04-17', caret: 4 });
   assert.deepStrictEqual(typed('', 0), { value: '', caret: 0 });
 });
+
+test('a birthday with no year is a date, and orders nothing (#90)', () => {
+  // A person holding "--04-17" must stay editable: this used to refuse even a change to the name.
+  assert.deepStrictEqual(dateProblems({ ...blank, name: 'Asha', birthDate: '--04-17' }),
+    { birthDate: null, deathDate: null });
+  assert.strictEqual(dateProblems({ ...blank, birthDate: '--12-31', deathDate: '--01-01' }).deathDate, null);
+  assert.strictEqual(dateProblems({ ...blank, birthDate: '--02-30' }).birthDate, DateProblem.MALFORMED);
+});
