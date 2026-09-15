@@ -136,6 +136,9 @@ object DateEntry {
         val digits = text.filter(Char::isDigit)
         // A separator only counts in text that is otherwise digits: pasted words are not a keystroke.
         val separated = text.any { it in SEPARATORS } && text.all { it.isDigit() || it in SEPARATORS }
+        // Padding and moving on answer a digit typed, never one deleted: backspacing `17` to `7` is
+        // on the way to a different day, not a request for the 7th.
+        val grew = digits.length > parts[slot].length
 
         return when (slot) {
             DateSlot.YEAR -> {
@@ -152,7 +155,7 @@ object DateEntry {
                 val month = digits.take(2)
                 val spill = digits.drop(2)
                 when {
-                    month.length == 1 && (month[0] >= '2' || separated) ->
+                    month.length == 1 && ((grew && month[0] >= '2') || separated) ->
                         DateEdit(parts.copy(month = "0$month"), DateSlot.DAY)
                     month.isEmpty() && separated -> DateEdit(parts.copy(month = ""), DateSlot.DAY)
                     month.length == 2 && spill.isNotEmpty() && parts.day.isEmpty() ->
@@ -164,7 +167,7 @@ object DateEntry {
             }
             DateSlot.DAY -> {
                 val day = digits.take(2)
-                if (day.length == 1 && (day[0] >= '4' || separated)) {
+                if (day.length == 1 && ((grew && day[0] >= '4') || separated)) {
                     DateEdit(parts.copy(day = "0$day"), DateSlot.DAY)
                 } else {
                     DateEdit(parts.copy(day = day), DateSlot.DAY)

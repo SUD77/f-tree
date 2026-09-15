@@ -111,13 +111,15 @@ class PersonFlowTest {
     }
 
     @Test
-    fun aMalformedDateBlocksSaving() {
+    fun anImpossibleDateBlocksSaving() {
         rule.onNodeWithText("Add your first person").performClick()
         rule.waitForIdle()
-        rule.onNodeWithTag(EditBornFieldTag).performTextInput("not a date")
+        // The field takes digits only (#90), so the way to type something that is not a date is a
+        // month that does not exist - said at once, because the month slot is complete.
+        rule.onNodeWithTag(EditBornFieldTag).performTextInput("1938-13")
         rule.waitForIdle()
 
-        rule.onNodeWithText("Use a year like 1938, or 1938-04-17").assertIsDisplayed()
+        rule.onNodeWithText("Months run from 01 to 12").assertIsDisplayed()
         rule.onNodeWithTag(EditSaveTag).performScrollTo().assertIsNotEnabled()
     }
 

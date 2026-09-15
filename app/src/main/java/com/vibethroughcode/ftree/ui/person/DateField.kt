@@ -1,6 +1,11 @@
 package com.vibethroughcode.ftree.ui.person
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
@@ -69,7 +74,7 @@ fun dateSlotTag(tag: String, slot: DateSlot): String = if (slot == DateSlot.YEAR
  * date back as it will be kept — "17 April 1938" — which is what catches a month and day typed the
  * wrong way round, a mistake no validation can see.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DateField(
     value: String,
@@ -83,6 +88,14 @@ fun DateField(
     val focused by interaction.collectIsFocusedAsState()
     val requesters = remember { DateSlot.entries.associateWith { FocusRequester() } }
     var pendingFocus by remember { mutableStateOf<DateSlot?>(null) }
+
+    // The read-back line is the point of the field, so the whole of it - not only the slot with the
+    // caret, which is all a text field brings into view by itself - is kept above the keyboard.
+    val whole = remember { BringIntoViewRequester() }
+    val keyboard = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(focused, keyboard) {
+        if (focused) whole.bringIntoView()
+    }
 
     LaunchedEffect(pendingFocus) {
         pendingFocus?.let { requesters.getValue(it).requestFocus() }
@@ -121,103 +134,111 @@ fun DateField(
     )
     val errorText = shown?.let { problemText(it, value) }
 
-    OutlinedTextFieldDefaults.DecorationBox(
-        value = value,
-        innerTextField = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // A tap on the field but between or beside the slots lands where typing would.
-                    .clickable(interactionSource = null, indication = null) {
-                        pendingFocus = when {
-                            parts.isEmpty -> DateSlot.YEAR
-                            parts.month.isNotEmpty() || parts.day.isNotEmpty() -> DateSlot.DAY
-                            else -> DateSlot.MONTH
+    Box(Modifier.bringIntoViewRequester(whole)) {
+        OutlinedTextFieldDefaults.DecorationBox(
+            value = value,
+            innerTextField = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // A tap on the field but between or beside the slots lands where typing would.
+                        .clickable(interactionSource = null, indication = null) {
+                            pendingFocus = when {
+                                parts.isEmpty -> DateSlot.YEAR
+                                parts.month.isNotEmpty() || parts.day.isNotEmpty() -> DateSlot.DAY
+                                else -> DateSlot.MONTH
+                            }
+                        },
+                ) {
+                    DateSlot.entries.forEach { slot ->
+                        if (slot != DateSlot.YEAR) {
+                            // Ink once the slot after it holds digits, so a finished date reads as one
+                            // date; faint while it is still only the shape of one.
+                            Text(
+                                text = "-",
+                                style = style,
+                                color = when {
+                                    !active -> style.color.copy(alpha = 0f)
+                                    parts[slot].isNotEmpty() -> style.color
+                                    else -> ghost
+                                },
+                            )
                         }
-                    },
-            ) {
-                DateSlot.entries.forEach { slot ->
-                    if (slot != DateSlot.YEAR) {
-                        Text(
-                            text = "-",
-                            style = style,
-                            color = if (active) ghost else style.color.copy(alpha = 0f),
+                        // Each slot keeps its own caret, started afresh at the end whenever a rule rather
+                        // than a keystroke sets the text (`4` becoming `04`): that is where the next digit goes.
+                        val text = parts[slot]
+                        var field by remember(text) { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+                        BasicTextField(
+                            value = field,
+                            onValueChange = { next ->
+                                if (next.text == field.text) {
+                                    field = next // the caret moved; nothing was typed
+                                } else {
+                                    apply(DateEntry.enter(parts, slot, next.text), slot)
+                                }
+                            },
+                            singleLine = true,
+                            textStyle = style,
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next,
+                            ),
+                            interactionSource = interaction,
+                            decorationBox = { inner ->
+                                Box {
+                                    if (field.text.isEmpty() && active) Text(ghosts.getValue(slot), style = style, color = ghost)
+                                    inner()
+                                }
+                            },
+                            modifier = Modifier
+                                .width(slotWidth(if (slot == DateSlot.YEAR) 4 else 2))
+                                .focusRequester(requesters.getValue(slot))
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    val caret = field.selection
+                                    when {
+                                        event.key == Key.Backspace && field.text.isEmpty() && slot != DateSlot.YEAR -> {
+                                            apply(DateEntry.backspace(parts, slot), slot)
+                                            true
+                                        }
+                                        event.key == Key.DirectionLeft && caret.collapsed && caret.start == 0 &&
+                                            slot != DateSlot.YEAR -> {
+                                            pendingFocus = DateSlot.entries[slot.ordinal - 1]
+                                            true
+                                        }
+                                        event.key == Key.DirectionRight && caret.collapsed &&
+                                            caret.start == field.text.length && slot != DateSlot.DAY -> {
+                                            pendingFocus = DateSlot.entries[slot.ordinal + 1]
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                }
+                                .semantics {
+                                    contentDescription = names.getValue(slot)
+                                    if (errorText != null) error(errorText)
+                                }
+                                .testTag(dateSlotTag(tag, slot)),
                         )
                     }
-                    // Each slot keeps its own caret, started afresh at the end whenever a rule rather
-                    // than a keystroke sets the text (`4` becoming `04`): that is where the next digit goes.
-                    val text = parts[slot]
-                    var field by remember(text) { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
-                    BasicTextField(
-                        value = field,
-                        onValueChange = { next ->
-                            if (next.text == field.text) {
-                                field = next // the caret moved; nothing was typed
-                            } else {
-                                apply(DateEntry.enter(parts, slot, next.text), slot)
-                            }
-                        },
-                        singleLine = true,
-                        textStyle = style,
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next,
-                        ),
-                        interactionSource = interaction,
-                        decorationBox = { inner ->
-                            Box {
-                                if (field.text.isEmpty() && active) Text(ghosts.getValue(slot), style = style, color = ghost)
-                                inner()
-                            }
-                        },
-                        modifier = Modifier
-                            .width(slotWidth(if (slot == DateSlot.YEAR) 4 else 2))
-                            .focusRequester(requesters.getValue(slot))
-                            .onPreviewKeyEvent { event ->
-                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                val caret = field.selection
-                                when {
-                                    event.key == Key.Backspace && field.text.isEmpty() && slot != DateSlot.YEAR -> {
-                                        apply(DateEntry.backspace(parts, slot), slot)
-                                        true
-                                    }
-                                    event.key == Key.DirectionLeft && caret.collapsed && caret.start == 0 &&
-                                        slot != DateSlot.YEAR -> {
-                                        pendingFocus = DateSlot.entries[slot.ordinal - 1]
-                                        true
-                                    }
-                                    event.key == Key.DirectionRight && caret.collapsed &&
-                                        caret.start == field.text.length && slot != DateSlot.DAY -> {
-                                        pendingFocus = DateSlot.entries[slot.ordinal + 1]
-                                        true
-                                    }
-                                    else -> false
-                                }
-                            }
-                            .semantics {
-                                contentDescription = names.getValue(slot)
-                                if (errorText != null) error(errorText)
-                            }
-                            .testTag(dateSlotTag(tag, slot)),
-                    )
                 }
-            }
-        },
-        enabled = true,
-        singleLine = true,
-        visualTransformation = VisualTransformation.None,
-        interactionSource = interaction,
-        isError = shown != null,
-        label = { Text(label) },
-        supportingText = {
-            Text(
-                text = errorText ?: readBack(value, problem) ?: stringResource(R.string.edit_date_support),
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        },
-    )
+            },
+            enabled = true,
+            singleLine = true,
+            visualTransformation = VisualTransformation.None,
+            interactionSource = interaction,
+            isError = shown != null,
+            label = { Text(label) },
+            supportingText = {
+                Text(
+                    text = errorText ?: readBack(value, problem) ?: stringResource(R.string.edit_date_support),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            },
+        )
+    }
 }
 
 /** The date as it will be kept, in words; null while there is nothing whole to read back. */
