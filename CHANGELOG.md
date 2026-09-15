@@ -10,6 +10,20 @@ betas leading up to a stable release are folded into that release's entry here.
 
 ## [Unreleased]
 
+**Dates you just type, and birthdays nobody remembers the year of (#90).**
+
+- **Type a date as digits, on Android (0.10.0-beta.2) and desktop (0.8.0-beta.2).** The date
+  field is three slots — `YYYY-MM-DD` — with the hyphens already there, and on a phone it opens
+  the number pad. `19380417` is the whole gesture; no hunting for `-` behind a keyboard switch,
+  which is what a user asked for.
+- **A birthday without a year.** Leave the year empty and the day is kept as `17 April`; tap the
+  year later to add it. Death dates work the same way. Stored as `--04-17`, the standard form, and
+  files stay openable by every earlier version, which reads such a date as unknown.
+- **The date is read back as you type it** — "17 April 1938" — which catches a month and day
+  swapped. Mistakes are named ("April has 30 days") and wait until you have finished typing.
+- Fixed along the way: a child with a yearless birthday was listed as the eldest; the family book
+  could print "Born null"; duplicate matching now treats two birthdays that disagree as two people.
+
 **A family book: the whole tree, designed and printable, made to be handed around.**
 
 - **The family book, on Android (0.10.0-beta.1) and desktop (0.8.0-beta.1) — a beta feature.** A
