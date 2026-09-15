@@ -6,6 +6,11 @@ import com.vibethroughcode.ftree.data.FTreeDatabase
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.KinshipPreferences
 import com.vibethroughcode.ftree.data.PhotoStore
+import com.vibethroughcode.ftree.entitlement.EntitlementSource
+import com.vibethroughcode.ftree.entitlement.FreeForEveryone
+import com.vibethroughcode.ftree.entitlement.Policy
+import com.vibethroughcode.ftree.entitlement.PolicyAssets
+import com.vibethroughcode.ftree.entitlement.UsageLedger
 import com.vibethroughcode.ftree.nearby.LanTransport
 import com.vibethroughcode.ftree.nearby.NearbyIdentity
 import com.vibethroughcode.ftree.nearby.NearbyPreferences
@@ -56,6 +61,22 @@ class AppContainer(context: Context) {
     val updatePreferences: UpdatePreferences by lazy { UpdatePreferences(context) }
     val chartPreferences: ChartPreferences by lazy { ChartPreferences(context) }
     val kinshipPreferences: KinshipPreferences by lazy { KinshipPreferences(context) }
+
+    /**
+     * The policy switch (#156). Nothing calls `Entitlements.decide` yet -- that starts with the
+     * family book itself (#155 onward) -- but every piece it will need is already wired here,
+     * lazily like everything else, so wiring it into a screen later is the whole of the work.
+     *
+     * [entitlementPolicy] is read from `assets/book/policy.json` once and held rather than
+     * re-parsed per call; a missing or unreadable asset comes back `null`, which
+     * `Entitlements.decide` already treats as "allow everything" (see its own doc comment for why).
+     * [entitlementSource] has exactly one implementation today -- there is no account to be on any
+     * other plan -- and [usageLedger] is local, resettable, and records nothing until something
+     * calls it.
+     */
+    val entitlementPolicy: Policy? by lazy { PolicyAssets.loadShippedPolicy(context.applicationContext) }
+    val entitlementSource: EntitlementSource by lazy { FreeForEveryone }
+    val usageLedger: UsageLedger by lazy { UsageLedger(context.applicationContext) }
 
     /**
      * Built lazily like everything else, which also means the updater's objects do not exist at

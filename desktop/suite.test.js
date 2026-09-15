@@ -21,11 +21,11 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 // The scripts that run tests, and the directories a test file may live in. Both are stated
 // rather than discovered, so adding either is a deliberate edit to this file.
 //
-// `../site/playground` is here because the shared engine's tests run from this package: `site/`
-// has no package.json of its own, so there is nowhere else for them to be run from, and a rule
-// ported out of the Kotlin into the engine is exactly as able to go unrun as one ported into the
-// renderer. The extension differs -- `.test.mjs` there, because those files must be modules
-// whatever the directory above them says.
+// `../site/playground` and `../site/book` are here because the shared engines' tests run from
+// this package: `site/` has no package.json of its own, so there is nowhere else for them to be
+// run from, and a rule ported out of the Kotlin into one of those engines is exactly as able to
+// go unrun as one ported into the renderer. The extension differs -- `.test.mjs` there, because
+// those files must be modules whatever the directory above them says.
 const RUNNERS = ['test', 'test:package'];
 //
 // `renderer/vendor` holds files that are not ours -- the QR encoder, byte-for-byte upstream -- and
@@ -37,6 +37,7 @@ const TEST_DIRS = [
   { dir: 'renderer', suffix: '.test.js' },
   { dir: 'renderer/vendor', suffix: '.test.js' },
   { dir: '../site/playground', suffix: '.test.mjs' },
+  { dir: '../site/book', suffix: '.test.mjs' },
 ];
 
 function testFiles() {

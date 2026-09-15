@@ -19,6 +19,7 @@
 | [**Architecture**](architecture.md) | The graph model, chart layout, kinship rules, photo pipeline, accessibility, and the design decisions table |
 | [**Data model**](data-model.md) | Tables, fields and migrations |
 | [**Nearby sharing: the protocol**](nearby-protocol.md) | The beacon, the handshake, the six digits and the frames — the contract the Kotlin and the JavaScript both have to satisfy |
+| [**The policy switch**](premium.md) | The one place the app asks what a reader may do, and how much of it — gate presentation, never data |
 | [**Fonts**](fonts.md) | Literata and JetBrains Mono, and why they are bundled |
 | [**Site and browser viewer**](site.md) | The landing page and the dependency-free `.ftree` reader |
 | [**Contributing**](../CONTRIBUTING.md) | Where to start, and how a change gets reviewed |
