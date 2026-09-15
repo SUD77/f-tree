@@ -349,6 +349,13 @@ content that refusal exists for. `backgroundThrottling: false` matters here spec
 throttles a backgrounded page's timers by default, and without this the wait for
 `document.fonts.ready` below can stall in a way that is intermittent and hard to reproduce.
 
+The document the print window loads also carries its own Content-Security-Policy —
+`default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'` — on top of the
+session-level network refusal above. Belt and braces: the session refusal is what actually stops
+a request from leaving, but the CSP means the page cannot even *ask* for anything beyond an inline
+style and a `data:` image or font, which is all a page built entirely from inlined SVG and
+`data:`-URL fonts ever needs.
+
 **Fonts, and the Devanagari gotcha.** The three book fonts (`docs/fonts.md`) are inlined as `data:`
 URLs the same way Literata and JetBrains Mono are (`bookFontCss`, beside `localFontCss`) — read
 once from the same `app/src/main/res/font/` directory the existing `*.ttf` packaging glob already
@@ -442,6 +449,24 @@ FTREE_SMOKE=/path/to/tree.ftree npm run smoke
 
 A desktop app is the one thing in this repository that cannot be checked by reading it: the shell,
 the preload bridge and the viewer only meet each other once a window exists.
+
+Each feature section is its own switch on top of the base smoke test, run only when its variable is
+set (`smoke-gates.test.js` fails if this list and the harness's own gates disagree). The family
+book's is `FTREE_SMOKE_BOOK`, which opens the dialog from the menu, checks every shipped template
+offers a chip, sets a Devanagari title, saves a real PDF to `FTREE_SMOKE_BOOK_SAVE_TO` — the same
+kind of narrow, env-gated seam `FTREE_SMOKE_SAVE_TO` is above, since a native save dialog cannot be
+driven from a script — and then reads that PDF back to check it starts with `%PDF`, has one page
+per composed page, embeds real (`/FontFile2`) rather than outline (`/Type3`) fonts, and stays under
+the 10 MB budget:
+
+```sh
+FTREE_SMOKE=/path/to/tree.ftree FTREE_SMOKE_BOOK=1 \
+  FTREE_SMOKE_BOOK_SAVE_TO=/tmp/book-smoke.pdf npm run smoke
+```
+
+CI runs this beside every other feature section — see `.github/workflows/desktop.yml` for the full
+set of `FTREE_SMOKE_*` variables it sets, once against the source tree and once against the packaged
+app.
 
 ## Building installers
 

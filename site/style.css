@@ -775,6 +775,24 @@ h2.rule-label,
 .shot-narrow { max-width: 360px; }
 .shot-card { max-width: 400px; }
 
+/* Three sample book pages, side by side; two, then one alone, once a phone can't fit three. */
+.book-pages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.book-pages figure { margin: 0; }
+.book-pages figcaption {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  text-align: center;
+}
+@media (max-width: 520px) {
+  .book-pages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* --------------------------------------------------------------- the demo */
 /*
  * A screen recording of the shipped app, framed exactly like a screenshot so the section
