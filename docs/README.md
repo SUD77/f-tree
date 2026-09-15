@@ -21,6 +21,7 @@
 | [**Nearby sharing: the protocol**](nearby-protocol.md) | The beacon, the handshake, the six digits and the frames — the contract the Kotlin and the JavaScript both have to satisfy |
 | [**The policy switch**](premium.md) | The one place the app asks what a reader may do, and how much of it — gate presentation, never data |
 | [**Fonts**](fonts.md) | Literata and JetBrains Mono, and why they are bundled |
+| [**The family book**](family-book.md) | The designed PDF: one composer, two painters, the Book format and the template rules |
 | [**Site and browser viewer**](site.md) | The landing page and the dependency-free `.ftree` reader |
 | [**Contributing**](../CONTRIBUTING.md) | Where to start, and how a change gets reviewed |
 | [**Security policy**](../SECURITY.md) | What is in scope, and how to report privately |

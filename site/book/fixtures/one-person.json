@@ -1,0 +1,18 @@
+{
+ "format": "f-tree",
+ "version": 1,
+ "people": [
+  {
+   "id": "only",
+   "name": "Meera Nair",
+   "gender": "FEMALE",
+   "birthDate": "1994-06-02",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  }
+ ],
+ "relationships": []
+}

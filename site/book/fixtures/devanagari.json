@@ -1,0 +1,456 @@
+{
+ "format": "f-tree",
+ "version": 1,
+ "people": [
+  {
+   "id": "g1",
+   "name": "रामप्रसाद शर्मा",
+   "gender": "MALE",
+   "birthDate": "1921-03-14",
+   "deathDate": "1994-11-02",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "g2",
+   "name": "सावित्री देवी",
+   "gender": "FEMALE",
+   "birthDate": "1926",
+   "deathDate": "2009-01-20",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "g0",
+   "name": null,
+   "gender": "MALE",
+   "birthDate": null,
+   "deathDate": "1960",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p1",
+   "name": "विनोद कुमार शर्मा",
+   "gender": "MALE",
+   "birthDate": "1948-07-09",
+   "deathDate": "2017-05-11",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p2",
+   "name": "कृष्णा शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "1952-02-01",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p3",
+   "name": "सुधा त्रिपाठी",
+   "gender": "FEMALE",
+   "birthDate": "1951",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p4",
+   "name": "अनिल त्रिपाठी",
+   "gender": "MALE",
+   "birthDate": "1947",
+   "deathDate": "2020",
+   "deceased": true,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p5",
+   "name": "राजेश शर्मा",
+   "gender": "MALE",
+   "birthDate": "1955-12-25",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "p6",
+   "name": "मीनाक्षी शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "1958",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c1",
+   "name": "आरव शर्मा",
+   "gender": "MALE",
+   "birthDate": "1976-04-18",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c2",
+   "name": "प्रिया शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "1979-08-30",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c3",
+   "name": "क्षितिज त्रिपाठी",
+   "gender": "MALE",
+   "birthDate": "1978",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c4",
+   "name": "अनन्या त्रिपाठी",
+   "gender": "FEMALE",
+   "birthDate": "1982-10-05",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c5",
+   "name": "ज्ञानेश्वर शर्मा",
+   "gender": "MALE",
+   "birthDate": "1984-01-12",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c6",
+   "name": "श्रेया शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "1987",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "c7",
+   "name": "ज़ोया शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "1981",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "k1",
+   "name": "कबीर शर्मा",
+   "gender": "MALE",
+   "birthDate": "2006-06-06",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "k2",
+   "name": "ईशा शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "2009-02-14",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "k3",
+   "name": "विहान त्रिपाठी",
+   "gender": "MALE",
+   "birthDate": "2012-11-11",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "k4",
+   "name": "तारा शर्मा",
+   "gender": "FEMALE",
+   "birthDate": "2015-03-08",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  },
+  {
+   "id": "k5",
+   "name": "अद्वैत शर्मा",
+   "gender": "MALE",
+   "birthDate": "2019-09-19",
+   "deathDate": null,
+   "deceased": false,
+   "photo": null,
+   "notes": null,
+   "origins": []
+  }
+ ],
+ "relationships": [
+  {
+   "id": "r0",
+   "from": "g0",
+   "to": "g1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r1",
+   "from": "g1",
+   "to": "g2",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r2",
+   "from": "g1",
+   "to": "p1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r3",
+   "from": "g2",
+   "to": "p1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r4",
+   "from": "g1",
+   "to": "p3",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r5",
+   "from": "g2",
+   "to": "p3",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r6",
+   "from": "g1",
+   "to": "p5",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r7",
+   "from": "g2",
+   "to": "p5",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r8",
+   "from": "p1",
+   "to": "p2",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r9",
+   "from": "p3",
+   "to": "p4",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r10",
+   "from": "p5",
+   "to": "p6",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r11",
+   "from": "p1",
+   "to": "c1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r12",
+   "from": "p2",
+   "to": "c1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r13",
+   "from": "p1",
+   "to": "c2",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r14",
+   "from": "p2",
+   "to": "c2",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r15",
+   "from": "p3",
+   "to": "c3",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r16",
+   "from": "p4",
+   "to": "c3",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r17",
+   "from": "p3",
+   "to": "c4",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r18",
+   "from": "p4",
+   "to": "c4",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r19",
+   "from": "p5",
+   "to": "c5",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r20",
+   "from": "p6",
+   "to": "c5",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r21",
+   "from": "p5",
+   "to": "c6",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r22",
+   "from": "p6",
+   "to": "c6",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r23",
+   "from": "c1",
+   "to": "c7",
+   "type": "SPOUSE",
+   "subtype": null
+  },
+  {
+   "id": "r24",
+   "from": "c1",
+   "to": "k1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r25",
+   "from": "c7",
+   "to": "k1",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r26",
+   "from": "c1",
+   "to": "k2",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r27",
+   "from": "c7",
+   "to": "k2",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r28",
+   "from": "c4",
+   "to": "k3",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r29",
+   "from": "c5",
+   "to": "k4",
+   "type": "PARENT",
+   "subtype": null
+  },
+  {
+   "id": "r30",
+   "from": "c5",
+   "to": "k5",
+   "type": "PARENT",
+   "subtype": null
+  }
+ ]
+}
