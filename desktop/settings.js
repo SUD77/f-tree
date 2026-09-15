@@ -54,6 +54,18 @@ const DEFAULTS = Object.freeze({
    * real person's name to a whole cafe without ever saying so.
    */
   nearbyName: null,
+  /**
+   * How many times each family-book feature has been used on this machine, keyed by feature name
+   * (`"book.export"`, `"book.template"`) -- the desktop half of `UsageLedger` (#156). Nothing
+   * reads this yet; the shipped policy grants every feature in full, so no rule ever asks what it
+   * says. It exists now so a future quota rule is a data change, not a new place to start
+   * counting from zero for everybody already using the app.
+   *
+   * Local and resettable by design, same as the Android `SharedPreferences` copy: clearing this
+   * file (or reinstalling) forgets the count. That is accepted as a *soft* allowance -- see
+   * `docs/premium.md` -- not a security boundary this setting is pretending to be.
+   */
+  bookUsage: {},
 });
 
 /** The settings this app knows about, and what counts as a value for each. */
@@ -73,6 +85,21 @@ const SHAPE = {
    * that lets a device draw itself as somebody else's.
    */
   nearbyName: (v) => (typeof v === 'string' ? sanitiseName(v) : null),
+  /**
+   * Keys and values are both filtered rather than trusted, same as everywhere else here. The
+   * result is always a fresh object, never the same reference twice -- see the note in `normalise`
+   * about why that matters for this one setting in particular.
+   */
+  bookUsage: (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const out = {};
+    for (const [feature, count] of Object.entries(v)) {
+      if (typeof feature === 'string' && feature && Number.isInteger(count) && count >= 0) {
+        out[feature] = count;
+      }
+    }
+    return out;
+  },
 };
 
 /**
@@ -87,7 +114,12 @@ function normalise(stored) {
   const raw = stored && typeof stored === 'object' ? stored : {};
   const out = {};
   for (const [key, clean] of Object.entries(SHAPE)) {
-    out[key] = key in raw ? clean(raw[key]) : DEFAULTS[key];
+    // Every value is put through `clean`, even the default -- not just the ones present in `raw`.
+    // Every other default here is a primitive, where handing out `DEFAULTS[key]` directly and
+    // handing out `clean(DEFAULTS[key])` are the same thing. `bookUsage` defaults to `{}`, the one
+    // object-valued setting, and `clean` is what guarantees a caller who mutates the object they
+    // got back can never reach into `DEFAULTS.bookUsage` or into another caller's settings.
+    out[key] = clean(key in raw ? raw[key] : DEFAULTS[key]);
   }
   return out;
 }

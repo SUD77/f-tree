@@ -13,6 +13,39 @@ val signingProperties = rootProject.file("keystore.properties").takeIf { it.exis
     Properties().apply { it.inputStream().use(::load) }
 }
 
+/**
+ * Copies exactly `site/book/policy.json` into a variant's generated assets, at `book/policy.json`
+ * -- and nothing else in `site/book/`.
+ *
+ * `site/book/` is one shell-agnostic engine shared with desktop (#156, #200), and it will go on to
+ * hold a great deal more than this one file: the composer, page blocks, templates. A plain
+ * `assets.srcDir("site/book")` would stage all of it -- including `.test.mjs` files and, later,
+ * template art meant to be staged deliberately by a future issue, not by accident because it
+ * happened to live in the same directory as the policy. Naming the one file this task copies is
+ * what keeps that true.
+ *
+ * A dedicated task with a real `@OutputDirectory`, rather than a bare `Copy`, because
+ * `Sources.assets.addGeneratedSourceDirectory` wants a task whose output is a `DirectoryProperty`
+ * it can wire a task dependency to -- `Copy`'s destination is a plain `File` and cannot be wired
+ * that way.
+ */
+@CacheableTask
+abstract class SyncBookPolicyAsset : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val policyJson: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun sync() {
+        val destination = outputDir.get().asFile.resolve("book")
+        destination.mkdirs()
+        policyJson.get().asFile.copyTo(destination.resolve("policy.json"), overwrite = true)
+    }
+}
+
 android {
     namespace = "com.vibethroughcode.ftree"
     compileSdk = 37
@@ -92,6 +125,19 @@ android {
 // Emit the Room schema so migrations can be written against a checked-in history.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// One `site/book/policy.json` in git, staged into each variant's assets as `book/policy.json` by
+// `SyncBookPolicyAsset` above -- never a second copy checked in under app/src. See that class's
+// doc comment for why a plain `assets.srcDir` over the whole of `site/book/` is not used instead.
+androidComponents {
+    onVariants { variant ->
+        val syncTask = tasks.register<SyncBookPolicyAsset>("sync${variant.name.replaceFirstChar { it.uppercase() }}BookPolicyAsset") {
+            policyJson.set(rootProject.file("site/book/policy.json"))
+            outputDir.set(layout.buildDirectory.dir("generated/bookAssets/${variant.name}"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(syncTask) { it.outputDir }
+    }
 }
 
 kotlin {
@@ -188,5 +234,20 @@ tasks.withType<Test>().configureEach {
         rootProject.file("site/playground/model.js"),
     ).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("branchCrossLanguageInputs")
+        .optional()
+
+    /*
+     * `PolicyCasesTest` reads `site/book/policy.json` and `site/book/policy-cases.json` by a
+     * project-relative path, the same way it reads `entitlement/Entitlements.kt` through the
+     * compiled classpath and `CrossLanguageTransferTest` reads `sample-family.ftree` above --
+     * these two files are genuine inputs even though Gradle has no other reason to know that a
+     * plain JSON file feeds a JVM test. Without this, editing only the shared table would leave
+     * the task up to date and the new case would pass by not running.
+     */
+    inputs.files(
+        rootProject.file("site/book/policy.json"),
+        rootProject.file("site/book/policy-cases.json"),
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("policyCasesInputs")
         .optional()
 }

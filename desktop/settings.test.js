@@ -204,3 +204,63 @@ test('switching nearby sharing off does not forget the name', () => {
   assert.strictEqual(off.nearbySharing, false);
   assert.strictEqual(off.nearbyName, 'Study desk');
 });
+
+// ------------------------------------------------------------------ the book usage ledger (#156)
+
+test('nobody has used a book feature until the counter says otherwise', () => {
+  assert.deepStrictEqual(DEFAULT_SETTINGS.bookUsage, {});
+});
+
+test('a stored count survives normalisation', () => {
+  assert.deepStrictEqual(
+    normalise({ bookUsage: { 'book.export': 2, 'book.template': 1 } }).bookUsage,
+    { 'book.export': 2, 'book.template': 1 },
+  );
+});
+
+test('a settings file edited into nonsense gives an empty ledger, not a crash', () => {
+  // The same promise every other setting makes: a hand-edited or newer-version file starts this
+  // one fresh rather than behaving strangely. Nonsense here specifically must not read as "already
+  // used a great many times", which is the one wrong direction for a counter to fail in.
+  for (const bad of [null, undefined, 'a string', 42, [], ['book.export']]) {
+    assert.deepStrictEqual(normalise({ bookUsage: bad }).bookUsage, {});
+  }
+});
+
+test('a count for an unrecognised key is dropped, not kept as a stray entry', () => {
+  assert.deepStrictEqual(
+    normalise({ bookUsage: { '': 1, 'book.export': 'lots' } }).bookUsage,
+    {},
+  );
+});
+
+test('a negative or non-integer count is dropped rather than trusted', () => {
+  assert.deepStrictEqual(
+    normalise({ bookUsage: { 'book.export': -1, 'book.template': 1.5 } }).bookUsage,
+    {},
+  );
+});
+
+test('normalise never hands back the same bookUsage object twice', () => {
+  // DEFAULTS.bookUsage is the one non-primitive default this file has. Every other default is a
+  // value type, where handing it out by reference is indistinguishable from copying it -- an
+  // object is not, and a caller that mutated what normalise() gave them must never be able to
+  // reach DEFAULTS itself or another caller's settings through it.
+  const first = normalise({});
+  const second = normalise({});
+  assert.notStrictEqual(first.bookUsage, second.bookUsage);
+  assert.notStrictEqual(first.bookUsage, DEFAULT_SETTINGS.bookUsage);
+
+  first.bookUsage['book.export'] = 99;
+  assert.deepStrictEqual(second.bookUsage, {});
+  assert.deepStrictEqual(DEFAULT_SETTINGS.bookUsage, {});
+});
+
+test('applyChange replaces the whole ledger rather than merging into it', () => {
+  // Consistent with every other setting here: applyChange sets a key to what it is given. A
+  // caller that wants to record one more use reads the current count and writes the whole object
+  // back, the same shape record() will take once something in the app actually calls it.
+  const before = normalise({ bookUsage: { 'book.export': 1 } });
+  const after = applyChange(before, 'bookUsage', { 'book.export': 2 });
+  assert.deepStrictEqual(after.bookUsage, { 'book.export': 2 });
+});
