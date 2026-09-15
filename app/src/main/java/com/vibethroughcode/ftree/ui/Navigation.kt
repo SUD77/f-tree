@@ -45,3 +45,10 @@ data object SettingsRoute
 /** Picking who to attach to [anchorPersonId] as a [kind]. */
 @Serializable
 data class AddRelativeRoute(val anchorPersonId: String, val kind: RelativeKind)
+
+/**
+ * The family book. [scopePersonId] is set when it was opened from a person, which offers their
+ * branch as well as everyone.
+ */
+@Serializable
+data class BookRoute(val scopePersonId: String? = null)

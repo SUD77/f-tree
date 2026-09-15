@@ -1,0 +1,13 @@
+<!doctype html>
+<!--
+  The page the family book is composed in, inside a WebView nobody sees (book/BookComposer.kt).
+
+  It holds no content of its own: it loads the book's composer from the app's own assets, takes the
+  tree through the FTreeBook bridge, and hands the laid-out book back the same way. The policy below
+  is the second lock on the door - the WebView's own client already refuses every address but the
+  app's assets - and it says the same thing: scripts from here, and nothing else, ever.
+-->
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<script src="guard.js"></script>
+<script type="module" src="host.js"></script>

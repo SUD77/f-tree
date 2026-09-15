@@ -44,3 +44,15 @@
 -keep class com.vibethroughcode.ftree.transfer.** { *; }
 -keep class com.vibethroughcode.ftree.ui.*Route { *; }
 -keep class com.vibethroughcode.ftree.ui.*Route$* { *; }
+
+# --- the family book (#200) -------------------------------------------------------------------
+#
+# The Book is read from the composer's JSON by kotlinx-serialization, polymorphically on "t", and
+# the policy switch reads policy.json the same way; R8 renaming a field or a sealed subclass is a
+# book that cannot be read in release builds only. Kept whole, as the export document is.
+-keep class com.vibethroughcode.ftree.book.** { *; }
+-keep class com.vibethroughcode.ftree.entitlement.** { *; }
+# The WebView calls the bridge's methods by name. Stripped or renamed, the book never arrives.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

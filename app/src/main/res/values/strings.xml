@@ -582,4 +582,43 @@
         <item>tenth</item>
     </string-array>
 
+    <!--
+        The family book (#200). One screen, described once for both shells in docs/family-book.md;
+        keep the wording here and on the desktop the same.
+    -->
+    <string name="book_open">Family book</string>
+    <string name="book_open_description">Make a family book</string>
+    <string name="book_from_person">Family book from %1$s</string>
+    <string name="book_screen_title">Family book</string>
+    <string name="book_back">Back</string>
+    <string name="book_template">Template</string>
+    <string name="book_title_label">Title</string>
+    <string name="book_title_reset">Reset</string>
+    <string name="book_who">Who\'s in it</string>
+    <string name="book_who_everyone">Everyone</string>
+    <string name="book_who_branch">%1$s\'s branch</string>
+    <string name="book_details">In the book</string>
+    <string name="book_photos">Photographs</string>
+    <string name="book_photos_estimate">About %1$s</string>
+    <string name="book_photos_none">Nobody in the tree has a photograph yet</string>
+    <string name="book_living_dates">Full dates for living people</string>
+    <string name="book_living_dates_help">When off, living people show only the year they were born.</string>
+    <string name="book_share">Share</string>
+    <string name="book_save">Save to device</string>
+    <string name="book_share_chooser">Share the family book</string>
+    <string name="book_share_caption">%1$s, a family book made with f-tree.</string>
+    <string name="book_saved">Saved “%1$s”</string>
+    <string name="book_action_failed">The book could not be written: %1$s</string>
+    <string name="book_making">Making your book…</string>
+    <string name="book_writing">Writing the PDF…</string>
+    <string name="book_page_of">Page %1$d of %2$d</string>
+    <string name="book_page_description">Page %1$d of %2$d: %3$s</string>
+    <string name="book_empty">Add someone to the tree first. A family book is made from the people in it.</string>
+    <string name="book_failed_webview">The family book is laid out by Android System WebView, which is missing or switched off on this phone. Turn it on, or install it from the app store, and try again.</string>
+    <string name="book_failed_old_webview">The family book needs a newer Android System WebView than this phone has (%1$s). Update it from the app store and try again.</string>
+    <string name="book_failed_retry">Making the book stopped part-way. Go back and open it again.</string>
+    <string name="book_failed_script">The book could not be laid out. Report it from Settings, so it can be fixed.</string>
+    <string name="book_locked">This template isn\'t included. Choose another to make your book.</string>
+    <string name="book_limited">Part of this book is included: the rest appears once it is.</string>
+
 </resources>

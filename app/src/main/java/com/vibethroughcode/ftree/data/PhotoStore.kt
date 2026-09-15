@@ -121,6 +121,35 @@ class PhotoStore(private val context: Context) {
         }.getOrNull()
     }
 
+    /**
+     * A portrait for print: exactly [edgePx] square, in full colour, marked opaque.
+     *
+     * Not [thumbnail], whose RGB_565 is invisible on a phone-sized chart card and visible as
+     * banding on a printed face. Opaque, because the family book's PDF stores a bitmap losslessly
+     * and an alpha channel nobody uses would be stored too.
+     */
+    suspend fun printable(photoId: String, edgePx: Int): Bitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val path = file(photoId).takeIf { it.exists() }?.absolutePath ?: return@runCatching null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+            var sample = 1
+            while (min(bounds.outWidth, bounds.outHeight) / (sample * 2) >= edgePx) sample *= 2
+            val decoded = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }) ?: return@runCatching null
+            // Stored photographs are already square (see STORED_EDGE); a centre square guards any
+            // that arrived another way.
+            val side = min(decoded.width, decoded.height)
+            val square = if (decoded.width == decoded.height) decoded
+            else Bitmap.createBitmap(decoded, (decoded.width - side) / 2, (decoded.height - side) / 2, side, side)
+            val sized = if (side == edgePx) square else Bitmap.createScaledBitmap(square, edgePx, edgePx, true)
+            sized.apply { setHasAlpha(false) }
+        }.getOrNull()
+    }
+
     suspend fun delete(photoId: String?) = withContext(Dispatchers.IO) {
         if (photoId != null) file(photoId).delete()
         Unit

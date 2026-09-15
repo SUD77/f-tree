@@ -6,6 +6,8 @@ import com.vibethroughcode.ftree.data.FTreeDatabase
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.KinshipPreferences
 import com.vibethroughcode.ftree.data.PhotoStore
+import com.vibethroughcode.ftree.book.BookPrinter
+import com.vibethroughcode.ftree.book.BookTemplates
 import com.vibethroughcode.ftree.entitlement.EntitlementSource
 import com.vibethroughcode.ftree.entitlement.FreeForEveryone
 import com.vibethroughcode.ftree.entitlement.Policy
@@ -77,6 +79,10 @@ class AppContainer(context: Context) {
     val entitlementPolicy: Policy? by lazy { PolicyAssets.loadShippedPolicy(context.applicationContext) }
     val entitlementSource: EntitlementSource by lazy { FreeForEveryone }
     val usageLedger: UsageLedger by lazy { UsageLedger(context.applicationContext) }
+
+    /** The family book's fonts, photographs and PDF writer (#200). The composer is per screen. */
+    val bookPrinter: BookPrinter by lazy { BookPrinter(context.applicationContext, photoStore) }
+    val bookTemplates: BookTemplates by lazy { BookTemplates(context.applicationContext) }
 
     /**
      * Built lazily like everything else, which also means the updater's objects do not exist at

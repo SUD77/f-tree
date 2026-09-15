@@ -49,6 +49,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FTree">
         <!--
+            The family book lays its pages out in a hidden WebView (book/BookComposer.kt), which
+            runs the book's own script against the app's own assets and nothing else. These two
+            keep the System WebView from doing what it otherwise does unasked: sending usage
+            metrics, and checking addresses with Safe Browsing - there are no addresses to check.
+        -->
+        <meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />
+        <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
+        <!--
             One task, whichever way the app is entered.
 
             singleTask because opening a shared `.ftree` from a chat app should bring the reader to

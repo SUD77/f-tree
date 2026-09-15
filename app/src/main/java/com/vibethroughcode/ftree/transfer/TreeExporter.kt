@@ -32,15 +32,19 @@ class TreeExporter(
 ) {
 
     /**
-     * [only] narrows the archive to those people. A relationship travels when *both* ends do, so a
-     * shared branch never carries an edge pointing at somebody who is not in the file — the reader
-     * would have no way to resolve it, and it would leak the existence of a person who was
-     * deliberately left behind.
+     * The tree as `tree.json` would hold it, without writing an archive: what the family book is
+     * composed from. Reading the tree through the exporter rather than beside it means the book
+     * can never see a different family from the one a `.ftree` would carry - the same people, the
+     * same relationships, the same rule that a photograph whose file has gone is not promised.
      */
-    suspend fun exportTo(
-        destination: OutputStream,
-        only: Set<String>? = null,
-    ): ExportSummary = withContext(Dispatchers.IO) {
+    suspend fun document(only: Set<String>? = null): TreeDocument = withContext(Dispatchers.IO) { build(only).document }
+
+    /** The document encoded exactly as it is inside a `.ftree` archive. */
+    suspend fun documentJson(only: Set<String>? = null): String = json.encodeToString(document(only))
+
+    private data class Built(val document: TreeDocument, val exportable: List<String>, val missing: Set<String>)
+
+    private suspend fun build(only: Set<String>?): Built {
         val people = repository.allPeople().let { all ->
             if (only == null) all else all.filter { it.id in only }
         }
@@ -85,6 +89,20 @@ class TreeExporter(
                 )
             },
         )
+        return Built(document, exportable, missing)
+    }
+
+    /**
+     * [only] narrows the archive to those people. A relationship travels when *both* ends do, so a
+     * shared branch never carries an edge pointing at somebody who is not in the file — the reader
+     * would have no way to resolve it, and it would leak the existence of a person who was
+     * deliberately left behind.
+     */
+    suspend fun exportTo(
+        destination: OutputStream,
+        only: Set<String>? = null,
+    ): ExportSummary = withContext(Dispatchers.IO) {
+        val (document, exportable, missing) = build(only)
 
         ZipOutputStream(destination.buffered()).use { zip ->
             zip.putNextEntry(ZipEntry(TreeDocument.ENTRY_JSON))
@@ -101,8 +119,8 @@ class TreeExporter(
         }
 
         ExportSummary(
-            people = people.size,
-            relationships = relationships.size,
+            people = document.people.size,
+            relationships = document.relationships.size,
             photos = exportable.size,
             missingPhotos = missing.size,
         )
