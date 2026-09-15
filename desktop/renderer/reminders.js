@@ -23,7 +23,7 @@
  */
 
 import { localToday } from '../../site/playground/occasions.js';
-import { displayName } from '../../site/playground/model.js';
+import { displayDate, displayName } from '../../site/playground/model.js';
 
 const DAY_MS = 86400000;
 
@@ -86,6 +86,18 @@ function remembranceTitle(remembered, tomorrow) {
 }
 
 /**
+ * What the note says under its title when it is about one person: the title already says who and
+ * what, so this says the date the day comes from -- "Born 15 September 1942" -- rather than the
+ * title again. The phone's note says the same.
+ */
+function recorded(occasion) {
+  const { person, kind } = occasion;
+  const date = displayDate(kind === 'DEATH_ANNIVERSARY' ? person.deathDate : person.birthDate);
+  if (!date) return `${displayName(person)} — ${detailFor(occasion)}`;
+  return kind === 'DEATH_ANNIVERSARY' ? `Passed away ${date}` : `Born ${date}`;
+}
+
+/**
  * The one notification a day, or null when there is nothing worth showing.
  *
  * `occasions` is what `on()` in occasions.js already answered for the target day -- the living
@@ -105,7 +117,9 @@ export function digest(occasions, { lead, remembrance }) {
 
   return {
     title: birthdays.length > 0 ? birthdayTitle(birthdays, tomorrow) : remembranceTitle(remembered, tomorrow),
-    body: relevant.map((o) => `${displayName(o.person)} — ${detailFor(o)}`).join('\n'),
+    body: relevant.length === 1
+      ? recorded(relevant[0])
+      : relevant.map((o) => `${displayName(o.person)} — ${detailFor(o)}`).join('\n'),
     personId: relevant.length === 1 ? relevant[0].person.id : null,
   };
 }

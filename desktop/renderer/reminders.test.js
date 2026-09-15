@@ -68,9 +68,9 @@ test('detail wording matches the table in docs/birthdays.md, kind by kind', () =
 
 /* ------------------------------------------------------------------ digest */
 
-const asha = { id: 'asha', name: 'Asha' };
+const asha = { id: 'asha', name: 'Asha', birthDate: '1966-09-15' };
 const ravi = { id: 'ravi', name: 'Ravi' };
-const ramesh = { id: 'ramesh', name: 'Ramesh' };
+const ramesh = { id: 'ramesh', name: 'Ramesh', birthDate: '1936-09-20', deathDate: '2023-09-15' };
 
 test('nothing due makes no digest', () => {
   assert.strictEqual(digest([], { lead: 'day', remembrance: false }), null);
@@ -88,7 +88,8 @@ test('one birthday with a known age, on the day', () => {
     { lead: 'day', remembrance: false },
   );
   assert.strictEqual(result.title, 'Asha turns 60 today');
-  assert.strictEqual(result.body, 'Asha — turns 60');
+  // One person: the title says who and what, so the body says when they were born.
+  assert.strictEqual(result.body, 'Born 15 September 1966');
   assert.strictEqual(result.personId, 'asha');
 });
 
@@ -159,5 +160,15 @@ test('a remembrance birth line reads "would have been", never "turns"', () => {
     [{ person: ramesh, kind: 'BIRTH_REMEMBRANCE', years: 90 }],
     { lead: 'day', remembrance: true },
   );
-  assert.strictEqual(result.body, 'Ramesh — would have been 90');
+  assert.strictEqual(result.title, 'Remembering Ramesh today');
+  assert.strictEqual(result.body, 'Born 20 September 1936');
+  assert.doesNotMatch(result.body + result.title, /turns/);
+});
+
+test('one death anniversary says when they died, not the title again', () => {
+  const result = digest(
+    [{ person: ramesh, kind: 'DEATH_ANNIVERSARY', years: 3 }],
+    { lead: 'day', remembrance: true },
+  );
+  assert.strictEqual(result.body, 'Passed away 15 September 2023');
 });

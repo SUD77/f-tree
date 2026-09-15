@@ -829,11 +829,16 @@ function wirePrefs() {
   dialog.addEventListener('close', commitNearbyName);
 
   $('pref-reminders').addEventListener('change', async (e) => {
-    await setPref('reminders', e.target.checked);
-    // Turning it on this minute is the one moment a reader is looking straight at the switch, so a
-    // birthday already past nine today is worth saying now rather than waiting for the window to
-    // next lose and regain focus.
-    checkReminders();
+    // A morning already past counts as told, as it does on the phone: turning this on at two in the
+    // afternoon on somebody's birthday does not answer with a note about what the band above is
+    // already showing. Tomorrow's is the first.
+    // Read once: the first setPref repaints the dialog from the settings as they were, box included.
+    const on = e.target.checked;
+    if (on) {
+      const due = dueNow({ ...prefs, reminders: true }, remindersClock());
+      if (due) await setPref('remindersShownOn', due.today);
+    }
+    await setPref('reminders', on);
   });
   $('pref-reminder-lead').addEventListener('change', (e) => setPref('reminderLead', e.target.value));
   $('pref-reminder-remembrance').addEventListener('change',
@@ -1333,7 +1338,7 @@ function comingUpRow(occasion) {
   const detail = document.createElement('span');
   detail.className = 'coming-up-detail';
   detail.textContent = detailText;
-  who.append(name, document.createElement('br'), detail);
+  who.append(name, detail);
 
   row.append(dateBlock, who);
   // Read naturally regardless of what the date block spells out visually -- "today"/"tomorrow" or a
@@ -3456,6 +3461,8 @@ async function boot() {
   if (shell?.smoke) {
     window.__remindersForTest = {
       check: () => checkReminders(),
+      // The morning after: what a machine opened the next day looks like to `dueNow`.
+      shownOn: (day) => setPref('remindersShownOn', day),
       edit: (id, fields) => { state.tree.updatePerson(id, fields); rebuild(); },
       add: (fields) => { const result = state.tree.addPerson(fields); rebuild(); return result.id; },
       firstLivingId: () => state.tree.people

@@ -2512,11 +2512,11 @@ async function runRemindersSmoke(win, check) {
     band.text.slice(0, 160));
 
   /*
-   * Reminders start off. Turning the switch on is also what arms the first check -- `checkReminders`
-   * in app.js runs right after `setPref('reminders', true)` round-trips -- and that check needs the
-   * clock at or past nine. `FTREE_SMOKE_REMINDER_HOUR` is what moves it there without moving the
-   * date the band assertion above just proved: `dueNow`'s own `now` parameter is what makes that
-   * possible without the harness waiting for a real nine o'clock.
+   * Reminders start off. Turning the switch on after nine counts today as already told -- the band
+   * is showing it -- so the first note is the next morning's, as on the phone. The next morning is
+   * made by moving `remindersShownOn` back a day, which is exactly the state a machine is in when it
+   * is opened the day after. `FTREE_SMOKE_REMINDER_HOUR` holds the clock at or past nine without
+   * moving the date the band assertion above just proved.
    */
   win.webContents.send('menu:command', 'settings:open');
   await settle(400);
@@ -2526,8 +2526,20 @@ async function runRemindersSmoke(win, check) {
     box.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await settle(500);
+  check('turning reminders on after nine sends nothing about today',
+    smokeNotifications.length === 0, JSON.stringify(smokeNotifications));
 
-  check('turning reminders on records exactly one digest',
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  await page((day) => window.__remindersForTest.shownOn(day), yesterday);
+  await settle(300);
+  await page(() => window.__remindersForTest.check());
+  await settle(300);
+
+  check('the next morning records exactly one digest',
     smokeNotifications.length === 1, JSON.stringify(smokeNotifications));
   check('the digest is about the one person whose birthday it is',
     smokeNotifications[0]?.personId === personId, JSON.stringify(smokeNotifications[0] ?? null));
