@@ -145,6 +145,52 @@ empty, which means everything. `maxGenerations` keeps that many generations from
 `attribution: false` leaves out the f-tree credit. Both are tested, so the day a policy uses them
 is a policy change, not a composer change.
 
+## The book screen, the same on both shells
+
+**Where it opens from.**
+
+- The whole tree:
+  - Android: a book icon in the chart's action row.
+  - Desktop: a toolbar button, and **File › Make a family book…** (Ctrl+P).
+- One branch: **Family book from {first name}** in a person's actions (Android's person sheet,
+  the desktop's person panel). That opens the screen with *Who* already set to that person's
+  branch.
+- With nobody in the tree, the entries are disabled and say why: *Add someone to the tree first*.
+
+**What it shows**, top to bottom on a phone, and as preview-left and options-right on a wide
+window:
+
+1. **The preview is the book.** Android shows the pages the PDF is drawn from, one at a time, with
+   *Page 3 of 10* beneath. The desktop shows them as a scrolling column.
+2. **Template.** One choice per catalogue entry, each showing a small cover drawn with the reader's
+   own family. A seasonal template shows *This season* inside its window.
+3. **Title.** Starts as the derived title (*The Sharma Family*). It can be edited, and Devanagari
+   works. *Reset* appears once it has been changed.
+4. **Who's in it.** *Everyone* or *{Name}'s branch*. The second is offered only when the screen was
+   opened from a person.
+5. **Photographs**, a switch, with the estimate beside it: *About 3.4 MB*.
+6. **Full dates for living people**, a switch, off by default. Its helper line: *When off, living
+   people show only the year they were born.*
+
+**Actions.**
+
+- Android: **Share** (primary, the share icon, the same button the relationship card uses) and
+  **Save to device** (the system's save dialog).
+- Desktop: **Save PDF…** (primary). When it's done, a toast says *Saved "{file name}"* and offers
+  **Show in folder**.
+
+Both actions ask the policy switch first. Today it always answers yes. Only a successful save or
+share is counted.
+
+**While it works.** *Making your book…*, with the controls held still so nothing changes under
+the reader's hand.
+
+**If it fails.** The message says what failed and what to try, never "something went wrong".
+Android names the missing System WebView if that is the cause.
+
+**Accessibility.** Every page preview carries its label (*Page 3 of 10: The second generation*),
+progress is announced, and every control is reachable by keyboard and screen reader.
+
 ## Working on it
 
 - `node --test site/book/*.test.mjs` runs the tests. Regenerate the goldens with `UPDATE_GOLDEN=1`
