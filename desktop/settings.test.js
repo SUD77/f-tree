@@ -256,6 +256,40 @@ test('normalise never hands back the same bookUsage object twice', () => {
   assert.deepStrictEqual(DEFAULT_SETTINGS.bookUsage, {});
 });
 
+// ------------------------------------------------------------------ birthday reminders (#154)
+
+test('reminders are off until switched on, like everything else that can surprise a reader', () => {
+  assert.strictEqual(DEFAULT_SETTINGS.reminders, false);
+  assert.strictEqual(DEFAULT_SETTINGS.reminderRemembrance, false);
+  assert.strictEqual(normalise({ reminders: 'true' }).reminders, false);
+  assert.strictEqual(normalise({ reminders: true }).reminders, true);
+});
+
+test('the lead time falls back to "on the day" for anything it does not recognise', () => {
+  assert.strictEqual(DEFAULT_SETTINGS.reminderLead, 'day');
+  assert.strictEqual(normalise({ reminderLead: 'before' }).reminderLead, 'before');
+  assert.strictEqual(normalise({ reminderLead: 'yesterday' }).reminderLead, 'day');
+  assert.strictEqual(normalise({}).reminderLead, 'day');
+});
+
+test('the day a digest was last shown is a real date or nothing, never trusted as typed', () => {
+  assert.strictEqual(DEFAULT_SETTINGS.remindersShownOn, null);
+  assert.strictEqual(normalise({ remindersShownOn: '2026-09-15' }).remindersShownOn, '2026-09-15');
+  assert.strictEqual(normalise({ remindersShownOn: 'yesterday' }).remindersShownOn, null);
+  assert.strictEqual(normalise({ remindersShownOn: 20260915 }).remindersShownOn, null);
+});
+
+test('turning reminders off does not need to clear what depends on it', () => {
+  // Unlike the updater, there is no stale banner here for a cross-setting rule to protect against:
+  // `dueNow` (reminders.js) already returns null while `reminders` is false, whatever the lead time
+  // or the remembrance switch say, so there is nothing left behind that could act on its own.
+  const on = normalise({ reminders: true, reminderRemembrance: true, reminderLead: 'before' });
+  const off = applyChange(on, 'reminders', false);
+  assert.strictEqual(off.reminders, false);
+  assert.strictEqual(off.reminderRemembrance, true);
+  assert.strictEqual(off.reminderLead, 'before');
+});
+
 test('applyChange replaces the whole ledger rather than merging into it', () => {
   // Consistent with every other setting here: applyChange sets a key to what it is given. A
   // caller that wants to record one more use reads the current count and writes the whole object

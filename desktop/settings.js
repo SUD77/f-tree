@@ -55,6 +55,29 @@ const DEFAULTS = Object.freeze({
    */
   nearbyName: null,
   /**
+   * Birthday reminders (#154): a note at nine in the morning on a birthday, one a day however many
+   * share it, while f-tree is open or on the same-day catch-up when it is next opened. Off by
+   * default for the same reason the network settings are: a notification nobody asked for is not a
+   * quiet default, it is a surprise.
+   */
+  reminders: false,
+  /**
+   * Whether the digest also covers the departed's remembrance days -- a birth remembrance ("would
+   * have been 90") and a death anniversary. The "Coming up" list always shows them; this is only
+   * about whether a notification does. Meaningless while `reminders` itself is off, the same way
+   * `betaReleases` is meaningless while `checkForUpdates` is off -- see `mayCheckForUpdates` below.
+   */
+  reminderRemembrance: false,
+  /** 'day' (on the day) or 'before' (the day before). Meaningless while `reminders` is off. */
+  reminderLead: 'day',
+  /**
+   * The last local date, as `YYYY-MM-DD`, a digest was shown on -- so an app left open all day gets
+   * one notification and not one every time it regains focus. Cleared by nothing: a new day is a
+   * new value, and there is no cross-setting rule here the way there is for the updater, because
+   * turning reminders off already makes `dueNow` return null regardless of what this holds.
+   */
+  remindersShownOn: null,
+  /**
    * How many times each family-book feature has been used on this machine, keyed by feature name
    * (`"book.export"`, `"book.template"`) -- the desktop half of `UsageLedger` (#156). Nothing
    * reads this yet; the shipped policy grants every feature in full, so no rule ever asks what it
@@ -85,6 +108,11 @@ const SHAPE = {
    * that lets a device draw itself as somebody else's.
    */
   nearbyName: (v) => (typeof v === 'string' ? sanitiseName(v) : null),
+  reminders: (v) => v === true,
+  reminderRemembrance: (v) => v === true,
+  reminderLead: (v) => (v === 'before' ? 'before' : 'day'),
+  /** A real `YYYY-MM-DD` or nothing -- never trusted further than that, same as everything above. */
+  remindersShownOn: (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null),
   /**
    * Keys and values are both filtered rather than trusted, same as everywhere else here. The
    * result is always a fresh object, never the same reference twice -- see the note in `normalise`

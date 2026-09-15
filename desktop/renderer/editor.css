@@ -740,6 +740,134 @@
   overflow-y: auto;
 }
 
+/* ------------------------------------------------------------------ coming up (#230, #154) */
+
+.editor .coming-up {
+  margin-bottom: 30px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.editor .coming-up-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.editor .coming-up-heading {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0;
+  color: var(--ink);
+}
+
+.editor .coming-up-window {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.editor .coming-up-empty {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  line-height: 1.6;
+  margin: 0 0 6px;
+}
+
+.editor .coming-up-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.editor .coming-up-row {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 16px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  padding: 9px 8px;
+  cursor: pointer;
+  color: inherit;
+  font-family: var(--serif);
+}
+
+.editor .coming-up-row:hover,
+.editor .coming-up-row:focus-visible { background: var(--bone-dim); outline: none; }
+
+/* Tabular numerals so a day of the month never jitters the column when it changes width. */
+.editor .coming-up-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor .coming-up-day {
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.editor .coming-up-small {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.editor .coming-up-soon { color: var(--accent); font-weight: 600; }
+
+.editor .coming-up-who { display: block; min-width: 0; }
+.editor .coming-up-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor .coming-up-detail { font-size: 12.5px; color: var(--ink-soft); }
+
+/*
+ * Remembering (#230): the same visual idea the legend's `.k-died` swatch already gives the departed
+ * on the chart -- a tint into the paper and a heavier top edge, not a lower opacity. Opacity already
+ * means something else here (it is what a row not related to whoever is selected gets on the
+ * chart), so reusing it for "quieter" would say the wrong thing about these rows.
+ */
+.editor .coming-up-subheading {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 16px 0 6px;
+}
+
+.editor .coming-up-row.remembering {
+  background: var(--departed);
+  border-top: 2px solid var(--rule-strong);
+  border-bottom-color: var(--rule-strong);
+}
+.editor .coming-up-row.remembering:hover,
+.editor .coming-up-row.remembering:focus-visible { background: var(--bone-dim); }
+.editor .coming-up-row.remembering .coming-up-name { color: var(--ink-soft); font-weight: 500; }
+
+.editor .coming-up-toggle { display: block; margin-top: 12px; }
+
 /* ------------------------------------------------------------------ the import review
 
    The one screen in the app where confirming does something a person cannot put right by hand.
@@ -1345,29 +1473,32 @@
 .editor .prefs-row:has(.prefs-check:disabled) .prefs-label { color: var(--ink-faint); }
 
 /*
- * Two columns wherever there is room for them: how the app reads on the left, and the three things
- * that reach a network -- updates and nearby sharing -- together on the right.
+ * Two columns wherever there is room for them: how the app reads -- and, since #154, how it reminds
+ * you, which leaves the machine as little as the reading settings do -- on the left, and the two
+ * things that reach a network, updates and nearby sharing, together on the right.
  *
  * Measured, not assumed. The harness's budget is for the 900px window the app opens at, and a
  * 1080p laptop at the scaling Windows and GNOME default to cannot give it one: on this project's own
- * test laptop the window is about 754px tall, the dialog's body 457px, and one column of three
- * sections is 547px. What scrolled out of sight was the Nearby section -- a setting that reaches a
- * network, hidden at the bottom of the screen a reader opens to check exactly that. Side by side, the
- * taller column is about 340px. Below 960px there is no room, and it goes back to one column.
+ * test laptop the window is about 754px tall, the dialog's body 457px, and one column of four
+ * sections is taller than that. Side by side, in two rows of two, neither column is. Below 960px
+ * there is no room for two columns at all, and it goes back to one.
  */
 @media (min-width: 960px) {
   .editor .prefs[open] { width: min(880px, calc(100vw - 48px)); }
   .editor .prefs-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto auto;
     align-items: start;
   }
-  .editor .prefs-group:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
+  /* Reading, Reminders. */
+  .editor .prefs-group:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .editor .prefs-group:nth-child(3) { grid-column: 1; grid-row: 2; }
+  /* Updates, Nearby sharing -- the column that reaches a network, told apart by the rule between. */
   .editor .prefs-group:nth-child(2),
-  .editor .prefs-group:nth-child(3) { grid-column: 2; border-left: 1px solid var(--rule); }
+  .editor .prefs-group:nth-child(4) { grid-column: 2; border-left: 1px solid var(--rule); }
   .editor .prefs-group:nth-child(2) { grid-row: 1; border-top: 0; }
-  .editor .prefs-group:nth-child(3) { grid-row: 2; align-self: stretch; }
+  .editor .prefs-group:nth-child(4) { grid-row: 2; align-self: stretch; }
 }
 
 /*

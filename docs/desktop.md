@@ -16,7 +16,7 @@ memory of which tree you were reading.
 | | | |
 |---|---|---|
 | **Chart** | `Ctrl+1` | The whole tree, drawn. Pan, zoom, search, click a person to edit them. |
-| **People** | `Ctrl+2` | Everybody by name, grouped as the chart groups them, filterable to the living. The only place somebody with no recorded relatives is as visible as anybody else. |
+| **People** | `Ctrl+2` | Everybody by name, grouped as the chart groups them, filterable to the living. The only place somebody with no recorded relatives is as visible as anybody else. Above the list, a **Coming up** band (#230) shows the next 30 days of birthdays, and a quieter **Remembering** group below them for the departed — see `docs/birthdays.md` for the rules and the reminder that reads the same list. |
 | **Compact** | `Ctrl+3` | One person's family as generation bands, read as text at any size. |
 
 Compact exists for the space between the other two. The chart is a picture: to read a name you
@@ -178,8 +178,9 @@ must be B's भांजा or भांजी*, computed independently from opp
 
 ## Settings
 
-The gear on the bar, `Settings > Preferences…`, or `Ctrl+,`. Family words, photographs on the chart, appearance, and the
-two update settings. Every one of them is also in the native menu, and **both surfaces go through
+The gear on the bar, `Settings > Preferences…`, or `Ctrl+,`: family words, photographs on the chart, appearance, the
+two update settings, birthday reminders, and nearby sharing. The three that reach a network — the two update settings
+and nearby sharing — are also checkboxes in the native `Settings` menu, and **both surfaces go through
 the same `settings:set`**, which rebuilds the menu from the result.
 
 That rebuild is the point rather than a detail. A native menu checkbox's `checked:` is a snapshot
@@ -214,6 +215,17 @@ The theme lives in that file too, with everything else. `localStorage` keeps a m
 only for the inline script that sets the theme before the first paint: the settings file is read
 over IPC and there is no asking it anything that early. A cleared mirror costs one launch in the
 system's colours, not a lost setting.
+
+**Reminders** (#154) are off until switched on, the same as the other three, but for a different
+reason: they reach nobody outside the machine, so being off by default is not about a network at
+all, it is that a notification nobody asked for is a surprise rather than a quiet default. Two more
+settings under it only mean anything once it is on — **When** (on the day or the day before) and
+**Remembrance days**, whether the digest also covers the departed — the same dependent relationship
+`betaReleases` has on `checkForUpdates`: a select and a checkbox that stay in the document, disabled,
+rather than the dialog having to explain their absence. Turning the switch off needs no
+cross-setting rule the way the updater does, because there is no remembered state left over that
+could act on its own — see `docs/birthdays.md` for the rules a reminder and the "coming up" list
+both read, and `desktop/renderer/reminders.js` for when one actually fires.
 
 ## How two people are related
 
@@ -584,3 +596,12 @@ a chart.
 layout for a phone, and #89 reversed the *desktop*, not the app. What the JavaScript engine keeps is
 the ability to draw either, with CI checking both orientations, so the one neither JS shell currently
 ships is the one that cannot rot unnoticed.
+
+**A tray icon or a login item, for reminders (#154).** Desktop reminders work only while f-tree is
+open, plus a same-day catch-up the moment it opens or a tree is opened — never a process quietly
+running in the background between launches. That is a deliberate line, not a gap waiting to be
+filled: an app that starts itself at login and stays resident to fire an alarm is a much bigger
+promise than "a note while you're using it", on every platform this ships for, and it is not the
+promise this app has made anywhere else. `desktop/renderer/reminders.js`'s `dueNow` is built around
+that constraint rather than around it being missing — see `docs/birthdays.md` for the rules it
+shares with the "coming up" list and with Android's own reminder.
