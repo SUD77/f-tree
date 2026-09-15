@@ -518,6 +518,14 @@ Publishing a desktop build as an ordinary release would make `releases/latest` r
 with no APK on it, and every phone checking for updates would quietly stop being offered any. Two
 guards, because there are live users on the app.
 
+A desktop release is promoted to stable with `gh release edit desktop-vX --prerelease=false
+--latest=false` — both flags, every time. Desktop 0.6.0 was promoted without the second, so from
+2026-09-11 `releases/latest` answered with a desktop release. It did no visible harm only because no
+stable Android release had shipped since; the same slip after one had would have hidden it from
+every phone. The app now also falls back to the full release list when `releases/latest` has
+nothing it can install, deciding the way the beta channel does minus the pre-releases, so a phone on
+this version or later can no longer be misled this way. Older installs still depend on the flag.
+
 ## The updater
 
 Two switches under **Settings**, both off until the reader turns them on, and the same two the
