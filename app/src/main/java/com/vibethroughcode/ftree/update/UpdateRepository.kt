@@ -60,8 +60,15 @@ class UpdateRepository(
             val body = client.fetchLatestRelease(includePreReleases = beta)
             val current = currentVersion ?: AppVersion(listOf(0))
             val lookup =
-                if (beta) readReleases(body, current, allowPreRelease = true)
-                else readRelease(body, current)
+                if (beta) {
+                    readReleases(body, current, allowPreRelease = true)
+                } else {
+                    // `releases/latest` can answer with a desktop release (see readReleaseWithFallback),
+                    // in which case the full list is worth a second look before giving up.
+                    readReleaseWithFallback(body, current) {
+                        client.fetchLatestRelease(includePreReleases = true)
+                    }
+                }
             _state.value = when (lookup) {
                 is ReleaseLookup.Newer -> {
                     val skipped = preferences.skippedVersion

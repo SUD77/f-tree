@@ -133,6 +133,29 @@ fun readReleases(
 }
 
 /**
+ * The ordinary channel's answer, with one fallback for when `releases/latest` is lying to it.
+ *
+ * GitHub's "latest" is not "newest app release" — it is whatever release is newest among those not
+ * flagged pre-release, and nothing stops a *desktop* release from being promoted to that status by
+ * mistake. When it is, `releases/latest` returns a payload [readRelease] cannot use (its tag is
+ * `desktop-v…`, which [AppVersion.PATTERN] rejects), and every Android release behind it would be
+ * invisible to every phone until somebody noticed. So [NoUsableRelease] from the primary endpoint —
+ * and only that outcome, not [UpToDate] — triggers a second look at the full release list, decided
+ * the same way the beta channel decides it, minus the pre-releases: the ordinary channel still never
+ * offers one. [fetchList] is a suspend thunk rather than an already-fetched body so the common case,
+ * where `releases/latest` already names an Android release, never pays for the second request.
+ */
+suspend fun readReleaseWithFallback(
+    latestBody: String,
+    current: AppVersion,
+    fetchList: suspend () -> String,
+): ReleaseLookup {
+    val primary = readRelease(latestBody, current)
+    if (primary != ReleaseLookup.NoUsableRelease) return primary
+    return readReleases(fetchList(), current, allowPreRelease = false)
+}
+
+/**
  * Picks the newest release worth offering, and says why when there is none.
  *
  * Drafts never count: they are visible only to whoever is signed in as the author, and a draft is
