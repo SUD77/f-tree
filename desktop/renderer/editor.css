@@ -1917,3 +1917,147 @@
 @media (max-width: 960px) {
   .editor.viewer[data-state='loaded'] .theme-btn { display: none; }
 }
+
+/* ------------------------------------------------------------------ the family book */
+
+/*
+ * The preview *is* the file (docs/family-book.md): a scrolling column of the exact SVG pages the
+ * hidden print window turns into the PDF. Below the width the app opens at, options sit under the
+ * preview because there is nowhere else for them; from 960px up -- the same breakpoint Preferences
+ * widens at -- they move beside it, since a page and its own choices read as one screen there.
+ */
+.editor .review.book[open] { max-height: min(90vh, 860px); }
+
+.editor .book-body {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor .book-preview {
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  background: var(--bone-dim);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+.editor .book-page { margin: 0; width: min(100%, 420px); flex: none; }
+
+/* The page's own paper colour is baked into it by the template's palette, in every theme -- it is
+   a printed sheet, not a panel of this app, and the shadow is what says so against either ground. */
+.editor .book-page svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, .38), 0 0 0 1px var(--rule);
+}
+
+.editor .book-page figcaption {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.editor .book-error {
+  margin: auto;
+  max-width: 42ch;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.editor .book-options {
+  flex: 0 0 auto;
+  max-height: 44vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+}
+
+.editor .book-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px 16px;
+}
+
+.editor .book-template-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 92px;
+  padding: 8px 8px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.editor .book-template-chip:hover { border-color: var(--forest); }
+.editor .book-template-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor .book-template-chip[aria-pressed='true'] { border-color: var(--forest); background: var(--sage-container); }
+.editor .book-template-chip:disabled { opacity: .5; cursor: default; }
+
+.editor .book-template-cover {
+  display: block;
+  width: 64px;
+  aspect-ratio: 595 / 842;
+  overflow: hidden;
+  border-radius: 3px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .4);
+}
+
+.editor .book-template-cover svg { display: block; width: 100%; height: 100%; }
+.editor .book-template-name { font-size: 12px; text-align: center; }
+
+.editor .book-title-row { display: flex; align-items: center; gap: 10px; padding: 0 20px 16px; }
+
+.editor .book-title-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 15px;
+  border-radius: 8px;
+  width: auto;
+}
+
+.editor .book-who { margin: 0 20px 16px; }
+
+.editor .book-decision {
+  margin: 0 20px 16px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--brass-surface);
+  border: 1px solid var(--brass);
+  border-radius: 9px;
+}
+
+@media (min-width: 960px) {
+  .editor .review.book[open] { width: min(1180px, calc(100vw - 48px)); }
+  .editor .book-body { flex-direction: row; }
+  .editor .book-options {
+    flex: 0 0 320px;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--rule);
+  }
+}

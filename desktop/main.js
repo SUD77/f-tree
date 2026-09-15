@@ -558,6 +558,16 @@ function buildMenu(win) {
         // "autosave kept a mistake": the version before it is in here.
         { label: 'Show backups', click: () => showBackups() },
         { type: 'separator' },
+        /*
+         * A designed PDF of the tree (#200, #207), the same accelerator every other app on the
+         * desktop uses for printing -- this is, in effect, the one thing in f-tree that gets
+         * printed. Greyed the same way "Send to a nearby device…" is: there is no book to be made
+         * of a tree with nobody in it, and the reader is told so in the dialog it opens rather than
+         * left to wonder why a menu item does nothing.
+         */
+        { label: 'Make a family book…', accelerator: 'CmdOrCtrl+P', enabled: treeOpen,
+          click: () => win.webContents.send('menu:command', 'book:open') },
+        { type: 'separator' },
         { label: 'Undo', accelerator: 'CmdOrCtrl+Z',
           click: () => win.webContents.send('menu:command', 'edit:undo') },
         { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z',
@@ -690,6 +700,49 @@ async function localFontCss() {
     await face('JetBrains Mono', 'jetbrains_mono.ttf', '100 900'),
   ].join('');
 }
+
+/*
+ * The book's three faces (#203, #207): family names exactly the keys `site/book/format.js` uses
+ * for a font role -- `book_display`, `book_text`, `book_strong` -- because that is the string
+ * `svg.js`'s `resolve.font` hands back for every `<text>` it paints, unchanged, on both the
+ * renderer's own preview and the hidden window that prints the PDF.
+ *
+ * The files already ride into the package with Literata and JetBrains Mono: `book_*.ttf` live
+ * beside them in `app/src/main/res/font/`, which `desktop/package.json`'s existing `*.ttf` glob
+ * copies wholesale (docs/family-book.md), so `FONT_DIR` above is exactly where these are too.
+ */
+const BOOK_FONT_FILES = [
+  ['book_display', 'book_display.ttf'],
+  ['book_text', 'book_text.ttf'],
+  ['book_strong', 'book_strong.ttf'],
+];
+
+/** Each book font's family name and its bytes, base64-encoded once for whoever needs a `data:` URL. */
+async function bookFontFiles() {
+  return Promise.all(BOOK_FONT_FILES.map(async ([family, file]) => ({
+    family,
+    base64: (await fs.readFile(path.join(FONT_DIR, file))).toString('base64'),
+  })));
+}
+
+const fontFace = ({ family, base64 }) => `@font-face{font-family:"${family}";`
+  + `src:url(data:font/ttf;base64,${base64}) format("truetype");font-display:block}`;
+
+/** Inserted into the main window alongside `localFontCss`, so the live preview can paint a page. */
+async function bookFontCss() {
+  return (await bookFontFiles()).map(fontFace).join('');
+}
+
+/*
+ * `site/book/`'s own directory, staged the same way `site/playground/` is (#207): a resource in a
+ * packaged build, the working tree otherwise. `renderer/book.js` imports `compose.js`, `svg.js` and
+ * the rest of the engine as ordinary ES modules, exactly as it imports the viewer's -- but the
+ * templates and the policy are *data*, JSON the page cannot `fetch()` across a `file://` origin, so
+ * `book:assets` below reads them here and hands them across the bridge instead.
+ */
+const BOOK_DIR = app.isPackaged
+  ? path.join(process.resourcesPath, 'page', 'site', 'book')
+  : path.join(__dirname, '..', 'site', 'book');
 
 /*
  * The page gets its own session, and that session reaches nothing.
@@ -856,6 +909,13 @@ async function createWindow() {
     // Without them the app falls back to the system serif and monospace. Worth a line in the log,
     // not worth refusing to open somebody's family tree over.
     console.warn(`f-tree: could not load the bundled typefaces — ${error.message}`);
+  }
+  try {
+    await win.webContents.insertCSS(await bookFontCss());
+  } catch (error) {
+    // The book dialog's preview would fall back to the system serif -- worth logging, not worth
+    // refusing the whole window over, same as the two typefaces above.
+    console.warn(`f-tree: could not load the book's typefaces — ${error.message}`);
   }
   buildMenu(win);
 
@@ -1040,6 +1100,151 @@ ipcMain.handle('tree:last', async () => {
     await writeSession({});
     return null;
   }
+});
+
+/* ------------------------------------------------------------------ the family book */
+
+/*
+ * The templates and the policy, handed across once as data (#207). The page composes the book
+ * itself -- this is not an export the main process decides anything about -- so the only thing
+ * asked of this side is what it alone can do: read a file the renderer cannot fetch.
+ */
+ipcMain.handle('book:assets', async () => {
+  const readJson = async (file) => JSON.parse(await fs.readFile(file, 'utf8'));
+  try {
+    const [heirloom, diwali, policy] = await Promise.all([
+      readJson(path.join(BOOK_DIR, 'templates', 'heirloom.json')),
+      readJson(path.join(BOOK_DIR, 'templates', 'diwali.json')),
+      readJson(path.join(BOOK_DIR, 'policy.json')),
+    ]);
+    return { templates: [heirloom, diwali], policy };
+  } catch (error) {
+    // `decide()` treats a policy it cannot read as Allowed, not Locked (docs/premium.md) -- the
+    // same principle applies here: a staging mistake must not quietly take the feature away, so an
+    // empty catalogue is what the dialog sees, and it says so, rather than the page hanging on a
+    // rejected promise it never expected.
+    console.warn(`f-tree: could not read the book's templates or policy — ${error.message}`);
+    return { templates: [], policy: null };
+  }
+});
+
+/*
+ * Turning fitted SVG pages into an actual PDF, through a hidden window that never shows itself and
+ * never leaves the machine.
+ *
+ * `partition: VIEWER_PARTITION` -- the exact same session the main window's session is -- is what
+ * makes this window exactly as network-refused: `refuseTheNetwork` was already installed on that
+ * session the moment the app's first window opened, and Electron shares one session object per
+ * partition string, so there is no second call to make here. This window renders a template's own
+ * art and a family's own names, and that is precisely the content `refuseTheNetwork` exists for.
+ */
+async function printBookToPdf(pages) {
+  const fontFaces = (await bookFontFiles()).map(fontFace).join('');
+
+  /*
+   * One rule each for the page box, the break between pages, and the one page that must not get a
+   * break after it -- `.page:last-child` -- which is what stops Chromium's print pipeline adding a
+   * blank trailing page when the content's last boundary already lines up with the page box.
+   */
+  // The pages are the renderer's own painted SVG, but this window still refuses to run anything in
+  // them: no script, no request - fonts and photographs arrive as data: URLs or not at all.
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"><style>
+${fontFaces}
+@page { size: 595pt 842pt; margin: 0; }
+html, body { margin: 0; }
+.page { width: 595pt; height: 842pt; overflow: hidden; break-after: page; }
+.page:last-child { break-after: auto; }
+.page svg { display: block; width: 595pt; height: 842pt; }
+</style></head><body>${pages.map((svg) => `<div class="page">${svg}</div>`).join('')}</body></html>`;
+
+  const tempFile = path.join(app.getPath('temp'), `ftree-book-${crypto.randomUUID()}.html`);
+  await fs.writeFile(tempFile, html, 'utf8');
+
+  const printWindow = new BrowserWindow({
+    show: false,
+    partition: VIEWER_PARTITION,
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      // This window renders while never visible or focused, and Chromium throttles a backgrounded
+      // page's timers by default -- which is exactly what document.fonts.ready waits on below. Left
+      // on, that throttling is an intermittent, hard-to-reproduce hang right at this step.
+      backgroundThrottling: false,
+    },
+  });
+
+  try {
+    await printWindow.loadFile(tempFile);
+
+    /*
+     * `document.fonts.ready` resolving is not proof Devanagari is actually shapeable -- a font can
+     * report ready before its shaping data has loaded, which is exactly the failure this book must
+     * avoid (docs/family-book.md). Loading each face with a real Devanagari string, not only the
+     * Latin family name, is what forces that path before anything is printed.
+     */
+    await printWindow.webContents.executeJavaScript(`(async () => {
+      await document.fonts.ready;
+      await Promise.all(${JSON.stringify(BOOK_FONT_FILES.map(([family]) => family))}
+        .map((family) => document.fonts.load(\`16px "\${family}"\`, 'शर्मा')));
+    })()`);
+
+    return await printWindow.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    });
+  } finally {
+    if (!printWindow.isDestroyed()) printWindow.close();
+    await fs.rm(tempFile, { force: true });
+  }
+}
+
+/*
+ * Saving: print, then the same atomic write `tree:save` uses.
+ *
+ * `writeTreeFile` is not tree-specific despite its name -- it is "bytes onto this path without
+ * ever leaving a half-written file", which a PDF wants exactly as much as a `.ftree` does. Reusing
+ * it rather than a second temp-then-rename implementation is the point, not a shortcut: the crash
+ * safety only has to be gotten right once.
+ */
+ipcMain.handle('book:save', async (event, { fileName, pages } = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!Array.isArray(pages) || !pages.length || typeof fileName !== 'string' || !fileName.trim()) {
+    return { error: 'That book has nothing in it to save.' };
+  }
+
+  let target;
+  // The same narrow, FTREE_SMOKE-gated seam `tree:saveAs` uses: a native save dialog cannot be
+  // driven from a test, so the destination is supplied and everything after it is the real path.
+  if (process.env.FTREE_SMOKE && process.env.FTREE_SMOKE_BOOK_SAVE_TO) {
+    target = process.env.FTREE_SMOKE_BOOK_SAVE_TO;
+  } else {
+    const picked = await dialog.showSaveDialog(win, {
+      title: 'Save the family book',
+      defaultPath: path.join(app.getPath('documents'), fileName),
+      filters: [{ name: 'PDF document', extensions: ['pdf'] }],
+    });
+    if (picked.canceled || !picked.filePath) return { canceled: true };
+    target = picked.filePath;
+  }
+
+  try {
+    const pdf = await printBookToPdf(pages);
+    await writeTreeFile(target, pdf);
+    savedBooks.add(target);
+    return { path: target };
+  } catch (error) {
+    return { error: error.message };
+  }
+});
+
+// Only a file this session saved can be shown: the page names a path, and the main process is the
+// one that decides whether it is a path the page has any business naming.
+const savedBooks = new Set();
+
+ipcMain.handle('book:showInFolder', (event, target) => {
+  if (typeof target === 'string' && savedBooks.has(target)) shell.showItemInFolder(target);
 });
 
 /* ------------------------------------------------------------------ nearby sharing */
@@ -2766,6 +2971,141 @@ async function runNearbySmoke(win, check, fileToSend) {
 }
 
 /*
+ * The family book, end to end (#200, #207): open the dialog from the menu, prove every shipped
+ * template offers a preview, prove a Devanagari title survives all the way into a real PDF, and
+ * hold the PDF itself to the promises `docs/family-book.md` makes -- real pages, embedded static
+ * fonts, no trailing blank page, small enough to send in a chat app.
+ *
+ * `FTREE_SMOKE_BOOK_SAVE_TO` is the same narrow, env-gated seam `FTREE_SMOKE_SAVE_TO` is: a native
+ * save dialog cannot be driven from here, so the destination is supplied and `printToPDF` itself is
+ * exercised for real.
+ */
+async function runBookSmoke(win, check) {
+  const page = (fn, ...args) => win.webContents.executeJavaScript(
+    `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
+
+  /*
+   * Every step below waits for a real condition rather than a fixed pause. Composing decodes every
+   * photograph in the family through a `<canvas>` (`resolvePhotoUrls` in `renderer/book.js`), and
+   * on the software rendering this harness runs under that can take a good deal longer than the
+   * debounce it follows -- a fixed sleep here was exactly the kind of flake this rewrite removes.
+   */
+  async function waitFor(predicate, { timeoutMs = 10_000, everyMs = 150 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let last;
+    while (Date.now() < deadline) {
+      last = await page(predicate);
+      if (last) return last;
+      await new Promise((r) => setTimeout(r, everyMs));
+    }
+    return last;
+  }
+
+  console.log('\n  -- the family book --');
+
+  win.webContents.send('menu:command', 'book:open');
+
+  const opened = await waitFor(() => {
+    const dialog = document.getElementById('book');
+    const pages = document.querySelectorAll('#book-preview svg').length;
+    return dialog.open && pages > 0 && {
+      open: dialog.open,
+      pages,
+      templates: document.querySelectorAll('#book-templates .book-template-chip').length,
+    };
+  }, { timeoutMs: 20_000 }); // the very first compose warms up every font and photograph at once
+  check('the book dialog opens from the menu, with a live preview',
+    Boolean(opened?.open) && opened?.pages > 0, JSON.stringify(opened));
+  check('every shipped template offers a chip with a mini cover',
+    (opened?.templates ?? 0) >= 2, String(opened?.templates ?? 0));
+
+  /*
+   * A Devanagari title, before anything is saved: the composer's own tests already hold Devanagari
+   * shaping to a golden fixture, so what this proves is different -- that the whole desktop path
+   * (this page's fonts, the print window's own, and Chromium's PDF backend) still gets it right,
+   * not only the engine underneath.
+   */
+  await page(() => {
+    const input = document.getElementById('book-title-input');
+    input.value = 'शर्मा परिवार';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  /*
+   * Save re-enables only once a recompose that started after the edit has actually finished (see
+   * `paintSaveState` in book.js), so waiting on it is also waiting on the retitled recompose --
+   * and, unlike the very first compose right after opening, this one runs with every font and
+   * photograph already warm, so it is the reliable point to say the dialog has settled.
+   */
+  const ready = await waitFor(() => {
+    const save = document.getElementById('book-save');
+    return !save.disabled && { title: document.getElementById('book-title-input').value };
+  }, { timeoutMs: 20_000 });
+  const composedPages = await page(() => document.querySelectorAll('#book-preview svg').length);
+  check('the Devanagari title took, and the preview recomposed for it',
+    ready?.title === 'शर्मा परिवार' && composedPages > 0,
+    JSON.stringify({ ...ready, pages: composedPages }));
+
+  if (process.env.FTREE_SMOKE_SHOT_BOOK) {
+    const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+    // A DOM state being ready does not mean Chromium has actually painted it -- under this
+    // harness's software rendering (no working vsync) capturePage() can otherwise return a frame
+    // that lags well behind what waitFor already confirmed, so this waits again on the pixels.
+    await settle(900);
+
+    const shot = process.env.FTREE_SMOKE_SHOT_BOOK;
+    await fs.writeFile(shot, (await win.webContents.capturePage()).toPNG());
+    console.log(`       wrote ${shot}`);
+
+    await page(() => document.getElementById('theme-btn').click());
+    await waitFor(() => document.documentElement.getAttribute('data-theme') === 'dark');
+    await settle(900);
+    const other = shot.replace(/(\.png)?$/, '-dark.png');
+    await fs.writeFile(other, (await win.webContents.capturePage()).toPNG());
+    console.log(`       wrote ${other}`);
+    await page(() => document.getElementById('theme-btn').click());
+    await waitFor(() => document.documentElement.getAttribute('data-theme') === 'light');
+    await settle(900);
+  }
+
+  // The same narrow seam `FTREE_SMOKE_SAVE_TO` is for the tree writer: supplied once, externally,
+  // rather than invented here, so the workflow's own env block is the one place that says where
+  // every smoke-written file on a run lands.
+  const target = process.env.FTREE_SMOKE_BOOK_SAVE_TO
+    ?? path.join(app.getPath('userData'), 'book-smoke.pdf');
+  await fs.rm(target, { force: true });
+  await page(() => document.getElementById('book-save').click());
+  const closed = await waitFor(() => document.getElementById('book').open === false,
+    { timeoutMs: 15_000 });
+  check('saving closes the dialog', Boolean(closed), closed ? '' : 'the dialog is still open after 15s');
+
+  const bytes = await fs.readFile(target).catch(() => null);
+  check('a PDF was written', Boolean(bytes) && bytes.length > 0,
+    bytes ? `${bytes.length} bytes` : 'no file');
+  if (!bytes) return;
+
+  // Read as Latin-1 rather than UTF-8: PDF is a binary format and this only ever looks for ASCII
+  // structural markers in it, which Latin-1 preserves byte-for-byte without a decode error on the
+  // binary streams in between.
+  const text = bytes.toString('latin1');
+  check('the file starts with the PDF signature', text.startsWith('%PDF'), text.slice(0, 8));
+
+  // `(?!s)` is what tells a page object (`/Type /Page`) apart from the pages tree (`/Type /Pages`).
+  const pageMatches = text.match(/\/Type\s*\/Page(?!s)/g) ?? [];
+  check('the PDF has exactly one page per page the book composed',
+    pageMatches.length === composedPages,
+    `${pageMatches.length} in the PDF, ${composedPages} composed`);
+
+  const embedded = text.includes('/FontFile2');
+  const outlined = text.includes('/Type3');
+  check('the book fonts are embedded as real, static fonts -- never Type3 outlines',
+    embedded && !outlined, `FontFile2 present: ${embedded}; Type3 present: ${outlined}`);
+
+  const megabytes = bytes.length / 1_000_000;
+  check('the file stays well under the 10 MB budget', megabytes < 10, `${megabytes.toFixed(2)} MB`);
+}
+
+/*
  * The menu, read back from the app that built it.
  *
  * Nothing tested the menu before this. It is assembled inline in `createWindow`, so there is no
@@ -3052,6 +3392,11 @@ async function runSmoke(win, file) {
   if (process.env.FTREE_SMOKE_PHOTO) {
     await reopenSample();
     await runPhotoSmoke(win, check);
+  }
+
+  if (process.env.FTREE_SMOKE_BOOK) {
+    await reopenSample();
+    await runBookSmoke(win, check);
   }
 
   // Last of the feature sections: it switches nearby sharing on, and the sections above were

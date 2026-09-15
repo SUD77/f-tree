@@ -112,6 +112,14 @@ jobs:
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
           FTREE_SMOKE_PHOTO: '1'
+          # The family book (#200, #207): opens from the menu, proves every template chip previews,
+          # carries a Devanagari title all the way into a real PDF, and holds that PDF to what
+          # docs/family-book.md promises -- real embedded fonts, one page per page composed, no
+          # stray trailing blank page, under the 10 MB budget. FTREE_SMOKE_BOOK_SAVE_TO is the same
+          # kind of seam FTREE_SMOKE_SAVE_TO is above: a native save dialog cannot be driven from
+          # here, so this is where the PDF actually lands.
+          FTREE_SMOKE_BOOK: '1'
+          FTREE_SMOKE_BOOK_SAVE_TO: ${{ runner.temp }}/book-smoke.pdf
           # Nearby sharing (#175): a second device in the same process sends over 127.0.0.1, and the
           # transfer must end in the import review with the tree untouched -- and the page must still
           # be unable to open a socket of its own. The complement of FTREE_SMOKE_NETWORK above.
@@ -190,6 +198,11 @@ jobs:
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
           FTREE_SMOKE_PHOTO: '1'
+          # And the family book against the package: the only run that proves `site/book` was
+          # staged at all -- forgetting it is exactly the mistake that leaves a dev build working
+          # and a packaged one silently unable to find the composer (docs/family-book.md).
+          FTREE_SMOKE_BOOK: '1'
+          FTREE_SMOKE_BOOK_SAVE_TO: ${{ runner.temp }}/book-smoke-packaged.pdf
           # And nearby sharing against the package: the only run that proves `nearby/` and the
           # vendored QR encoder were packaged at all.
           FTREE_SMOKE_NEARBY: '1'

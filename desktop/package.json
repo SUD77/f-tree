@@ -49,6 +49,17 @@
         ]
       },
       {
+        "from": "../site/book",
+        "to": "page/site/book",
+        "filter": [
+          "**/*",
+          "!*.test.mjs",
+          "!golden${/*}",
+          "!fixtures${/*}",
+          "!preview.html"
+        ]
+      },
+      {
         "from": "renderer",
         "to": "page/desktop/renderer",
         "filter": [
