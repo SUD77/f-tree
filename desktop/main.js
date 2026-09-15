@@ -10,7 +10,9 @@
  * What the shell adds is the part a browser tab cannot have: a real file picker, a native menu,
  * and a memory of which tree you were reading.
  */
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell } = require('electron');
+const {
+  app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell, Notification,
+} = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -44,6 +46,15 @@ if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND
     + 'is nowhere to open a window. If you are on a remote shell, this needs a desktop session.');
   process.exit(1);
 }
+
+/*
+ * Windows groups a process's toasts -- and lets one carry this app's name and icon rather than
+ * Electron's -- by this id, matched against `build.appId` above and the id `nearby`'s own explored
+ * dead end (identity.js) never needed. Without it a birthday reminder (#154) would still show, but
+ * unlabelled and liable to be silently grouped under whatever "Electron" last used the same slot.
+ * Harmless to call on platforms that ignore it, so this is not gated to `win32` by an `if`.
+ */
+app.setAppUserModelId('com.vibethroughcode.ftree');
 
 /*
  * The viewer, which lives beside this app rather than inside it.
@@ -104,6 +115,16 @@ if (process.env.FTREE_SMOKE) {
 
 /** Which windows have edits that are not on disk. Keyed by window id. */
 const unsaved = new Map();
+
+/**
+ * What a notification would have shown, under `FTREE_SMOKE`, instead of actually showing it.
+ *
+ * A real `Notification` cannot be clicked from a script, the same reason the native save and photo
+ * dialogs are stubbed under this flag rather than exercised -- so this is where the reminders
+ * smoke section (`runRemindersSmoke`) reads what `reminders:notify` was asked to show, and how many
+ * times, without a toast ever appearing on the runner.
+ */
+const smokeNotifications = [];
 
 const stateFile = () => path.join(app.getPath('userData'), 'session.json');
 
@@ -994,6 +1015,38 @@ ipcMain.handle('settings:set', async (event, { key, value }) => {
 
   return { ...(await changeSetting(key, value, win)) };
 });
+
+/*
+ * Birthday reminders (#154), both ways.
+ *
+ * The renderer decides *whether* and *what* -- `renderer/reminders.js` is pure and holds the tree,
+ * neither of which this side has. What this side owns is the one thing the renderer cannot do for
+ * itself: asking the OS to show something, and hearing back when it is clicked.
+ */
+ipcMain.handle('reminders:supported', () => Notification.isSupported());
+
+ipcMain.handle('reminders:notify', (event, { title, body, personId = null } = {}) => {
+  if (process.env.FTREE_SMOKE) {
+    smokeNotifications.push({ title, body, personId });
+    return;
+  }
+  // Asked for anyway, defensively: the prefs dialog already greys the switch when this is false,
+  // but settings persist and a desktop's notification service can be turned off after the fact.
+  if (!Notification.isSupported()) return;
+
+  const notice = new Notification({ title, body });
+  notice.on('click', () => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    // The window this came from, brought back exactly as clicking its taskbar entry would.
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    win.webContents.send('reminders:open', personId);
+  });
+  notice.show();
+});
+
 ipcMain.handle('tree:choose', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   return chooseInto(win);
@@ -2414,6 +2467,175 @@ async function runSettingsSmoke(win, check) {
   await settle(300);
 }
 
+/*
+ * "Coming up" (#230) and birthday reminders (#154), together: the reminder reads the same list the
+ * band draws, so one section proves both rather than risking two that quietly drift apart.
+ *
+ * The birthday under test is computed from *this run's* own local date, never written into the
+ * fixture -- a hardcoded date would make the "Today" assertion true by coincidence on the day it
+ * was written and false, silently, on every other day the harness happens to run.
+ *
+ * `window.__remindersForTest` (wired in `boot()`, only under `shell.smoke`) is how this reaches
+ * into the tree: the same seam `__bookForTest` and `__nearbyForTest` already use, because there is
+ * no button here a script can click to give a real person a birthday today.
+ */
+async function runRemindersSmoke(win, check) {
+  const page = (fn, ...args) => win.webContents.executeJavaScript(
+    `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
+  const settle = (ms = 350) => new Promise((r) => setTimeout(r, ms));
+
+  console.log('\n  -- coming up, and reminders (#230, #154) --');
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const todayMD = `--${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  win.webContents.send('menu:command', 'view:index');
+  await settle(400);
+
+  const personId = await page(() => window.__remindersForTest.firstLivingId());
+  check('the fixture has a living, named person to give a birthday to',
+    Boolean(personId), String(personId));
+
+  // A yearless birthday (#90): today, but with no age to state -- so the digest below is checked
+  // against the "It's ⟨name⟩'s birthday today" wording rather than the "turns ⟨n⟩" one.
+  await page((id, md) => window.__remindersForTest.edit(id, { birthDate: md }), personId, todayMD);
+  await settle(300);
+
+  const band = await page(() => ({
+    hidden: document.getElementById('coming-up')?.hidden,
+    text: document.getElementById('coming-up-list')?.textContent ?? '',
+  }));
+  check('the "coming up" band is drawn once there is a person to show', band.hidden === false,
+    String(band.hidden));
+  check('a birthday today reads as Today, not a date', /Today/.test(band.text),
+    band.text.slice(0, 160));
+
+  /*
+   * Reminders start off. Turning the switch on is also what arms the first check -- `checkReminders`
+   * in app.js runs right after `setPref('reminders', true)` round-trips -- and that check needs the
+   * clock at or past nine. `FTREE_SMOKE_REMINDER_HOUR` is what moves it there without moving the
+   * date the band assertion above just proved: `dueNow`'s own `now` parameter is what makes that
+   * possible without the harness waiting for a real nine o'clock.
+   */
+  win.webContents.send('menu:command', 'settings:open');
+  await settle(400);
+  await page(() => {
+    const box = document.getElementById('pref-reminders');
+    box.checked = true;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await settle(500);
+
+  check('turning reminders on records exactly one digest',
+    smokeNotifications.length === 1, JSON.stringify(smokeNotifications));
+  check('the digest is about the one person whose birthday it is',
+    smokeNotifications[0]?.personId === personId, JSON.stringify(smokeNotifications[0] ?? null));
+  check('the digest says it is a birthday', /birthday/i.test(smokeNotifications[0]?.title ?? ''),
+    smokeNotifications[0]?.title ?? '');
+
+  await page(() => window.__remindersForTest.check());
+  await settle(300);
+  check('a second check the same day records nothing more',
+    smokeNotifications.length === 1, String(smokeNotifications.length));
+
+  /*
+   * Pictures, not assertions -- taken only when asked, because they are for a person to look at
+   * (docs/desktop.md's screenshots and this PR's own), not for CI to read. `FTREE_SMOKE_SHOT_REMINDERS`
+   * names a *directory*: this is several pictures, not one, the same reason FTREE_SMOKE_SHOT_PREFS
+   * above is not reused for it -- that one is mid-way through the Reading group, and these are about
+   * a part of the dialog nothing before this section has populated.
+   */
+  if (process.env.FTREE_SMOKE_SHOT_REMINDERS) {
+    const dir = process.env.FTREE_SMOKE_SHOT_REMINDERS;
+    await fs.mkdir(dir, { recursive: true });
+    /*
+     * `capturePage()` can return a frame from *before* the DOM change a moment earlier settled --
+     * every picture in an early run of this was one action behind the one it was named for, a click
+     * or a theme toggle old. Waiting on two animation frames from the page's own clock, not this
+     * process's, is what actually catches up with it before the pixels are read.
+     */
+    const paint = () => page(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+    }));
+    const shoot = async (name) => {
+      await paint();
+      await fs.writeFile(path.join(dir, name), (await win.webContents.capturePage()).toPNG());
+      console.log(`       wrote ${path.join(dir, name)}`);
+    };
+    const dateStr = (year, d) => `${year}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const daysFromNow = (n) => new Date(now.getTime() + n * 86400000);
+
+    await page(() => document.getElementById('prefs').close());
+    await settle(200);
+
+    // Three more birthdays and two remembrance days, so the band has more than three of each group
+    // to collapse -- and something in "Remembering" for the expanded picture to show.
+    const ids = await page(() => window.__remindersForTest.livingIds(4));
+    if (ids[1]) {
+      await page((id, v) => window.__remindersForTest.edit(id, { birthDate: v }),
+        ids[1], dateStr(1994, daysFromNow(1)));
+    }
+    if (ids[2]) {
+      await page((id, v) => window.__remindersForTest.edit(id, { birthDate: v }),
+        ids[2], dateStr(1958, daysFromNow(5)));
+    }
+    if (ids[3]) {
+      await page((id, v) => window.__remindersForTest.edit(id, { birthDate: v }),
+        ids[3], dateStr(1932, daysFromNow(12)));
+    }
+    await page((v) => window.__remindersForTest.add({ name: 'Kamala', deceased: true, birthDate: v }),
+      dateStr(1930, daysFromNow(9)));
+    await page((v) => window.__remindersForTest.add({
+      name: 'Ramesh', deceased: true, birthDate: '1936-01-01', deathDate: v,
+    }), dateStr(2011, daysFromNow(14)));
+    await settle(300);
+
+    win.webContents.send('menu:command', 'view:index');
+    await settle(400);
+
+    await shoot('coming-up-collapsed.png');
+    await page(() => document.getElementById('coming-up-toggle')?.click());
+    await settle(200);
+    await shoot('coming-up-expanded.png');
+
+    await page(() => document.getElementById('theme-btn').click());
+    await settle(300);
+    await shoot('coming-up-expanded-dark.png');
+    await page(() => document.getElementById('coming-up-toggle')?.click());
+    await settle(200);
+    await shoot('coming-up-collapsed-dark.png');
+
+    win.webContents.send('menu:command', 'settings:open');
+    await settle(400);
+    // The Reading group above it is taller than the window's default height leaves room for, so the
+    // Reminders group itself needs scrolling into view -- a picture of the dialog's top half would
+    // not be a picture of the thing this section is about.
+    await page(() => document.getElementById('pref-reminders').scrollIntoView({ block: 'center' }));
+    await shoot('prefs-reminders-dark.png');
+    await page(() => document.getElementById('theme-btn').click());
+    await settle(300);
+    await shoot('prefs-reminders.png');
+    await page(() => document.getElementById('prefs').close());
+    await settle(200);
+
+    // Last: a tree with somebody in it, but nobody with a day and month recorded at all -- the
+    // other empty state, and one the rich tree above can no longer show.
+    await page(() => window.__remindersForTest.blank());
+    await settle(300);
+    await shoot('coming-up-empty.png');
+    await page(() => document.getElementById('theme-btn').click());
+    await settle(300);
+    await shoot('coming-up-empty-dark.png');
+    await page(() => document.getElementById('theme-btn').click());
+    await settle(300);
+    return;
+  }
+
+  await page(() => document.getElementById('prefs').close());
+  await settle(200);
+}
+
 async function runRelateSmoke(win, check) {
   const page = (fn, ...args) => win.webContents.executeJavaScript(
     `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
@@ -3424,6 +3646,13 @@ async function runSmoke(win, file) {
   if (process.env.FTREE_SMOKE_SETTINGS) {
     await reopenSample();
     await runSettingsSmoke(win, check);
+  }
+
+  // After settings, not before: it edits a person's birthday and turns reminders on, and every
+  // section above assumes the sample family and a fresh install exactly as the fixture ships them.
+  if (process.env.FTREE_SMOKE_REMINDERS) {
+    await reopenSample();
+    await runRemindersSmoke(win, check);
   }
 
   if (process.env.FTREE_SMOKE_PHOTO) {

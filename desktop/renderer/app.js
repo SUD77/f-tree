@@ -31,6 +31,9 @@ import { compactFamily } from '../../site/playground/compact.js';
 import { relate, peopleToDraw, restrictedGraph } from '../../site/playground/model.js';
 import { searchPeople } from '../../site/playground/search.js';
 import { mostConnected } from '../../site/playground/focus.js';
+import {
+  upcoming, next as nextOccasion, census as occasionCensus, localToday, on as occasionsOn,
+} from '../../site/playground/occasions.js';
 
 import { Tree, RelationshipType, Rejection } from './document.js';
 import { bytesForTree, SaveRefused } from './save.js';
@@ -51,6 +54,7 @@ import { relateIcon, prefsIcon, bookIcon } from './icons.js';
 import { createNearby } from './nearby.js';
 import { qrMatrix, qrSvg } from './qr-picture.js';
 import { createBook } from './book.js';
+import { dueNow, digest, detailFor } from './reminders.js';
 
 const { PARENT, SPOUSE, SIBLING } = RelationshipType;
 
@@ -104,6 +108,14 @@ const state = {
   /** 'all' or 'living' -- the same filter the phone's people list offers. */
   who: 'all',
   saving: false,
+  /**
+   * Whether the "coming up" band (#230) is showing more than its first three of each group.
+   *
+   * Kept here rather than in settings: it is a fact about this reading of this window, not a
+   * preference, so it starts collapsed again next launch rather than remembering what somebody last
+   * expanded in a different family entirely.
+   */
+  comingUpExpanded: false,
 };
 
 let chart = null;
@@ -306,6 +318,10 @@ function rebuild({ refit = false } = {}) {
   reflectDirty();
   updateZoom();
   paintBookAvailability();
+  // Every rebuild is a tree just opened or just changed -- either is "on startup/tree open" for
+  // #154's arming rule, and `checkReminders` is cheap enough that running it on every edit too costs
+  // nothing while `reminders` is off, which is the state most readers are in.
+  checkReminders();
 
   /*
    * An edit can change the answer, so an open question is asked again.
@@ -701,6 +717,28 @@ function paintPrefs() {
     // What stays true, and is what this switch is about, is that GitHub is never asked anything.
     : 'Off. Nothing is asked of GitHub until this is on.';
 
+  /*
+   * Birthday reminders (#154).
+   *
+   * Unavailable outright when this desktop has no notification service to ask -- there is nothing
+   * a switch here could turn on. Otherwise the note is the off explanation or, once it is on, the
+   * coverage line: who it will actually notice, so turning it on is not a guess about what happens
+   * next. `reminderLead` and `reminderRemembrance` follow the same disabled-while-inert pattern as
+   * `betaReleases` does with `checkForUpdates`.
+   */
+  $('pref-reminders').checked = prefs.reminders;
+  $('pref-reminders').disabled = !remindersSupported;
+  $('pref-reminder-lead').value = prefs.reminderLead;
+  $('pref-reminder-lead').disabled = !prefs.reminders || !remindersSupported;
+  $('pref-reminder-remembrance').checked = prefs.reminderRemembrance;
+  $('pref-reminder-remembrance').disabled = !prefs.reminders || !remindersSupported;
+  $('pref-reminders-note').textContent = !remindersSupported
+    ? 'This desktop has no notification service, so nothing can be shown.'
+    : prefs.reminders
+      ? remindersCoverageLine()
+      : 'Off. When on, a note at 9 in the morning on a birthday — one a day, however many share '
+        + 'it — while f-tree is open, or when you next open it that day.';
+
   // The name can only be chosen once there is something to name. With sharing off there is no
   // device id yet, so no generated name to show as the placeholder either -- and nothing to say it to.
   $('pref-nearby').checked = prefs.nearbySharing;
@@ -789,6 +827,101 @@ function wirePrefs() {
   // Escape closes the dialog without the field losing focus first, so `change` never fires. The
   // dialog closing is the last moment the field is "done".
   dialog.addEventListener('close', commitNearbyName);
+
+  $('pref-reminders').addEventListener('change', async (e) => {
+    await setPref('reminders', e.target.checked);
+    // Turning it on this minute is the one moment a reader is looking straight at the switch, so a
+    // birthday already past nine today is worth saying now rather than waiting for the window to
+    // next lose and regain focus.
+    checkReminders();
+  });
+  $('pref-reminder-lead').addEventListener('change', (e) => setPref('reminderLead', e.target.value));
+  $('pref-reminder-remembrance').addEventListener('change',
+    (e) => setPref('reminderRemembrance', e.target.checked));
+}
+
+/* ------------------------------------------------------------------ birthday reminders (#154) */
+
+/**
+ * Whether this desktop can show a notification at all, asked once at boot and cached: it describes
+ * the machine, not the tree, so there is nothing to ask again while the app runs.
+ */
+let remindersSupported = true;
+
+/**
+ * Who a reminder would cover right now, in the reader's own words -- the same `census` the
+ * Kotlin's reminder settings screen reads, so the two say the same thing about the same tree.
+ */
+function remindersCoverageLine() {
+  if (!state.tree) return 'Covers the tree that is open.';
+  const c = occasionCensus(state.tree.people, localToday());
+  let line = `Covers ${count(c.covered, 'person', 'people')}.`;
+  if (c.noDay > 0) line += ` ${c.noDay} ${c.noDay === 1 ? 'has' : 'have'} no day and month recorded.`;
+  if (c.presumedDeparted > 0) {
+    line += ` ${c.presumedDeparted} would be over 110, so ${c.presumedDeparted === 1 ? 'is' : 'are'} `
+      + 'taken to be no longer living.';
+  }
+  return line;
+}
+
+/**
+ * The clock a reminder check reads -- ordinarily just now, except under the smoke harness, where
+ * `FTREE_SMOKE_REMINDER_HOUR` (read in `preload.js`, from the *main* process's own environment so a
+ * build somebody is using never carries it) moves only the hour. `dueNow` needs "at or past nine",
+ * and a CI runner has no reason to be started after nine in whatever timezone it thinks it is in --
+ * this is what lets the smoke test assert that without waiting for a real nine o'clock.
+ */
+function remindersClock() {
+  const now = new Date();
+  if (shell?.reminders?.smokeHourOverride != null) {
+    now.setHours(shell.reminders.smokeHourOverride, now.getMinutes(), now.getSeconds(), 0);
+  }
+  return now;
+}
+
+/**
+ * Asks whether a digest is due and, if one is, shows it.
+ *
+ * Cheap to call often: `dueNow` is a couple of comparisons, and it is what makes "off" mean off --
+ * there is no timer to cancel when `reminders` is false, this simply keeps returning null. Nothing
+ * is marked shown unless a digest actually went out, so a tree with nobody due yet (no tree open,
+ * or one where `digest` finds nothing once remembrance is filtered) is asked again next time rather
+ * than silently marked as checked for the day.
+ */
+function checkReminders() {
+  if (!shell?.reminders || !prefs || !state.tree) return;
+  const due = dueNow(prefs, remindersClock());
+  if (!due) return;
+
+  const occasions = occasionsOn(state.tree.people, due.target);
+  const result = digest(occasions, { lead: prefs.reminderLead, remembrance: prefs.reminderRemembrance });
+  if (!result) return;
+
+  shell.reminders.notify(result);
+  setPref('remindersShownOn', due.today);
+}
+
+/**
+ * Arms the checks #154 asks for: on startup and every tree opening (via `rebuild`), on the window
+ * regaining focus or visibility, and a 15-minute interval that outlives a laptop's sleep -- a
+ * `setInterval` alone can be starved by suspend for hours and then fire once on waking, which is
+ * exactly when "is it past nine and have we said so already" needs to be asked again anyway.
+ *
+ * The same tick also redraws the "coming up" band (#230), which is what rolls it over at midnight
+ * for a tree left open overnight -- a band drawn once at load would otherwise go on reading
+ * yesterday's "Today" until something else happened to redraw it.
+ */
+function wireReminders() {
+  const tick = () => { renderPeople(); checkReminders(); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  window.addEventListener('focus', tick);
+  setInterval(tick, 15 * 60 * 1000);
+
+  shell?.reminders?.onOpen((personId) => {
+    if (personId) { setView('index'); select(personId); return; }
+    setView('index');
+    $('coming-up')?.scrollIntoView({ block: 'start' });
+  });
 }
 
 /* ------------------------------------------------------------------ how two people are related */
@@ -1148,6 +1281,132 @@ function reachWords() {
   return `${state.generationsUp} generations`;
 }
 
+/* ------------------------------------------------------------------ coming up (#230, #154) */
+
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
+
+/** `2026-11-03` as "3 November" -- day and full month, deliberately without the year (#230). */
+function dayMonth(iso) {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d} ${MONTHS_FULL[m - 1]}`;
+}
+
+/**
+ * One row of the "coming up" band: a date block, the name, and the detail line `reminders.js`'s
+ * `detailFor` also uses for a notification -- one wording, read in two places.
+ *
+ * A `<button>`, opening the person exactly as an `index-row` does (#151's "how are we related"
+ * pattern aside, this is the same "click a row, open a person" the list next to it already is), so
+ * arriving from a birthday and arriving from the alphabetical list land on the same panel.
+ */
+function comingUpRow(occasion) {
+  const [y, m, d] = occasion.date.split('-').map(Number);
+  const weekday = WEEKDAYS_SHORT[new Date(y, m - 1, d).getDay()];
+  const soon = occasion.daysAway <= 1;
+
+  const li = document.createElement('li');
+  li.className = 'coming-up-item';
+
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = occasion.kind === 'BIRTHDAY' ? 'coming-up-row' : 'coming-up-row remembering';
+
+  const dateBlock = document.createElement('span');
+  dateBlock.className = 'coming-up-date';
+  const day = document.createElement('span');
+  day.className = 'coming-up-day';
+  day.textContent = String(d);
+  const small = document.createElement('span');
+  small.className = soon ? 'coming-up-small coming-up-soon' : 'coming-up-small';
+  small.textContent = soon ? (occasion.daysAway === 0 ? 'Today' : 'Tomorrow') : `${weekday} · ${MONTHS_SHORT[m - 1]}`;
+  dateBlock.append(day, small);
+
+  const detailText = detailFor(occasion);
+  const who = document.createElement('span');
+  who.className = 'coming-up-who';
+  const name = document.createElement('span');
+  name.className = 'coming-up-name';
+  name.textContent = displayName(occasion.person);
+  const detail = document.createElement('span');
+  detail.className = 'coming-up-detail';
+  detail.textContent = detailText;
+  who.append(name, document.createElement('br'), detail);
+
+  row.append(dateBlock, who);
+  // Read naturally regardless of what the date block spells out visually -- "today"/"tomorrow" or a
+  // day and month either way, never the raw "Sat · Sep" a screen reader would have to guess at.
+  const when = soon ? (occasion.daysAway === 0 ? 'today' : 'tomorrow') : `on ${dayMonth(occasion.date)}`;
+  row.setAttribute('aria-label', `${displayName(occasion.person)}, ${detailText}, ${when}`);
+  row.addEventListener('click', () => select(occasion.person.id));
+
+  li.append(row);
+  return li;
+}
+
+/**
+ * The "coming up" band above the people index (#230): living birthdays in the next 30 days, and
+ * beneath them a quieter Remembering group for the departed.
+ *
+ * Called from `renderPeople` -- wherever that redraws, this does too, which is what keeps it in
+ * step with a search, the Living filter, a selection, and every edit without a call of its own to
+ * remember at each of those sites.
+ */
+function renderComingUp() {
+  const section = $('coming-up');
+  if (!section) return;
+
+  // Hidden entirely with no people to ask about, and while a search is narrowing the list below it
+  // to something the band would otherwise disagree with.
+  if (!state.tree || state.tree.people.length === 0 || $('search').value.trim()) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  const today = localToday();
+  const items = upcoming(state.tree.people, today);
+  // The Living filter already hides the deceased from the list below; Remembering follows it (#230).
+  const showRemembering = state.who !== 'living';
+  const birthdays = items.filter((o) => o.kind === 'BIRTHDAY');
+  const remembering = showRemembering ? items.filter((o) => o.kind !== 'BIRTHDAY') : [];
+
+  const emptyEl = $('coming-up-empty');
+  const listEl = $('coming-up-list');
+  const remGroup = $('coming-up-remembering');
+  const remListEl = $('coming-up-remembering-list');
+  const toggle = $('coming-up-toggle');
+  const limit = state.comingUpExpanded ? Infinity : 3;
+
+  if (birthdays.length === 0) {
+    const upcomingBirthday = nextOccasion(state.tree.people, today);
+    emptyEl.textContent = upcomingBirthday
+      ? `No birthdays in the next 30 days. Next: ${displayName(upcomingBirthday.person)}, ${dayMonth(upcomingBirthday.date)}.`
+      : 'Birthdays appear here once someone has a day and month recorded.';
+    emptyEl.hidden = false;
+    listEl.replaceChildren();
+  } else {
+    emptyEl.hidden = true;
+    listEl.replaceChildren(...birthdays.slice(0, limit).map(comingUpRow));
+  }
+
+  if (remembering.length > 0) {
+    remGroup.hidden = false;
+    remListEl.replaceChildren(...remembering.slice(0, limit).map(comingUpRow));
+  } else {
+    remGroup.hidden = true;
+    remListEl.replaceChildren();
+  }
+
+  const moreExist = birthdays.length > 3 || remembering.length > 3;
+  toggle.hidden = !moreExist;
+  if (moreExist) {
+    toggle.textContent = state.comingUpExpanded ? 'Show fewer' : `Show all ${birthdays.length + remembering.length}`;
+  }
+}
+
 /**
  * Everyone, grouped as the chart groups them and sorted by name.
  *
@@ -1157,6 +1416,7 @@ function reachWords() {
  * relatives is invisible in a family chart and perfectly visible here.
  */
 function renderPeople() {
+  renderComingUp();
   if (!state.graph || !state.layout) return;
   const list = $('index-list');
   const query = $('search').value.trim().toLowerCase();
@@ -2920,6 +3180,10 @@ function wireChrome() {
       renderPeople();
     });
   }
+  $('coming-up-toggle').addEventListener('click', () => {
+    state.comingUpExpanded = !state.comingUpExpanded;
+    renderComingUp();
+  });
 
   $('zoom-in').addEventListener('click', () => { chart.zoomBy(1.25); updateZoom(); });
   $('zoom-out').addEventListener('click', () => { chart.zoomBy(0.8); updateZoom(); });
@@ -3140,6 +3404,7 @@ async function boot() {
   wireKeys();
   wireNearby();
   wireBook();
+  wireReminders();
 
   /*
    * Settings before the first draw.
@@ -3152,6 +3417,14 @@ async function boot() {
       prefs = await shell.settings();
       applyPrefs();
     } catch { /* the page already has the defaults on it */ }
+  }
+
+  // Describes the machine, not the tree, so it is asked once here rather than every time the
+  // preferences dialog opens.
+  if (shell?.reminders) {
+    try {
+      remindersSupported = await shell.reminders.supported();
+    } catch { /* the switch stays available; `reminders:notify` itself is the true gate */ }
   }
 
   // Whoever changed it -- this dialog, the native menu, another window -- the page follows.
@@ -3173,6 +3446,31 @@ async function boot() {
 
     const last = await shell.lastTree();
     if (last) await openBytes(last.bytes, last.name, last.path);
+  }
+
+  /*
+   * Test-only hooks for the reminders smoke section (`runRemindersSmoke` in main.js), the same seam
+   * `__bookForTest` and `__nearbyForTest` above use: there is no button a script can click to give a
+   * real person a birthday today, so the harness reaches in here instead.
+   */
+  if (shell?.smoke) {
+    window.__remindersForTest = {
+      check: () => checkReminders(),
+      edit: (id, fields) => { state.tree.updatePerson(id, fields); rebuild(); },
+      add: (fields) => { const result = state.tree.addPerson(fields); rebuild(); return result.id; },
+      firstLivingId: () => state.tree.people
+        .find((p) => p.name && !p.deceased && !p.deathDate)?.id ?? null,
+      livingIds: (n) => state.tree.people
+        .filter((p) => p.name && !p.deceased && !p.deathDate).slice(0, n).map((p) => p.id),
+      // A tree with somebody in it, but nobody with a day and month recorded at all -- the emptiest
+      // of the band's empty states, which the sample family cannot show once it has been edited.
+      blank: () => {
+        state.tree = new Tree({}, { ownTreeId: state.ownTreeId });
+        state.tree.addPerson({ name: 'Priya' });
+        state.selected = null;
+        rebuild({ refit: true });
+      },
+    };
   }
 }
 

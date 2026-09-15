@@ -111,6 +111,13 @@ jobs:
           FTREE_SMOKE_COMPACT: '1'
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
+          # "Coming up" (#230) and birthday reminders (#154): a person is given a birthday today,
+          # computed from this run's own date rather than written into the fixture, and the band and
+          # a real digest are both checked against it. FTREE_SMOKE_REMINDER_HOUR moves only the hour
+          # `dueNow` reads -- not the date -- so "the switch is on and it's past nine" does not
+          # depend on what hour a runner happens to start at.
+          FTREE_SMOKE_REMINDERS: '1'
+          FTREE_SMOKE_REMINDER_HOUR: '9'
           FTREE_SMOKE_PHOTO: '1'
           # The family book (#200, #207): opens from the menu, proves every template chip previews,
           # carries a Devanagari title all the way into a real PDF, and holds that PDF to what
@@ -197,6 +204,8 @@ jobs:
           FTREE_SMOKE_COMPACT: '1'
           FTREE_SMOKE_RELATE: '1'
           FTREE_SMOKE_SETTINGS: '1'
+          FTREE_SMOKE_REMINDERS: '1'
+          FTREE_SMOKE_REMINDER_HOUR: '9'
           FTREE_SMOKE_PHOTO: '1'
           # And the family book against the package: the only run that proves `site/book` was
           # staged at all -- forgetting it is exactly the mistake that leaves a dev build working

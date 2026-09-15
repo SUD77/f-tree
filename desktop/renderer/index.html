@@ -162,6 +162,27 @@
     -->
     <section class="index" id="index" data-when="index" hidden>
       <div class="index-inner">
+        <!--
+          "Coming up" (#230, #154): who is having a birthday in the next 30 days, and beneath them a
+          quieter Remembering group for the departed. `renderComingUp` in app.js draws it from
+          `site/playground/occasions.js`, the engine this shares with the reminder and with the
+          Android app's own list. `aria-labelledby` rather than a plain heading because this is a
+          second landmark on the page, not a continuation of "Everyone in this tree" below it.
+        -->
+        <section class="coming-up" id="coming-up" aria-labelledby="coming-up-heading" hidden>
+          <div class="coming-up-head">
+            <h3 class="coming-up-heading" id="coming-up-heading">Coming up</h3>
+            <span class="coming-up-window">Next 30 days</span>
+          </div>
+          <p class="coming-up-empty" id="coming-up-empty" hidden></p>
+          <ol class="coming-up-list" id="coming-up-list"></ol>
+          <div class="coming-up-remembering" id="coming-up-remembering" hidden>
+            <h4 class="coming-up-subheading">Remembering</h4>
+            <ol class="coming-up-list coming-up-remembering-list" id="coming-up-remembering-list"></ol>
+          </div>
+          <button type="button" class="link-btn coming-up-toggle" id="coming-up-toggle" hidden></button>
+        </section>
+
         <div class="index-head">
           <h2 class="index-heading">Everyone in this tree</h2>
           <div class="segmented small" role="group" aria-label="Who to show">
@@ -461,6 +482,43 @@
           <input type="checkbox" id="pref-beta" class="prefs-check">
           <p class="prefs-note">
             Unfinished builds, offered early. Turning this off or on forgets any version you skipped.
+          </p>
+        </div>
+      </section>
+
+      <!--
+        Birthday reminders (#154). Not a fourth network setting -- nothing here leaves the machine --
+        so it sits with Reading rather than with the two above it, which is why the grid below puts
+        it under Reading's column rather than Updates'. The coverage line is the "am I about to be
+        surprised" answer a switch alone cannot give: it says who it actually covers before it is
+        turned on for real.
+
+        "When" and "Remembrance days" stay in the document, disabled, while reminders are off --
+        the same pattern `pref-beta` uses against `pref-updates` -- so the dialog never has to
+        explain their absence, only their greyed presence.
+      -->
+      <section class="prefs-group">
+        <h3 class="prefs-heading">Reminders</h3>
+
+        <div class="prefs-row">
+          <label class="prefs-label" for="pref-reminders">Birthday reminders</label>
+          <input type="checkbox" id="pref-reminders" class="prefs-check">
+          <p class="prefs-note" id="pref-reminders-note"></p>
+        </div>
+
+        <div class="prefs-row">
+          <label class="prefs-label" for="pref-reminder-lead">When</label>
+          <select id="pref-reminder-lead" class="prefs-control">
+            <option value="day">On the day</option>
+            <option value="before">The day before</option>
+          </select>
+        </div>
+
+        <div class="prefs-row">
+          <label class="prefs-label" for="pref-reminder-remembrance">Remembrance days</label>
+          <input type="checkbox" id="pref-reminder-remembrance" class="prefs-check">
+          <p class="prefs-note">
+            Also the birthdays and death anniversaries of those no longer with us.
           </p>
         </div>
       </section>
