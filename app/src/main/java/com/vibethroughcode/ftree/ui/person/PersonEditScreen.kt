@@ -231,35 +231,6 @@ fun PersonEditScreen(
     }
 }
 
-@Composable
-private fun DateField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    problem: DateProblem?,
-    tag: String,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        placeholder = { Text(stringResource(R.string.edit_date_hint)) },
-        isError = problem != null,
-        singleLine = true,
-        textStyle = FTreeText.record,
-        supportingText = {
-            Text(
-                when (problem) {
-                    DateProblem.MALFORMED -> stringResource(R.string.edit_date_invalid)
-                    DateProblem.DEATH_BEFORE_BIRTH -> stringResource(R.string.edit_death_before_birth)
-                    null -> stringResource(R.string.edit_date_support)
-                }
-            )
-        },
-        modifier = Modifier.fillMaxWidth().testTag(tag),
-    )
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GenderChips(selected: Gender, onSelect: (Gender) -> Unit) {
