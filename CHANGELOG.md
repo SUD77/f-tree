@@ -10,6 +10,25 @@ betas leading up to a stable release are folded into that release's entry here.
 
 ## [Unreleased]
 
+**Whose birthday is coming up, and a note on the morning if you want one (#230, #154).**
+
+- **Coming up, on Android (0.10.0-beta.3) and desktop (0.8.0-beta.3).** The top of People lists the
+  next 30 days: living birthdays with the age turned ("turns 60"), or just the day when no year is
+  recorded. Below them, under **Remembering**, the birthdays and death anniversaries of those no
+  longer with us. Nothing in the window? It says when the next one is.
+- **Birthday reminders — off until you turn them on.** A note at nine in the morning, one a day
+  however many share it, on the day or the day before. Remembrance days are a second switch, off by
+  default. On a locked phone it says only "A birthday today".
+- **Asks for nothing until switched on.** Android is asked to allow notifications at the moment you
+  turn reminders on and at no other time; the permission list in Settings says so. The desktop
+  reminds you while f-tree is open, and catches up when you next open it that day.
+- **Nobody is left out in silence.** The switch says who it covers and who it cannot: "Covers 42
+  people. 106 have no day and month recorded." 29 February falls on the 28th in other years, and
+  nobody "living" is wished a happy 111th.
+- **The updater can no longer be hidden by a desktop release.** GitHub had been calling desktop
+  0.6.0 the repository's latest release, which left the phone's ordinary update check with nothing
+  to install. It now falls back to the full release list when that happens.
+
 **Dates you just type, and birthdays nobody remembers the year of (#90).**
 
 - **Type a date as digits, on Android (0.10.0-beta.2) and desktop (0.8.0-beta.2).** The date
