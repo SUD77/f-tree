@@ -83,6 +83,17 @@ test('the same tree makes the same bytes, every time', async () => {
   assert.equal(a, b);
 });
 
+test('a document as Android writes it, with empty lists left out, still makes a book', () => {
+  // Android's exporter omits defaults: one person and no relationships means no "relationships" key.
+  const lone = { format: 'f-tree', version: 1, people: [{ id: 'm', name: 'Meera Nair', birthDate: '1994' }] };
+  const book = composeBook(lone, { now: NOW }, TEMPLATES.heirloom);
+  assert.deepEqual(validateBook(book), []);
+  assert.ok(JSON.stringify(book).includes('Meera Nair'));
+  const diwali = JSON.stringify(composeBook(lone, { now: NOW }, TEMPLATES.diwali));
+  assert.ok(diwali.includes('One lamp, and room for many more.') && !diwali.includes('One lamps'));
+  assert.deepEqual(validateBook(composeBook({ format: 'f-tree', version: 1 }, { now: NOW }, TEMPLATES.diwali)), []);
+});
+
 test('the composer refuses to guess the date', async () => {
   const doc = await sampleDoc();
   assert.throws(() => composeBook(doc, {}, TEMPLATES.heirloom), /options.now/);

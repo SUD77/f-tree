@@ -27,7 +27,7 @@ export const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X
 
 export const generationName = (g) => (g < ORDINALS.length ? `The ${ORDINALS[g]} generation` : `Generation ${g + 1}`);
 
-const DEVANAGARI = /[ऀ-ॿ]/;
+const DEVANAGARI = /[\u0900-\u097F]/;
 
 /** "from the Sharma family", or "शर्मा परिवार की ओर से" when the family's name is in Hindi. */
 export function fromFamily(title) {

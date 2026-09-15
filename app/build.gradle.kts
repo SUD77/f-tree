@@ -14,15 +14,15 @@ val signingProperties = rootProject.file("keystore.properties").takeIf { it.exis
 }
 
 /**
- * Copies exactly `site/book/policy.json` into a variant's generated assets, at `book/policy.json`
- * -- and nothing else in `site/book/`.
+ * Stages the family book's engine (#200) and the policy switch (#156) into a variant's generated
+ * assets, under `book/`, from the one copy of each in git.
  *
- * `site/book/` is one shell-agnostic engine shared with desktop (#156, #200), and it will go on to
- * hold a great deal more than this one file: the composer, page blocks, templates. A plain
- * `assets.srcDir("site/book")` would stage all of it -- including `.test.mjs` files and, later,
- * template art meant to be staged deliberately by a future issue, not by accident because it
- * happened to live in the same directory as the policy. Naming the one file this task copies is
- * what keeps that true.
+ *  - `book/policy.json` - the shipped policy, read by `PolicyAssets`.
+ *  - `book/site/...` - the composer and exactly the modules it imports, at the same relative paths
+ *    they have in `site/`, so `../playground/model.js` resolves inside the WebView with no rewriting;
+ *    plus the templates. Which modules is not a list anybody maintains: [bookEngine] walks the
+ *    imports from `site/book/compose.js`, so a module added to the composer is staged because it is
+ *    imported, and a test, a golden or a fixture is never staged because nothing imports it.
  *
  * A dedicated task with a real `@OutputDirectory`, rather than a bare `Copy`, because
  * `Sources.assets.addGeneratedSourceDirectory` wants a task whose output is a `DirectoryProperty`
@@ -30,20 +30,45 @@ val signingProperties = rootProject.file("keystore.properties").takeIf { it.exis
  * that way.
  */
 @CacheableTask
-abstract class SyncBookPolicyAsset : DefaultTask() {
+abstract class SyncBookAssets : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
     abstract val policyJson: RegularFileProperty
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val engine: ConfigurableFileCollection
+
+    /** Where [engine]'s paths are measured from - the repository's `site/`. */
+    @get:Internal
+    abstract val siteRoot: DirectoryProperty
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun sync() {
-        val destination = outputDir.get().asFile.resolve("book")
-        destination.mkdirs()
-        policyJson.get().asFile.copyTo(destination.resolve("policy.json"), overwrite = true)
+        val root = outputDir.get().asFile
+        root.deleteRecursively()
+        val book = root.resolve("book").apply { mkdirs() }
+        policyJson.get().asFile.copyTo(book.resolve("policy.json"), overwrite = true)
+        val site = siteRoot.get().asFile
+        engine.files.forEach { it.copyTo(book.resolve("site").resolve(it.relativeTo(site).path), overwrite = true) }
     }
+}
+
+/** Every module `site/book/compose.js` imports, transitively, plus the templates it reads. */
+fun bookEngine(site: File): List<File> {
+    val found = linkedSetOf<File>()
+    val queue = ArrayDeque(listOf(site.resolve("book/compose.js").canonicalFile))
+    val specifier = Regex("""^\s*(?:import|export)\b[^'"]*['"](\.{1,2}/[^'"]+)['"]""", RegexOption.MULTILINE)
+    while (queue.isNotEmpty()) {
+        val file = queue.removeFirst()
+        if (!found.add(file)) continue
+        check(file.startsWith(site.canonicalFile)) { "the book engine imports ${file} from outside site/" }
+        specifier.findAll(file.readText()).forEach { queue.add(file.parentFile.resolve(it.groupValues[1]).canonicalFile) }
+    }
+    return found.toList() + (site.resolve("book/templates").listFiles { f -> f.extension == "json" }?.sorted() ?: emptyList())
 }
 
 android {
@@ -127,13 +152,14 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// One `site/book/policy.json` in git, staged into each variant's assets as `book/policy.json` by
-// `SyncBookPolicyAsset` above -- never a second copy checked in under app/src. See that class's
-// doc comment for why a plain `assets.srcDir` over the whole of `site/book/` is not used instead.
+// One copy of the book engine and the policy in git, staged into each variant's assets by
+// `SyncBookAssets` above -- never a second copy checked in under app/src.
 androidComponents {
     onVariants { variant ->
-        val syncTask = tasks.register<SyncBookPolicyAsset>("sync${variant.name.replaceFirstChar { it.uppercase() }}BookPolicyAsset") {
+        val syncTask = tasks.register<SyncBookAssets>("sync${variant.name.replaceFirstChar { it.uppercase() }}BookAssets") {
             policyJson.set(rootProject.file("site/book/policy.json"))
+            siteRoot.set(rootProject.layout.projectDirectory.dir("site"))
+            engine.from(bookEngine(rootProject.file("site")))
             outputDir.set(layout.buildDirectory.dir("generated/bookAssets/${variant.name}"))
         }
         variant.sources.assets?.addGeneratedSourceDirectory(syncTask) { it.outputDir }
@@ -249,5 +275,18 @@ tasks.withType<Test>().configureEach {
         rootProject.file("site/playground/model.js"),
     ).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("branchCrossLanguageInputs")
+        .optional()
+
+    /*
+     * `BookFormatTest` parses the composer's own golden book and runs the composer in node against
+     * a document the app's exporter types encoded - so the whole engine is an input to it.
+     */
+    inputs.files(
+        fileTree(rootProject.file("site/book")) { include("**/*.js", "**/*.json") },
+        rootProject.file("site/playground/model.js"),
+        rootProject.file("site/playground/layout.js"),
+        rootProject.file("site/playground/dates.js"),
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("bookEngineInputs")
         .optional()
 }

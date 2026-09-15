@@ -8,6 +8,6 @@ large diwali 3dac92011915af74 19 Cover,The_whole_family,The_family_in_numbers,Ge
 remarriage heirloom 6f4d7f825b0174d3 7 Cover,The_whole_family,The_family_in_numbers,Generations,Generations,_continued,Find_yourself,Is_someone_missing?
 remarriage diwali 5da0cf36db9aa155 7 Cover,The_whole_family,The_family_in_numbers,Generations,Generations,_continued,Find_yourself,Is_someone_missing?
 one-person heirloom e249e7ac301d8bad 5 Cover,The_whole_family,The_family_in_numbers,Generations,Is_someone_missing?
-one-person diwali 16c052ee7fc2a9d9 5 Cover,The_whole_family,The_family_in_numbers,Generations,Is_someone_missing?
+one-person diwali bfa02b6297263017 5 Cover,The_whole_family,The_family_in_numbers,Generations,Is_someone_missing?
 empty heirloom 80bcb52436914e70 5 Cover,The_whole_family,The_family_in_numbers,Generations,Is_someone_missing?
 empty diwali c9164082b82abd6a 5 Cover,The_whole_family,The_family_in_numbers,Generations,Is_someone_missing?

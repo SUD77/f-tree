@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.FitScreen
@@ -89,6 +90,8 @@ const val TreeModeWholeTag = "tree-mode-whole"
 const val TreeRelateTag = "tree-relate"
 const val TreeRelateFromTag = "tree-relate-from"
 const val TreeShareTag = "tree-share"
+const val TreeBookTag = "tree-book"
+const val TreeBookFromTag = "tree-book-from"
 const val TreeFrameTag = "tree-frame"
 
 /**
@@ -139,6 +142,8 @@ fun TreeScreen(
     onAddPerson: () -> Unit,
     onAddRelative: (String, RelativeKind) -> Unit,
     onShare: (String) -> Unit,
+    /** The family book: null for everyone, or the person whose branch it starts from. */
+    onBook: (String?) -> Unit,
     modifier: Modifier = Modifier,
     /** Somebody the reader has already named for a relation, arriving from their page. */
     relateFrom: String? = null,
@@ -327,6 +332,7 @@ fun TreeScreen(
                                     onRelate = { openRelation(null) },
                                     onMore = viewModel::showMoreGenerations,
                                     onFrame = { frameSignal++ },
+                                    onBook = { onBook(null) },
                                 )
                             }
                         },
@@ -347,6 +353,7 @@ fun TreeScreen(
                                 onRelate = { openRelation(null) },
                                 onMore = viewModel::showMoreGenerations,
                                 onFrame = { frameSignal++ },
+                                onBook = { onBook(null) },
                             )
                         }),
                     )
@@ -494,6 +501,10 @@ fun TreeScreen(
                     selected = null
                     onShare(person.id)
                 },
+                onBook = {
+                    selected = null
+                    onBook(person.id)
+                },
                 onAddRelative = { kind ->
                     selected = null
                     onAddRelative(person.id, kind)
@@ -582,6 +593,7 @@ private fun ChartActions(
     onRelate: () -> Unit,
     onMore: () -> Unit,
     onFrame: () -> Unit,
+    onBook: () -> Unit,
 ) {
     if (showFrame) {
         IconButton(onClick = onFrame, modifier = Modifier.testTag(TreeFrameTag)) {
@@ -598,6 +610,12 @@ private fun ChartActions(
                 contentDescription = stringResource(R.string.relation_find),
             )
         }
+    }
+    IconButton(onClick = onBook, modifier = Modifier.testTag(TreeBookTag)) {
+        Icon(
+            Icons.Default.AutoStories,
+            contentDescription = stringResource(R.string.book_open_description),
+        )
     }
     if (showMore) {
         IconButton(onClick = onMore) {
@@ -642,6 +660,7 @@ private fun PersonActions(
     onFocus: () -> Unit,
     onRelate: () -> Unit,
     onShare: () -> Unit,
+    onBook: () -> Unit,
     onAddRelative: (RelativeKind) -> Unit,
 ) {
     Column(
@@ -675,6 +694,12 @@ private fun PersonActions(
             label = stringResource(R.string.share_branch),
             tag = TreeShareTag,
             onClick = onShare,
+        )
+        SheetAction(
+            icon = { Icon(Icons.Default.AutoStories, contentDescription = null) },
+            label = stringResource(R.string.book_from_person, person.name?.trim()?.split(Regex("\\s+"))?.firstOrNull() ?: person.displayName()),
+            tag = TreeBookFromTag,
+            onClick = onBook,
         )
         // Naming the four kinds outright is one tap either way, and avoids the sheet quietly
         // choosing "parent" on the user's behalf.

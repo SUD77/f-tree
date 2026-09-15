@@ -39,6 +39,16 @@ const plainText = (v, max, what) => {
   return v;
 };
 
+/**
+ * Copy that counts people may say it both ways - `{ one, other }` - because "One lamps" is the
+ * first thing a new reader with a tree of one would see. A plain string is used for every count.
+ */
+function plural(v, max, what) {
+  if (typeof v === 'string') return { one: plainText(v, max, what), other: v };
+  if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).sort().join() !== 'one,other') fail(`${what} must be text, or { one, other }`);
+  return { one: plainText(v.one, max, `${what}.one`), other: plainText(v.other, max, `${what}.other`) };
+}
+
 export function validateTemplate(t) {
   if (!t || typeof t !== 'object' || Array.isArray(t)) fail('not an object');
   if (t.format !== TEMPLATE_FORMAT) fail(`format ${t.format} - this app reads format ${TEMPLATE_FORMAT}`);
@@ -75,7 +85,7 @@ export function validateTemplate(t) {
     motif: c.motif,
     greeting: c.greeting === undefined ? null : plainText(c.greeting, 40, 'cover.greeting'),
     subtitle: c.subtitle === undefined ? null : plainText(c.subtitle, 60, 'cover.subtitle'),
-    line: c.line === undefined ? null : plainText(c.line, 80, 'cover.line'),
+    line: c.line === undefined ? null : plural(c.line, 80, 'cover.line'),
     ornaments: [...ornaments],
   };
 

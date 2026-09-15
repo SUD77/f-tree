@@ -68,6 +68,7 @@ import com.vibethroughcode.ftree.ui.transfer.TransferMessages
 import com.vibethroughcode.ftree.ui.common.peopleCount
 import com.vibethroughcode.ftree.ui.transfer.TransferViewModel
 import com.vibethroughcode.ftree.ui.transfer.defaultExportName
+import com.vibethroughcode.ftree.ui.book.BookScreen
 import com.vibethroughcode.ftree.ui.tree.TreeScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -244,7 +245,12 @@ fun FTreeApp(
                                 navController.navigate(AddRelativeRoute(anchorId, kind))
                             },
                             onShare = transferViewModel::shareBranch,
+                            onBook = { navController.navigate(BookRoute(scopePersonId = it)) },
                         )
+                    }
+
+                    composable<BookRoute> {
+                        BookScreen(onBack = { navController.popBackStack() })
                     }
 
                     composable<PeopleRoute> {

@@ -8,6 +8,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.toRoute
 import com.vibethroughcode.ftree.FTreeApplication
+import com.vibethroughcode.ftree.book.BookComposer
+import com.vibethroughcode.ftree.ui.book.BookViewModel
 import com.vibethroughcode.ftree.data.FamilyRepository
 import com.vibethroughcode.ftree.data.PhotoStore
 import com.vibethroughcode.ftree.ui.people.PeopleViewModel
@@ -94,6 +96,23 @@ object FTreeViewModels {
         initializer {
             val route = createSavedStateHandle().toRoute<AddRelativeRoute>()
             AddRelativeViewModel(repository(), route.anchorPersonId, route.kind)
+        }
+        initializer {
+            val app = this[APPLICATION_KEY] as FTreeApplication
+            val route = createSavedStateHandle().toRoute<BookRoute>()
+            BookViewModel(
+                exporter = app.container.exporter,
+                repository = app.container.familyRepository,
+                printer = app.container.bookPrinter,
+                // One composer - one hidden WebView - per book screen, closed with it.
+                composer = BookComposer(app),
+                templates = app.container.bookTemplates,
+                policy = app.container.entitlementPolicy,
+                entitlements = app.container.entitlementSource,
+                ledger = app.container.usageLedger,
+                contentResolver = app.contentResolver,
+                scopePersonId = route.scopePersonId,
+            )
         }
     }
 }
