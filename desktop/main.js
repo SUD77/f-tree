@@ -1023,6 +1023,8 @@ ipcMain.handle('settings:set', async (event, { key, value }) => {
  * neither of which this side has. What this side owns is the one thing the renderer cannot do for
  * itself: asking the OS to show something, and hearing back when it is clicked.
  */
+let lastNotice = null;
+
 ipcMain.handle('reminders:supported', () => Notification.isSupported());
 
 ipcMain.handle('reminders:notify', (event, { title, body, personId = null } = {}) => {
@@ -1035,6 +1037,9 @@ ipcMain.handle('reminders:notify', (event, { title, body, personId = null } = {}
   if (!Notification.isSupported()) return;
 
   const notice = new Notification({ title, body });
+  // Held, not left to go out of scope: a Notification nothing refers to can be collected while it
+  // is still on screen, and its click then goes nowhere. One a day, so one reference is enough.
+  lastNotice = notice;
   notice.on('click', () => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return;
