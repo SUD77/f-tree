@@ -13,6 +13,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.core.graphics.PathParser
+import androidx.core.graphics.withSave
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -71,17 +72,18 @@ class BookPainter(
             is Item.Text -> drawText(canvas, book, item, inherited)
             is Item.Image -> drawImage(canvas, item, inherited)
             is Item.Group -> {
-                val saved = canvas.save()
-                item.tf?.let { (a, b, c, d, e) ->
-                    val f = item.tf[5]
-                    canvas.concat(Matrix().apply { setValues(floatArrayOf(a, c, e, b, d, f, 0f, 0f, 1f)) })
+                canvas.withSave {
+                    item.tf?.let { (a, b, c, d, e) ->
+                        val f = item.tf[5]
+                        concat(Matrix().apply { setValues(floatArrayOf(a, c, e, b, d, f, 0f, 0f, 1f)) })
+                    }
+                    // Group opacity applies to the group as one picture, not to each item in turn -
+                    // overlapping items inside must not show through each other. That is a layer,
+                    // and withSave's restore takes it down with the rest.
+                    val op = item.op ?: 1f
+                    if (op < 1f) saveLayerAlpha(null, (op * 255).roundToInt())
+                    item.items.forEach { draw(this, book, it, inherited) }
                 }
-                // Group opacity applies to the group as one picture, not to each item in turn -
-                // overlapping items inside must not show through each other. That is a layer.
-                val op = item.op ?: 1f
-                if (op < 1f) canvas.saveLayerAlpha(null, (op * 255).roundToInt())
-                item.items.forEach { draw(canvas, book, it, inherited) }
-                canvas.restoreToCount(saved)
             }
         }
     }
@@ -119,15 +121,15 @@ class BookPainter(
         val sx = (bitmap.width - sw) / 2f
         val sy = (bitmap.height - sh) / 2f
         val src = Rect(sx.roundToInt(), sy.roundToInt(), (sx + sw).roundToInt(), (sy + sh).roundToInt())
-        val saved = canvas.save()
-        if (item.clip == "circle") {
-            canvas.clipPath(Path().apply { addCircle(dst.centerX(), dst.centerY(), min(dst.width(), dst.height()) / 2f, Path.Direction.CW) })
-        } else {
-            canvas.clipRect(dst)
+        canvas.withSave {
+            if (item.clip == "circle") {
+                clipPath(Path().apply { addCircle(dst.centerX(), dst.centerY(), min(dst.width(), dst.height()) / 2f, Path.Direction.CW) })
+            } else {
+                clipRect(dst)
+            }
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = alphaOf(item.op, inherited) }
+            drawBitmap(bitmap, src, dst, paint)
         }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = alphaOf(item.op, inherited) }
-        canvas.drawBitmap(bitmap, src, dst, paint)
-        canvas.restoreToCount(saved)
     }
 
     private fun fillPaint(book: Book, fill: Fill?, op: Float?, inherited: Float, bounds: RectF, circle: Item.Circle? = null): Paint? {

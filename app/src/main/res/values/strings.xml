@@ -618,8 +618,12 @@
     <string name="book_empty">Add someone to the tree first. A family book is made from the people in it.</string>
     <string name="book_failed_webview">The family book is laid out by Android System WebView, which is missing or switched off on this phone. Turn it on, or install it from the app store, and try again.</string>
     <string name="book_failed_old_webview">The family book needs a newer Android System WebView than this phone has (%1$s). Update it from the app store and try again.</string>
-    <string name="book_failed_retry">Making the book stopped part-way. Go back and open it again.</string>
-    <string name="book_failed_script">The book could not be laid out. Report it from Settings, so it can be fixed.</string>
+    <string name="book_failed_retry">Making the book stopped part-way. Nothing was saved.</string>
+    <string name="book_try_again">Try again</string>
+    <string name="book_failed_script">The book could not be laid out, so nothing was saved. Copy the details and add them to a report from Settings, so it can be fixed.</string>
+    <!-- Copies the error and the app, Android and WebView versions to the clipboard. Nothing is sent. -->
+    <string name="book_copy_details">Copy details</string>
+    <string name="book_details_copied">Details copied</string>
     <string name="book_locked">This template isn\'t included. Choose another to make your book.</string>
     <string name="book_limited">Part of this book is included: the rest appears once it is.</string>
 

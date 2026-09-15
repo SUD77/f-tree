@@ -158,7 +158,7 @@ has a season. No screen changes.
 | `cover` | The chat thumbnail: the family's name, the constellation, one sentence. Legible at 150 px wide |
 | `tree` | Everyone joined to the family, from the viewer's layout. With less than about 44 pt between people, names would fall under 6 pt, so the page becomes a night silhouette and the names move to the generation pages |
 | `numbers` | A star chart plotted on time (across: year of birth, down: generation), then up to six facts |
-| `generations` | Generations flow like chapters. A generation that fits on a page is never split; portraits grow as a generation shrinks |
+| `generations` | Generations flow like chapters. One starts where the last ended if two of its rows fit, and never leaves a lone row to carry over. Portraits grow as a generation shrinks, and grow again when a generation has a page to itself. A page that ends early closes with a tailpiece, a short gold rule with the template's mark |
 | `find` | *Find yourself*: every named person with their page, in three columns. Left out below six names |
 | `closing` | *Is someone missing?*, the edition's month, and the QR code to the website |
 
@@ -195,9 +195,12 @@ window:
    works. *Reset* appears once it has been changed.
 4. **Who's in it.** *Everyone* or *{Name}'s branch*. The second is offered only when the screen was
    opened from a person.
-5. **Photographs**, a switch, with the estimate beside it: *About 3.4 MB*.
-6. **Full dates for living people**, a switch, off by default. Its helper line: *When off, living
-   people show only the year they were born.*
+5. **Photographs**, with the estimate beside it: *About 3.4 MB*.
+6. **Full dates for living people**, off by default. Its helper line: *When off, living people show
+   only the year they were born.*
+
+Both on/off options are a switch on Android and a checkbox on the desktop. That is deliberate, not
+a drift to fix: each is its platform's own idiom for a setting that applies at once.
 
 **Actions.**
 
@@ -213,7 +216,9 @@ share is counted.
 the reader's hand.
 
 **If it fails.** The message says what failed and what to try, never "something went wrong".
-Android names the missing System WebView if that is the cause.
+Android names the missing System WebView if that is the cause, and offers **Try again** when the
+renderer stopped or ran out of time. A layout failure offers **Copy details**: the error and the
+versions involved, put on the clipboard and sent nowhere, for the reader to add to a report.
 
 **Accessibility.** Every page preview carries its label (*Page 3 of 10: The second generation*),
 progress is announced, and every control is reachable by keyboard and screen reader.

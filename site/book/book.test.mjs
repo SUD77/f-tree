@@ -25,7 +25,8 @@ import { paintPage } from './svg.js';
 import { measure, breakLines } from './text.js';
 import { METRICS } from './metrics/index.js';
 import { SITE_QR, SITE_URL } from './qr.js';
-import { sortKey, byKey } from './family.js';
+import { sortKey, byKey, readFamily } from './family.js';
+import { orbitPositions } from './blocks/cover.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(path.join(here, p), 'utf8');
@@ -92,6 +93,27 @@ test('a document as Android writes it, with empty lists left out, still makes a 
   const diwali = JSON.stringify(composeBook(lone, { now: NOW }, TEMPLATES.diwali));
   assert.ok(diwali.includes('One lamp, and room for many more.') && !diwali.includes('One lamps'));
   assert.deepEqual(validateBook(composeBook({ format: 'f-tree', version: 1 }, { now: NOW }, TEMPLATES.diwali)), []);
+});
+
+test('with nobody joined to anybody yet, the cover puts them at the centre of the sky', async () => {
+  const family = readFamily(await FIXTURES['one-person'](), { now: NOW }, {});
+  const { pos } = orbitPositions(family, { cx: 300, cy: 400, rMin: 34, rMax: 225 });
+  assert.deepEqual([...pos.values()], [{ x: 300, y: 400 }]);
+});
+
+test('a tailpiece closes a page only where a generation ends, never one it runs on from', async () => {
+  const isTail = (it) => it.t === 'path' && it.sw === 0.6 && it.op === 0.7;
+  const carriesOn = (page) => page.items.some((it) => it.t === 'text' && it.s.endsWith(', continued'));
+  let seen = 0;
+  for (const name of ['sample', 'devanagari', 'large', 'remarriage']) {
+    const book = composeBook(await FIXTURES[name](), { now: NOW }, TEMPLATES.heirloom);
+    book.pages.forEach((page, i) => {
+      if (!page.items.some(isTail)) return;
+      seen++;
+      assert.ok(!book.pages[i + 1] || !carriesOn(book.pages[i + 1]), `${name}: page ${i + 1} has a tailpiece but its generation runs on`);
+    });
+  }
+  assert.ok(seen > 0, 'no fixture closed a chapter with a tailpiece');
 });
 
 test('the composer refuses to guess the date', async () => {

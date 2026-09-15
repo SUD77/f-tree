@@ -42,6 +42,16 @@ export function orbitPositions(family, { cx, cy, rMin, rMax }) {
     pos.set(p.id, { x: cx + Math.cos(a) * ring(p.gen), y: cy + Math.sin(a) * ring(p.gen) });
   }
   const apart = family.elsewhere;
+  if (!joined.length) {
+    // Nobody is joined to anybody yet - a first person, or a few not linked. They are the whole
+    // sky, so they sit at its centre rather than in the gap kept below for people apart.
+    apart.forEach((p, i) => {
+      const a = -Math.PI / 2 + (i / apart.length) * Math.PI * 2;
+      const r = apart.length > 1 ? rMin + 18 : 0;
+      pos.set(p.id, { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+    });
+    return { pos, ring };
+  }
   apart.forEach((p, i) => {
     const a = Math.PI / 2 + (apart.length > 1 ? (i / (apart.length - 1) - 0.5) * Math.PI * 0.16 : 0);
     const r = rMax + 16;
