@@ -1,8 +1,12 @@
 package com.vibethroughcode.ftree.ui.book
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Picture
+import android.os.Build
 import android.text.format.Formatter
+import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -60,8 +64,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -78,8 +84,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.withScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vibethroughcode.ftree.BuildConfig
 import com.vibethroughcode.ftree.R
 import com.vibethroughcode.ftree.book.BookFailure
 import com.vibethroughcode.ftree.book.sendBookIntent
@@ -92,6 +100,7 @@ import kotlinx.coroutines.launch
 const val BookScreenTag = "book-screen"
 const val BookPreviewTag = "book-preview"
 const val BookShareTag = "book-share"
+const val BookCopyDetailsTag = "book-copy-details"
 const val BookSaveTag = "book-save"
 const val BookTitleFieldTag = "book-title"
 const val BookPhotosTag = "book-photos"
@@ -210,7 +219,7 @@ fun BookScreen(
                 Progress(state)
                 if (wide) {
                     Row(Modifier.fillMaxSize()) {
-                        Preview(state, Modifier.weight(1f).fillMaxHeight().padding(24.dp))
+                        Preview(state, viewModel::retry, Modifier.weight(1f).fillMaxHeight().padding(24.dp))
                         Column(
                             Modifier.width(380.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(end = 24.dp, bottom = 24.dp),
                         ) {
@@ -221,6 +230,7 @@ fun BookScreen(
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         Preview(
                             state,
+                            viewModel::retry,
                             Modifier
                                 .fillMaxWidth()
                                 .padding(top = 16.dp)
@@ -257,10 +267,10 @@ private fun Progress(state: BookUiState) {
 }
 
 @Composable
-private fun Preview(state: BookUiState, modifier: Modifier) {
+private fun Preview(state: BookUiState, onRetry: () -> Unit, modifier: Modifier) {
     val failure = state.failure
     if (failure != null && state.pages.isEmpty()) {
-        FailureCard(failure, modifier)
+        FailureCard(failure, onRetry, modifier)
         return
     }
     val pages = state.pages
@@ -273,15 +283,20 @@ private fun Preview(state: BookUiState, modifier: Modifier) {
     }
     val pager = rememberPagerState { pages.size }
     Column(modifier.testTag(BookPreviewTag), horizontalAlignment = Alignment.CenterHorizontally) {
-        HorizontalPager(
-            state = pager,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 32.dp),
-            pageSpacing = 16.dp,
-        ) { index ->
-            val description = stringResource(R.string.book_page_description, index + 1, pages.size, labels.getOrElse(index) { "" })
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PageSurface(pages[index], Modifier.semantics { contentDescription = description })
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // Each page is as wide as the height allows. On a phone that is the width less a margin;
+            // on a tablet the room either side shows the neighbouring pages instead of standing empty.
+            val side = (maxWidth - minOf(maxWidth - 64.dp, maxHeight * PAGE_ASPECT)) / 2
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = side),
+                pageSpacing = 16.dp,
+            ) { index ->
+                val description = stringResource(R.string.book_page_description, index + 1, pages.size, labels.getOrElse(index) { "" })
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    PageSurface(pages[index], Modifier.semantics { contentDescription = description })
+                }
             }
         }
         Text(
@@ -304,32 +319,50 @@ private fun PageSurface(picture: Picture, modifier: Modifier = Modifier) {
         Canvas(Modifier.fillMaxSize()) {
             drawIntoCanvas { canvas ->
                 val native = canvas.nativeCanvas
-                val saved = native.save()
-                native.scale(size.width / picture.width, size.height / picture.height)
-                native.drawPicture(picture)
-                native.restoreToCount(saved)
+                native.withScale(size.width / picture.width, size.height / picture.height, 0f, 0f) { drawPicture(picture) }
             }
         }
     }
 }
 
 @Composable
-private fun FailureCard(failure: BookFailure, modifier: Modifier) {
+private fun FailureCard(failure: BookFailure, onRetry: () -> Unit, modifier: Modifier) {
     val message = when (failure) {
         BookFailure.NoWebView -> stringResource(R.string.book_failed_webview)
         is BookFailure.OldWebView -> stringResource(R.string.book_failed_old_webview, failure.version)
         BookFailure.Crashed, BookFailure.TimedOut -> stringResource(R.string.book_failed_retry)
         is BookFailure.Script -> stringResource(R.string.book_failed_script)
     }
-    Box(modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+    val context = LocalContext.current
+    var copied by remember(failure) { mutableStateOf(false) }
+    Column(modifier.padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
+        Spacer(Modifier.height(16.dp))
+        when (failure) {
+            BookFailure.Crashed, BookFailure.TimedOut -> OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.book_try_again)) }
+            is BookFailure.Script -> TextButton(
+                onClick = {
+                    // Onto this phone's clipboard and nowhere else: the reader decides whether to send it.
+                    context.getSystemService(ClipboardManager::class.java)
+                        ?.setPrimaryClip(ClipData.newPlainText("f-tree", failureDetails(failure)))
+                    copied = true
+                },
+                modifier = Modifier.testTag(BookCopyDetailsTag),
+            ) { Text(stringResource(if (copied) R.string.book_details_copied else R.string.book_copy_details)) }
+            else -> Unit
+        }
     }
 }
+
+/** What a report needs to find the fault: the versions involved and the composer's own error. */
+private fun failureDetails(failure: BookFailure): String =
+    "f-tree ${BuildConfig.VERSION_NAME}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), " +
+        "WebView ${WebView.getCurrentWebViewPackage()?.versionName ?: "none"}\n${failure.message}"
 
 @Composable
 private fun Options(state: BookUiState, viewModel: BookViewModel) {
@@ -361,10 +394,7 @@ private fun Options(state: BookUiState, viewModel: BookViewModel) {
                         Canvas(Modifier.fillMaxSize()) {
                             drawIntoCanvas { canvas ->
                                 val native = canvas.nativeCanvas
-                                val saved = native.save()
-                                native.scale(size.width / cover.width, size.height / cover.height)
-                                native.drawPicture(cover)
-                                native.restoreToCount(saved)
+                                native.withScale(size.width / cover.width, size.height / cover.height, 0f, 0f) { drawPicture(cover) }
                             }
                         }
                     }

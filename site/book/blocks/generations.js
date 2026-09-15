@@ -3,7 +3,7 @@
  *
  * A generation of three would leave most of an A4 page empty, and a family of seven generations
  * would become seven sparse pages; so a generation begins wherever the last one ended if its
- * heading and a first row fit, and runs on to a new page, headed "continued", when it does not.
+ * heading and two rows fit, and runs on to a new page, headed "continued", when it does not.
  * Portraits grow as a generation shrinks: two people get large ones, forty get small ones, and
  * every page stays full.
  *
@@ -11,6 +11,7 @@
  */
 
 import { PAGE, rect, path, PathData } from '../format.js';
+import { sparkleData, lamp } from './art.js';
 import { lifeLine } from '../family.js';
 import { generationName, ROMAN, firstName, andList } from './words.js';
 
@@ -58,8 +59,12 @@ export function generationPages(ctx) {
     numeral = null;
     y = TOP;
   };
-  const endPage = () => {
+  /** `closing`: the page ends because a generation did, not part-way through one. */
+  const endPage = (closing = true) => {
     if (!items) return;
+    // A chapter that ends high on its page closes with a tailpiece, as a printed book's would, so
+    // the space beneath reads as a pause rather than as something missing.
+    if (closing && BOTTOM - y > 150) tailpiece(ctx, items, y + 22);
     if (numeral) items.unshift(ctx.line(W - 40, 118, numeral, 'display', 120, P.gold, { align: 'end', op: 0.2 }));
     items.push(...ctx.footer(P.inkSoft));
     pages.push(ctx.page(pages.length ? 'Generations, continued' : 'Generations', items, P.paper));
@@ -68,37 +73,82 @@ export function generationPages(ctx) {
   };
 
   startPage();
-  for (const s of sections) {
-    const d = density(s.people.length);
-    const rh = rowHeight(d);
-    const heading = s.note ? 84 : 78;
-    const rows = Math.ceil(s.people.length / d.cols);
-    const whole = heading + rows * rh;
-    // A generation that fits on a page is never split across two: moving it whole to a fresh page
-    // costs some white space, and splitting it strands a row under a "continued" heading. Only a
-    // generation taller than a page runs on, and then only once at least two rows have fitted.
-    const fitsHere = y + whole <= BOTTOM;
-    const fitsFresh = TOP + whole <= BOTTOM;
-    if (y > TOP && !fitsHere && (fitsFresh || y + heading + 2 * rh > BOTTOM)) { endPage(); startPage(); }
+  sections.forEach((s, i) => {
+    let f = shape(s);
+    if (breaksBefore(y, f)) { endPage(); startPage(); }
+    // A generation with a page to itself - it opens the page and the next will not share it - is
+    // given the largest portraits that page has room for, rather than small ones and a bare foot.
+    if (y === TOP && TOP + f.whole <= BOTTOM) {
+      const next = sections[i + 1];
+      if (!next || breaksBefore(TOP + f.whole + 18, shape(next))) f = grown(s, f);
+    }
+    const { d, rh, heading } = f;
     if (s.numeral && !numeral) numeral = s.numeral;
     header(ctx, items, s.title, subtitle(s), y);
     y += heading;
 
-    for (let i = 0; i < s.people.length; i += d.cols) {
+    for (let j = 0; j < s.people.length; j += d.cols) {
       if (y + rh > BOTTOM) {
-        endPage(); startPage();
+        endPage(false); startPage();
         if (s.numeral) numeral = s.numeral;
         header(ctx, items, `${s.title}, continued`, null, y, 24);
         y += 52;
       }
-      const row = s.people.slice(i, i + d.cols);
+      const row = s.people.slice(j, j + d.cols);
       row.forEach((p, k) => card(ctx, items, p, d, rowX(row.length, d.cols, k), y, rh));
       y += rh;
     }
     y += 18;
-  }
+  });
   endPage();
   return pages;
+}
+
+/** A short gold rule broken by the template's own mark: three stars, or a lamp. */
+function tailpiece(ctx, items, y) {
+  const { P } = ctx;
+  const cx = W / 2;
+  items.push(path(String(new PathData().M(cx - 80, y).L(cx - 20, y).M(cx + 20, y).L(cx + 80, y)), { stroke: P.gold, sw: 0.6, op: 0.7 }));
+  if (ctx.tpl.cover.motif === 'lamps') {
+    const glow = ctx.gradient('lampGlow', { type: 'radial', cx: 0, cy: 0, r: 1, units: 'item', stops: [[0, P.flame, 0.8], [1, P.clay, 0]] });
+    items.push(...lamp(cx, y + 3, 10, { clay: P.clay, flame: P.flame, gold: P.gold, glow: glow.ref }));
+  } else {
+    const stars = sparkleData(cx, y, 7.5);
+    sparkleData(cx - 12, y, 3, stars);
+    sparkleData(cx + 12, y, 3, stars);
+    items.push(path(String(stars), { fill: P.gold }));
+  }
+}
+
+/** A section's measurements at a density: its row height, heading, rows and whole height. */
+function shape(s, d = density(s.people.length)) {
+  const rh = rowHeight(d);
+  const heading = s.note ? 84 : 78;
+  const rows = Math.ceil(s.people.length / d.cols);
+  return { d, rh, heading, rows, whole: heading + rows * rh };
+}
+
+/**
+ * Whether a section starts on a new page when the page so far reaches `y`. It starts where it is
+ * if it fits there whole; otherwise only if two of its rows fit under its heading and - when it
+ * would fit whole on a fresh page - two are left to carry over. So nothing strands a lone row
+ * under a "continued" heading, and a page is not left half empty just to keep a generation together.
+ */
+function breaksBefore(y, f) {
+  if (y <= TOP || y + f.whole <= BOTTOM) return false;
+  const room = Math.floor((BOTTOM - y - f.heading) / f.rh);
+  return room < 2 || (TOP + f.whole <= BOTTOM && f.rows - room < 2);
+}
+
+/** The same section with the largest portraits that still fit one page, keeping its columns. */
+function grown(s, f) {
+  const sizes = f.d.cols <= 4 ? [[44, 14], [38, 13], [34, 12.5]] : [[30, 11.5], [26, 10.5]];
+  for (const [r, name] of sizes) {
+    if (r <= f.d.r) break;
+    const g = shape(s, { ...f.d, r, name });
+    if (TOP + g.whole <= BOTTOM) return g;
+  }
+  return f;
 }
 
 function subtitle(s) {

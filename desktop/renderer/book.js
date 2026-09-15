@@ -260,10 +260,11 @@ export function createBook({ shell, hooks }) {
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.className = 'btn quiet';
-    copy.textContent = 'Copy diagnostics';
+    copy.textContent = 'Copy details';
     copy.addEventListener('click', () => {
-      const text = `${error?.message ?? error}\n${error?.stack ?? ''}`;
-      navigator.clipboard?.writeText(text).catch(() => {});
+      // Onto this computer's clipboard and nowhere else: the reader decides whether to send it.
+      const text = `f-tree desktop, ${navigator.userAgent}\n${error?.message ?? error}\n${error?.stack ?? ''}`;
+      navigator.clipboard?.writeText(text).then(() => { copy.textContent = 'Details copied'; }, () => {});
     });
     box.append(message, copy);
     preview.append(box);
