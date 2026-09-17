@@ -1,0 +1,72 @@
+{
+  "format": 2,
+  "template": "format2-conformance",
+  "title": "Format Two",
+  "fileName": "Format Two Book.pdf",
+  "size": { "w": 595, "h": 842 },
+  "fonts": { "display": "book_display", "text": "book_text", "strong": "book_strong" },
+  "defs": {
+    "band": { "type": "linear", "x1": 0, "y1": 580, "x2": 0, "y2": 720, "stops": [[0, "#17122e", 1], [1, "#3a2352", 1]] },
+    "glow": { "type": "radial", "units": "item", "cx": 0, "cy": 0, "r": 1, "stops": [[0, "#f2b84b", 0.55], [1, "#f2b84b", 0]] }
+  },
+  "symbols": {
+    "diya": {
+      "items": [
+        { "t": "path", "d": "M0 0 L24 0 C22.5 8.5 18 12.6 12 12.6 C6 12.6 1.5 8.5 0 0 Z", "fill": "#f2b84b", "stroke": "#b9822a", "sw": 0.8, "join": "round" },
+        { "t": "path", "d": "M12 -1.4 C15.2 -5 14.6 -9.2 12 -12.4 C9.4 -9.2 8.8 -5 12 -1.4 Z", "fill": "#ffe7a6" },
+        { "t": "path", "d": "M-2.5 0.6 L26.5 0.6", "stroke": "#b5562a", "sw": 0.5, "cap": "round" }
+      ]
+    },
+    "lamp-pair": {
+      "items": [
+        { "t": "use", "ref": "diya" },
+        { "t": "use", "ref": "diya", "tf": [0.75, 0, 0, 0.75, 32, 2.4] }
+      ]
+    }
+  },
+  "photos": [{ "id": "p1", "px": 200 }],
+  "pages": [
+    {
+      "label": "An arch over a photograph",
+      "items": [
+        { "t": "rect", "x": 0, "y": 0, "w": 595, "h": 842, "fill": "#f6ecda" },
+        { "t": "text", "x": 297.5, "y": 104, "s": "The arch", "font": "display", "size": 28, "fill": "#2a1a33", "align": "middle" },
+        {
+          "t": "group",
+          "clip": "M197.5 420 L197.5 240 C197.5 185 242 140 297.5 140 C353 140 397.5 185 397.5 240 L397.5 420 Z",
+          "items": [
+            { "t": "rect", "x": 175, "y": 118, "w": 245, "h": 320, "fill": "#ead7b5" },
+            { "t": "image", "id": "p1", "x": 175, "y": 118, "w": 245, "h": 320, "clip": "rect" }
+          ]
+        },
+        { "t": "path", "d": "M197.5 420 L197.5 240 C197.5 185 242 140 297.5 140 C353 140 397.5 185 397.5 240 L397.5 420 Z", "stroke": "#b9822a", "sw": 3, "join": "round" },
+        { "t": "use", "ref": "diya", "tf": [1, 0, 0, 1, 285.2, 504.3], "fill": "#2a1a33", "op": 0.22 },
+        { "t": "use", "ref": "diya", "tf": [1, 0, 0, 1, 283.5, 502] },
+        { "t": "text", "x": 297.5, "y": 560, "s": "Every clip edge is covered by a frame stroke.", "font": "text", "size": 11, "fill": "#5e4a66", "align": "middle", "w": 260 }
+      ]
+    },
+    {
+      "label": "The lamps are one drawing",
+      "items": [
+        { "t": "rect", "x": 0, "y": 0, "w": 595, "h": 842, "fill": "#1f1840" },
+        { "t": "text", "x": 297.5, "y": 120, "s": "One lamp, drawn once", "font": "display", "size": 28, "fill": "#f3ddb8", "align": "middle" },
+        { "t": "text", "x": 297.5, "y": 160, "s": "Reused, turned, dimmed and cast as a shadow", "font": "strong", "size": 12, "fill": "#f2b84b", "align": "middle", "w": 300 },
+        {
+          "t": "group",
+          "clip": "M60 700 L60 640 C180 600 415 600 535 640 L535 700 Z",
+          "items": [
+            { "t": "rect", "x": 40, "y": 580, "w": 515, "h": 140, "fill": { "ref": "band" } },
+            { "t": "circle", "cx": 297.5, "cy": 662, "r": 70, "fill": { "ref": "glow" } }
+          ]
+        },
+        { "t": "path", "d": "M60 700 L60 640 C180 600 415 600 535 640 L535 700 Z", "stroke": "#f2b84b", "sw": 1.2, "op": 0.6 },
+        { "t": "use", "ref": "diya", "tf": [1, 0, 0, 1, 96, 770] },
+        { "t": "use", "ref": "diya", "tf": [1, 0, 0, 1, 176, 770], "op": 0.55 },
+        { "t": "use", "ref": "diya", "tf": [0.6, 0, 0, 0.6, 256, 775] },
+        { "t": "use", "ref": "lamp-pair", "tf": [1, 0, 0, 1, 357.7, 772.3], "fill": "#17122e", "op": 0.35 },
+        { "t": "use", "ref": "lamp-pair", "tf": [1, 0, 0, 1, 356, 770] },
+        { "t": "text", "x": 297.5, "y": 812, "s": "The shadow keeps the shape and loses the hairline.", "font": "text", "size": 11, "fill": "#7a3e63", "align": "middle", "w": 300 }
+      ]
+    }
+  ]
+}

@@ -278,7 +278,8 @@ test('the SVG painter draws every page of every book', async () => {
 test('the painter refuses a book from a newer composer', async () => {
   const doc = await sampleDoc();
   const book = composeBook(doc, { now: NOW }, TEMPLATES.heirloom);
-  assert.throws(() => paintPage({ ...book, format: 2 }, 0, { photo: () => null, font: (k) => k }), /format 2/);
+  // Format 2 is this release's newest (format.test.mjs paints one); 3 is still the future.
+  assert.throws(() => paintPage({ ...book, format: 3 }, 0, { photo: () => null, font: (k) => k }), /format 3/);
 });
 
 test('the composer runs without a DOM, a clock or a locale', () => {
