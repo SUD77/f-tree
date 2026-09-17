@@ -1,14 +1,14 @@
 {
   "format": 1,
-  "note": "Paint with these hexes; tools/book_art.mjs maps each to its palette token and refuses any other colour.",
+  "note": "Paint with these hexes; tools/book_art.mjs maps each to its palette token and refuses any other colour. The tokens are the Aangan palette as the approved style frames use it (site/book/art/style-frames/motifs.mjs), and a format-2 template with art:papercut must define every one of them.",
   "swatches": {
     "#f6ecda": "paper",
     "#ead7b5": "paperDeep",
     "#fff8ec": "card",
     "#2a1a33": "ink",
     "#5e4a66": "inkSoft",
-    "#1c1638": "night",
-    "#0d0a1f": "deep",
+    "#1f1840": "night",
+    "#17122e": "deep",
     "#3a2352": "glow",
     "#7a3e63": "dusk",
     "#f2b84b": "gold",
@@ -27,7 +27,9 @@
     "#b97a52": "skin",
     "#d9d2ca": "silver",
     "#f3ddb8": "sky",
-    "#8db0d8": "wash",
-    "#5a3462": "haze"
+    "#6f93c7": "wash",
+    "#5a3462": "haze",
+    "#e9b777": "dayHaze",
+    "#d99a62": "dayMid"
   }
 }

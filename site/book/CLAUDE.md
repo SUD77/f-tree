@@ -14,6 +14,12 @@ document and a frame disagree, the frame wins.
 Rules that are easy to break without noticing:
 - **The composer is deterministic.** It never reads the clock, the locale, the DOM or the network,
   and it never uses `Math.random`. Its output is held by `golden.txt`.
+- **`searchPeople` (`site/playground/search.js`) is UI-only, forever.** It sorts with
+  `localeCompare`. A book screen may call it; nothing the composer imports ever may. Android
+  stages whatever `compose.js` reaches through static relative imports, so one such import both
+  breaks determinism and ships the module into the WebView.
+- **`ageOf` (`site/playground/model.js`) reads the clock.** The composer never calls it. No page
+  gives a living person an age.
 - **Heirloom's output must stay byte-identical.** A new Book feature appears only in books that
   use it (the lowest format that draws a book).
 - **The art invents nobody.** People with no photograph are faceless, or seen from behind.
