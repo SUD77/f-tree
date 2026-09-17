@@ -77,6 +77,13 @@
         "filter": [
           "*.ttf"
         ]
+      },
+      {
+        "from": "../app/src/main/assets/licenses",
+        "to": "licenses",
+        "filter": [
+          "*.txt"
+        ]
       }
     ],
     "linux": {
