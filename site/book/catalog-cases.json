@@ -59,6 +59,26 @@
       "expect": { "listed": ["holi", "heirloom"], "featured": ["holi"], "opening": "holi" }
     },
     {
+      "name": "the storybook's hidden format-2 row is skipped by a build that only reads format 1 (#243)",
+      "catalog": { "format": 1, "templates": [
+        { "id": "heirloom", "name": "Heirloom", "format": 1, "tier": "free" },
+        { "id": "diwali", "name": "Diwali", "format": 1, "tier": "free" },
+        { "id": "diwali-story", "name": "Diwali, the storybook", "format": 2, "tier": "free" }
+      ] },
+      "today": "2026-06-01", "supported": 1,
+      "expect": { "listed": ["heirloom", "diwali"], "featured": [], "opening": "heirloom" }
+    },
+    {
+      "name": "the same hidden row is offered cleanly once a build reads template format 2 (#243)",
+      "catalog": { "format": 1, "templates": [
+        { "id": "heirloom", "name": "Heirloom", "format": 1, "tier": "free" },
+        { "id": "diwali", "name": "Diwali", "format": 1, "tier": "free" },
+        { "id": "diwali-story", "name": "Diwali, the storybook", "format": 2, "tier": "free" }
+      ] },
+      "today": "2026-06-01", "supported": 2,
+      "expect": { "listed": ["heirloom", "diwali", "diwali-story"], "featured": [], "opening": "heirloom" }
+    },
+    {
       "name": "two templates in season keep their catalogue order, ahead of the rest",
       "catalog": { "format": 1, "templates": [
         { "id": "heirloom", "name": "Heirloom", "format": 1, "tier": "free" },
