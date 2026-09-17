@@ -7,7 +7,7 @@
  * WebView that is not attached to a window never fires an animation frame and throttles timers.
  */
 
-import { FORMAT, PAGE, text, circle, image, rect } from './format.js';
+import { formatOf, PAGE, text, circle, image, rect } from './format.js';
 import { measure, breakLines, fitSize } from './text.js';
 import { readFamily, familyFacts } from './family.js';
 import { validateTemplate } from './template.js';
@@ -57,8 +57,10 @@ export function composeBook(doc, options, template, allowance = {}) {
     }
   }
   const photos = budgetPhotos(ctx.photos, options?.photoBudget ?? PHOTO_BUDGET);
-  return {
-    format: FORMAT,
+  // A book declares the lowest format that draws it, so the format is read off the pages rather
+  // than written by hand: a book reaches format 2 the day it first clips or reuses something, and
+  // never a release before that.
+  const book = {
     template: tpl.id,
     title: family.title,
     fileName: fileName(family.title, tpl),
@@ -68,6 +70,7 @@ export function composeBook(doc, options, template, allowance = {}) {
     photos,
     pages,
   };
+  return { format: formatOf(book), ...book };
 }
 
 /*
