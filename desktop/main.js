@@ -723,19 +723,26 @@ async function localFontCss() {
 }
 
 /*
- * The book's three faces (#203, #207): family names exactly the keys `site/book/format.js` uses
- * for a font role -- `book_display`, `book_text`, `book_strong` -- because that is the string
- * `svg.js`'s `resolve.font` hands back for every `<text>` it paints, unchanged, on both the
- * renderer's own preview and the hidden window that prints the PDF.
+ * The book's four faces (#203, #207, #242): family names exactly the keys `site/book/format.js`
+ * uses for a font role -- `book_display`, `book_text`, `book_strong`, `book_hand` -- because that
+ * is the string `svg.js`'s `resolve.font` hands back for every `<text>` it paints, unchanged, on
+ * both the renderer's own preview and the hidden window that prints the PDF.
  *
  * The files already ride into the package with Literata and JetBrains Mono: `book_*.ttf` live
  * beside them in `app/src/main/res/font/`, which `desktop/package.json`'s existing `*.ttf` glob
  * copies wholesale (docs/family-book.md), so `FONT_DIR` above is exactly where these are too.
+ *
+ * This list is one of five that name the book's font keys and cannot import one another; the other
+ * four are `FONT_KEYS` in `site/book/template.js`, the hard-coded font map in
+ * `app/.../book/BookPrinter.kt`, the `@font-face` rules in `site/book/preview.html`, and the tables
+ * gathered into `METRICS` in `site/book/metrics/index.js`. `site/book/font-keys.json` plus
+ * `font-keys.test.mjs` and `FontKeysTest.kt` fail the build if any of the five disagree.
  */
 const BOOK_FONT_FILES = [
   ['book_display', 'book_display.ttf'],
   ['book_text', 'book_text.ttf'],
   ['book_strong', 'book_strong.ttf'],
+  ['book_hand', 'book_hand.ttf'],
 ];
 
 /** Each book font's family name and its bytes, base64-encoded once for whoever needs a `data:` URL. */

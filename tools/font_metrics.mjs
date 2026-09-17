@@ -12,7 +12,7 @@
  * No `fonttools`, no npm package: this file is committed as source and run by both the Node CI
  * runners and the composer's own build step, and pulling in a dependency for four small tables is
  * a worse trade than the ~150 lines below. It parses only what `book_*.ttf` actually contain —
- * `cmap` format 4 (all three fonts, since Latin + Devanagari fits inside the Basic Multilingual
+ * `cmap` format 4 (all four fonts, since Latin + Devanagari fits inside the Basic Multilingual
  * Plane) and format 12, kept for a future font whose coverage does not.
  *
  * Output is an ES module, not JSON: the composer imports it inside a WebView as old as Chrome 80,
@@ -39,8 +39,8 @@ const repoRoot = path.join(here, '..');
 const fontDir = path.join(repoRoot, 'app', 'src', 'main', 'res', 'font');
 const metricsDir = path.join(repoRoot, 'site', 'book', 'metrics');
 
-// The three static, subset book fonts. See docs/fonts.md for why these three and not more.
-const FONTS = ['book_display', 'book_text', 'book_strong'];
+// The four static, subset book fonts. See docs/fonts.md for why these four and not more.
+const FONTS = ['book_display', 'book_text', 'book_strong', 'book_hand'];
 
 /* ---------------------------------------------------------------- sfnt table directory */
 

@@ -24,8 +24,19 @@ const FORMAT_PAPERCUT = 2;
 
 export const BLOCKS = ['cover', 'tree', 'numbers', 'generations', 'find', 'closing'];
 
-/** The font files a template may choose among - the ones the release embeds. */
-export const FONT_KEYS = ['book_display', 'book_text', 'book_strong'];
+/**
+ * The font files a template may choose among - the ones the release embeds.
+ *
+ * `book_hand` (#242) joined `book_display`/`book_text`/`book_strong` here without a format bump,
+ * because `Book.fonts` is an open map (docs/family-book.md). A format-1 template still names
+ * exactly the three roles below - see the `fonts` check further down, which does not change - and
+ * a format-2 template is the first to use `hand` (#243). `FONT_KEYS` is enumerated in four other
+ * places that cannot import this file and must be kept in step by hand: the hard-coded font map in
+ * `app/.../book/BookPrinter.kt`, `BOOK_FONT_FILES` in `desktop/main.js`, the `@font-face` rules in
+ * `preview.html`, and the tables gathered into `METRICS` in `metrics/index.js`. `font-keys.json`
+ * plus `font-keys.test.mjs` and `FontKeysTest.kt` fail the build if any of the five disagree.
+ */
+export const FONT_KEYS = ['book_display', 'book_text', 'book_strong', 'book_hand'];
 
 /** The paper-cut template's fourth role, its handwritten voice (Kalam, `book_hand.ttf`, #242). */
 export const HAND_FONT_KEY = 'book_hand';
@@ -112,6 +123,9 @@ export function validateTemplate(t) {
   if (typeof t.id !== 'string' || !ID.test(t.id)) fail('id must be lower-case letters, digits and hyphens');
   const name = plainText(t.name, 40, 'name');
 
+  // A format-1 template still names exactly these three roles. `hand` (book_hand, #242) is a
+  // fourth entry in FONT_KEYS above, not a fourth role here - format-2 templates are the first to
+  // choose it (#243), and this exactly-3 check must not move before then.
   const fonts = {};
   for (const role of ['display', 'text', 'strong']) {
     if (!FONT_KEYS.includes(t.fonts?.[role])) fail(`font for "${role}" must be one of ${FONT_KEYS.join(', ')}`);
