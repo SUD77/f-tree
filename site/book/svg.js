@@ -17,7 +17,7 @@
  * buys a page that can be previewed, printed or saved alone.
  */
 
-import { FORMAT, FORMAT_MAX } from './format.js';
+import { FORMAT, FORMAT_MAX, MAX_SYMBOL_DEPTH } from './format.js';
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -42,7 +42,7 @@ function fillAttr(fill, state) {
   if (fill === undefined) return 'none';
   if (typeof fill === 'string') return fill;
   const id = state.prefix + fill.ref;
-  if (!state.defs.has(id)) state.defs.set(id, gradient(id, state.book.defs[fill.ref]));
+  if (!state.defs.has(id)) state.defs.set(id, gradient(id, own(state.book.defs, fill.ref, 'gradient')));
   return `url(#${id})`;
 }
 
@@ -63,6 +63,12 @@ function stroke(it) {
   if (it.cap) s += ` stroke-linecap="${it.cap}"`;
   if (it.join) s += ` stroke-linejoin="${it.join}"`;
   return s;
+}
+
+/** A named thing the book carries - never one the Object prototype lends it (`constructor`). */
+function own(map, ref, kind) {
+  if (!map || typeof map !== 'object' || typeof ref !== 'string' || !Object.hasOwn(map, ref)) throw new Error(`svg: unknown ${kind} ${ref}`);
+  return map[ref];
 }
 
 const opacity = (it) => (it.op !== undefined ? ` opacity="${it.op}"` : '');
@@ -89,9 +95,11 @@ function silhouette(it, fill) {
 }
 
 function expand(it, state) {
-  const symbol = state.book.symbols?.[it.ref];
-  if (!symbol) throw new Error(`svg: unknown symbol ${it.ref}`);
-  if (state.depth >= 5) throw new Error(`svg: symbol ${it.ref} is used too deep`);   // validateBook refuses the cycle; this stops a bad book hanging the preview
+  const symbol = own(state.book.symbols, it.ref, 'symbol');
+  if (!Array.isArray(symbol?.items)) throw new Error(`svg: unknown symbol ${it.ref}`);
+  // The same limit validateBook holds a book to, so a book that validates always paints and a
+  // cycle that slipped past validation stops here instead of hanging the preview.
+  if (state.depth >= MAX_SYMBOL_DEPTH) throw new Error(`svg: symbol ${it.ref} is used more than ${MAX_SYMBOL_DEPTH} deep`);
   state.depth++;
   const items = it.fill === undefined ? symbol.items : symbol.items.map((c) => silhouette(c, it.fill));
   const body = items.map((c) => item(c, state)).join('');

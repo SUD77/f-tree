@@ -70,10 +70,27 @@ const ITEM_TYPES = new Set(['rect', 'circle', 'path', 'text', 'image', 'group', 
  * has, and a photograph belongs to one person, so neither may be hidden inside one. */
 const SYMBOL_ITEM_TYPES = new Set(['rect', 'circle', 'path', 'group', 'use']);
 const SYMBOL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-/** How deep one symbol may use another. Deep enough to build a courtyard of lamps, shallow enough
- *  that a painter's recursion stays a few frames. */
-const SYMBOL_DEPTH = 4;
-const PATH_COMMANDS = /^[MLHVCQZ0-9eE.,\s-]*$/;
+/**
+ * How many symbols deep one `use` on a page may reach: the symbol it names counts as one, and each
+ * symbol that symbol uses adds one. A chain of four (a uses b uses c uses d) draws; a fifth is
+ * refused. Deep enough to build a courtyard out of lamp pairs out of lamps, shallow enough that a
+ * painter's recursion stays a few frames. validateBook and every painter read this one constant,
+ * so what validates is exactly what paints.
+ */
+export const MAX_SYMBOL_DEPTH = 4;
+/**
+ * The most items one page may draw once every `use` is expanded (each item, group and use counts
+ * one). Symbols multiply: four levels of a hundred uses each is a hundred million items from a few
+ * lines of JSON, which would hang the desktop preview and exhaust an Android PdfDocument. A rich
+ * storybook page - a courtyard of a few hundred lamps of a dozen shapes each, every cut layer with
+ * a three-offset soft shadow - comes to a few thousand, so 20000 leaves several times that
+ * headroom while keeping a page's SVG to a few megabytes at worst.
+ */
+export const MAX_EXPANDED_ITEMS = 20000;
+/* How many numbers each command takes. A command may repeat its arguments (`L1 1 2 2`), as SVG
+ * and Android's PathParser both read, but only in whole sets. */
+const PATH_ARGS = { M: 2, L: 2, H: 1, V: 1, C: 6, Q: 4, Z: 0 };
+const PATH_TOKEN = /([MLHVCQZ])|(-?(?:\d+\.?\d*|\.\d+)(?:[eE]-?\d+)?)|([\s,]+)/y;
 const COLOUR = /^#[0-9a-f]{6}$/;
 
 /*
@@ -164,6 +181,49 @@ export function formatOf(book) {
   return newer ? FORMAT_MAX : FORMAT;
 }
 
+/**
+ * Reads path data the way both painters must: a leading M, then only absolute M L H V C Q Z, each
+ * with whole sets of finite numbers. Returns the points the path visits (end and control points),
+ * or null if a painter could not follow it.
+ */
+export function pathPoints(d) {
+  if (typeof d !== 'string') return null;
+  const tokens = [];
+  PATH_TOKEN.lastIndex = 0;
+  while (PATH_TOKEN.lastIndex < d.length) {
+    const at = PATH_TOKEN.lastIndex;
+    const m = PATH_TOKEN.exec(d);
+    if (!m || m.index !== at) return null;
+    if (m[1]) tokens.push(m[1]);
+    else if (m[2]) { const n = Number(m[2]); if (!Number.isFinite(n)) return null; tokens.push(n); }
+  }
+  if (tokens[0] !== 'M') return null;
+  const points = [];
+  let x = 0, y = 0;
+  for (let i = 0; i < tokens.length;) {
+    const cmd = tokens[i++];
+    if (typeof cmd !== 'string') return null;
+    const args = [];
+    while (typeof tokens[i] === 'number') args.push(tokens[i++]);
+    const n = PATH_ARGS[cmd];
+    if (n === 0 ? args.length : !args.length || args.length % n) return null;
+    for (let k = 0; k < args.length; k += n || 1) {
+      const a = args.slice(k, k + n);
+      if (cmd === 'H') x = a[0];
+      else if (cmd === 'V') y = a[0];
+      else if (n) { for (let j = 0; j < n - 2; j += 2) points.push([a[j], a[j + 1]]); [x, y] = a.slice(-2); }
+      if (n) points.push([x, y]);
+    }
+  }
+  return points;
+}
+
+/** A clip must enclose something: a path that parses and visits at least three distinct points. */
+const isClip = (d) => {
+  const points = pathPoints(d);
+  return !!points && new Set(points.map(([x, y]) => `${x},${y}`)).size >= 3;
+};
+
 /*
  * Validation. The composer runs this on everything it produces in tests, and a painter can run it
  * on anything it is handed; a book that fails it is a composer bug, never something to draw
@@ -177,27 +237,38 @@ export function validateBook(book) {
   if (!book?.size || book.size.w !== PAGE.w || book.size.h !== PAGE.h) problems.push('page size is not A4');
   if (!Array.isArray(book?.pages) || !book.pages.length) problems.push('no pages');
   const defs = book?.defs ?? {};
-  const symbols = book?.symbols ?? {};
-  if (book?.symbols !== undefined && (typeof symbols !== 'object' || Array.isArray(symbols))) problems.push('symbols is not a map');
+  /* Every lookup by name is an own key: `ref: 'constructor'` must be an unknown symbol, not the
+   * Object prototype's constructor handed to a painter. */
+  const isMap = (m) => m !== null && typeof m === 'object' && !Array.isArray(m);
+  let symbols = {};
+  if (book?.symbols !== undefined) {
+    if (!isMap(book.symbols)) problems.push('symbols is not a map');
+    // A book that carries no symbols has no business declaring format 2 for them; the composer
+    // never writes an empty map, so one here is a bug upstream.
+    else if (!Object.keys(book.symbols).length) problems.push('symbols is empty');
+    else symbols = book.symbols;
+  }
+  const hasDef = (ref) => typeof ref === 'string' && isMap(defs) && Object.hasOwn(defs, ref);
+  const hasSymbol = (ref) => typeof ref === 'string' && Object.hasOwn(symbols, ref);
   const checkFill = (f, at) => {
     if (f === undefined) return;
     if (typeof f === 'string') { if (!COLOUR.test(f)) problems.push(`${at}: colour ${f}`); return; }
-    if (!f || typeof f.ref !== 'string' || !defs[f.ref]) problems.push(`${at}: unknown gradient ${f?.ref}`);
+    if (!f || !hasDef(f.ref)) problems.push(`${at}: unknown gradient ${f?.ref}`);
   };
   const checkTf = (tf, at) => {
     if (tf && (tf.length !== 6 || tf.some((v) => !Number.isFinite(v)))) problems.push(`${at}: transform`);
   };
   /* A clip that is empty, or written in commands a painter does not read, would cut everything
-   * away rather than a little: refuse it instead of drawing a blank page. */
-  const isClip = (d) => typeof d === 'string' && d.trim() !== '' && PATH_COMMANDS.test(d);
+   * away rather than a little: refuse it instead of drawing a blank page (isClip, above). */
   const walk = (items, where, depth, inSymbol) => items.forEach((it, i) => {
     const at = `${where} item ${i}`;
     if (!(inSymbol ? SYMBOL_ITEM_TYPES : ITEM_TYPES).has(it.t)) { problems.push(`${at}: type ${it.t}`); return; }
     checkFill(it.fill, at);
-    if (it.fill?.ref && defs[it.fill.ref]?.units === 'item' && it.t !== 'circle') problems.push(`${at}: an item-relative gradient on a ${it.t}`);
+    if (hasDef(it.fill?.ref) && defs[it.fill.ref].units === 'item' && it.t !== 'circle') problems.push(`${at}: an item-relative gradient on a ${it.t}`);
     if (it.stroke !== undefined && !COLOUR.test(it.stroke)) problems.push(`${at}: stroke ${it.stroke}`);
     if (it.op !== undefined && !(it.op >= 0 && it.op <= 1)) problems.push(`${at}: opacity ${it.op}`);
-    if (it.t === 'path' && (typeof it.d !== 'string' || !PATH_COMMANDS.test(it.d))) problems.push(`${at}: path data`);
+    // An empty path draws nothing, and the composer writes one where a tree has no lines to draw.
+    if (it.t === 'path' && it.d !== '' && !pathPoints(it.d)) problems.push(`${at}: path data`);
     if (it.t === 'text' && (typeof it.s !== 'string' || !book.fonts?.[it.font])) problems.push(`${at}: text font ${it.font}`);
     if (it.t === 'text' && /\n/.test(it.s)) problems.push(`${at}: text holds a line break`);
     if (it.t === 'image' && !['circle', 'rect'].includes(it.clip)) problems.push(`${at}: clip ${it.clip}`);
@@ -209,7 +280,7 @@ export function validateBook(book) {
     }
     if (it.t === 'use') {
       checkTf(it.tf, at);
-      if (typeof it.ref !== 'string' || !symbols[it.ref]) problems.push(`${at}: unknown symbol ${it.ref}`);
+      if (!hasSymbol(it.ref)) problems.push(`${at}: unknown symbol ${it.ref}`);
     }
     for (const k of ['x', 'y', 'w', 'h', 'cx', 'cy', 'r', 'size', 'sw']) {
       if (it[k] !== undefined && !Number.isFinite(it[k])) problems.push(`${at}: ${k} is not a number`);
@@ -223,22 +294,49 @@ export function validateBook(book) {
   }
   /*
    * A symbol may use another - the art is built from motifs, and a courtyard is lamps - but one
-   * that reaches itself would expand forever. Refuse the cycle here, where the composer's tests
-   * see it, rather than in a painter that has to hang or guess.
+   * that reaches itself would expand forever, and one that nests too deep or multiplies too far
+   * would hang a painter. Refuse all three here, where the composer's tests see it. Each symbol is
+   * walked once and remembered, so a motif shared by a hundred others costs one walk, not a
+   * hundred.
    */
   const usesOf = (items, out = []) => {
     for (const it of items ?? []) {
-      if (it?.t === 'use' && typeof it.ref === 'string') out.push(it.ref);
+      if (it?.t === 'use' && hasSymbol(it.ref)) out.push(it.ref);
       if (it?.t === 'group') usesOf(it.items, out);
     }
     return out;
   };
-  const chase = (id, trail) => {
-    if (trail.includes(id)) { problems.push(`symbol ${id}: used through itself (${[...trail, id].join(' -> ')})`); return; }
-    if (trail.length >= SYMBOL_DEPTH) { problems.push(`symbol ${id}: symbols nested more than ${SYMBOL_DEPTH} deep`); return; }
-    for (const ref of usesOf(symbols[id]?.items)) if (symbols[ref]) chase(ref, [...trail, id]);
+  const levels = new Map();   // id -> how many symbols deep a use of it reaches; Infinity on a cycle
+  const depthOf = (id, trail) => {
+    if (levels.has(id)) return levels.get(id);
+    if (trail.includes(id)) {
+      problems.push(`symbol ${id}: used through itself (${[...trail, id].join(' -> ')})`);
+      return Infinity;
+    }
+    let deepest = 0;
+    for (const ref of usesOf(symbols[id]?.items)) deepest = Math.max(deepest, depthOf(ref, [...trail, id]));
+    levels.set(id, 1 + deepest);
+    return 1 + deepest;
   };
-  for (const id of Object.keys(symbols)) chase(id, []);
+  for (const id of Object.keys(symbols)) {
+    const d = depthOf(id, []);
+    if (d > MAX_SYMBOL_DEPTH && d !== Infinity) problems.push(`symbol ${id}: symbols nested ${d} deep, more than ${MAX_SYMBOL_DEPTH}`);
+  }
+  const acyclic = [...levels.values()].every(Number.isFinite) && levels.size === Object.keys(symbols).length;
+  if (acyclic) {
+    const sizes = new Map();   // id -> how many items one use of it expands to
+    const count = (items) => (Array.isArray(items) ? items : []).reduce((n, it) => n + 1
+      + (it?.t === 'group' ? count(it.items) : 0)
+      + (it?.t === 'use' && hasSymbol(it.ref) ? sizeOf(it.ref) : 0), 0);
+    const sizeOf = (id) => {
+      if (!sizes.has(id)) sizes.set(id, count(symbols[id]?.items));
+      return sizes.get(id);
+    };
+    (book?.pages ?? []).forEach((page, p) => {
+      const n = count(page?.items);
+      if (n > MAX_EXPANDED_ITEMS) problems.push(`page ${p + 1}: draws ${n} items once expanded, more than ${MAX_EXPANDED_ITEMS}`);
+    });
+  }
   for (const [id, g] of Object.entries(defs)) {
     if (!['linear', 'radial'].includes(g.type)) problems.push(`gradient ${id}: type ${g.type}`);
     if (g.units !== undefined && g.units !== 'item') problems.push(`gradient ${id}: units ${g.units}`);

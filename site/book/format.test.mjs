@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { FORMAT, FORMAT_MAX, formatOf, validateBook, group, use } from './format.js';
+import { FORMAT, FORMAT_MAX, MAX_SYMBOL_DEPTH, MAX_EXPANDED_ITEMS, formatOf, validateBook, group, use } from './format.js';
 import { paintPage } from './svg.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,7 +78,12 @@ test('a book declares the lowest format that draws it, and neither less nor more
 test('a clip a painter could not follow is refused, not drawn as an empty page', () => {
   const clipped = (clip) => validateBook(book({ format: FORMAT_MAX, pages: page({ t: 'group', clip, items: [] }) }));
   assert.deepEqual(clipped('M0 0 L10 0 L10 10 Z'), []);
-  for (const bad of ['', '   ', 'm0 0 l10 0 z', 'M0 0 A5 5 0 0 1 10 10', { d: 'M0 0' }, 42]) {
+  assert.deepEqual(clipped('M0 0 H10 V10 H0 Z'), []);
+  assert.deepEqual(clipped('M0 0 L10 0 10 10Z'), [], 'a repeated set of arguments is still one command');
+  assert.deepEqual(clipped('M0 0 Q5 -5 10 0 C10 5 5 10 0 10 Z'), []);
+  for (const bad of ['', '   ', 'm0 0 l10 0 z', 'M0 0 A5 5 0 0 1 10 10', { d: 'M0 0' }, 42,
+    'L10 10 Z', 'e', 'M0 0', 'M0 0 Z', 'M0 0 L10 0 Z', 'M0 0 L10 0 L10 Z', 'M0 0 H Z', 'M0 0 C1 1 2 2 Z',
+    'M0 0 L10 0 L10 10 Z 5', 'M0 0 L1e999 0 L0 1 Z', 'M0 0 L10 0 L10 10 X', 'M0 0 L+10 0 L10 10 Z', 'M0 0 L10 0 L10 10 Z" onload="x']) {
     assert.ok(clipped(bad).some((p) => p.endsWith('clip path data')), JSON.stringify(bad));
   }
 });
@@ -110,10 +115,67 @@ test('a symbol may use another symbol, but never itself', () => {
   assert.ok(validateBook(book({ format: FORMAT_MAX, symbols: self, pages: page(use('a')) }))
     .some((p) => /used through itself/.test(p)));
 
-  const deep = Object.fromEntries('abcdef'.split('').map((id, i, all) =>
-    [id, { items: all[i + 1] ? [use(all[i + 1])] : [{ t: 'path', d: 'M0 0 L1 1 Z', fill: '#f2b84b' }] }]));
-  assert.ok(validateBook(book({ format: FORMAT_MAX, symbols: deep, pages: page(use('a')) }))
-    .some((p) => /nested more than/.test(p)));
+});
+
+/** A chain of `n` symbols, s1 using s2 ... using sn, and a page that uses s1. */
+const chain = (n) => book({
+  format: FORMAT_MAX,
+  symbols: Object.fromEntries(Array.from({ length: n }, (_, i) =>
+    [`s${i + 1}`, { items: i + 1 < n ? [use(`s${i + 2}`)] : [{ t: 'path', d: 'M0 0 L1 1 L0 1 Z', fill: '#f2b84b' }] }])),
+  pages: page(use('s1')),
+});
+
+test('validateBook and the painter agree on how deep symbols may nest: four draws, five does not', () => {
+  assert.equal(MAX_SYMBOL_DEPTH, 4);
+  const four = chain(4);
+  assert.deepEqual(validateBook(four), []);
+  assert.ok(paint(four).includes('M0 0 L1 1 L0 1 Z'));
+  const five = chain(5);
+  assert.ok(validateBook(five).some((p) => /nested 5 deep, more than 4/.test(p)), validateBook(five).join('; '));
+  assert.throws(() => paint(five), /more than 4 deep/);
+});
+
+test('a symbol shared by many is walked once, not once per use', () => {
+  // Five levels of fifty uses each: re-walking a shared symbol per use is 50^4 walks.
+  const reads = new Map();
+  const counted = (id, items) => ({ get items() { reads.set(id, (reads.get(id) ?? 0) + 1); return items; } });
+  const symbols = { leaf: counted('leaf', [{ t: 'circle', cx: 0, cy: 0, r: 1, fill: '#f2b84b' }]) };
+  for (const [id, next] of [['l3', 'leaf'], ['l2', 'l3'], ['l1', 'l2']]) {
+    symbols[id] = counted(id, Array.from({ length: 50 }, () => use(next)));
+  }
+  validateBook(book({ format: FORMAT_MAX, symbols, pages: page(use('l1')) }));
+  for (const [id, n] of reads) assert.ok(n <= 4, `symbol ${id} was walked ${n} times`);
+});
+
+test('a page may not multiply past the expansion cap', () => {
+  const blob = { items: Array.from({ length: 199 }, () => ({ t: 'circle', cx: 0, cy: 0, r: 1, fill: '#f2b84b' })) };
+  // Each use of blob draws 1 + 199 = 200 items, so 100 uses is exactly the cap and 101 is over.
+  const at = (n) => validateBook(book({ format: FORMAT_MAX, symbols: { blob }, pages: page(...Array.from({ length: n }, () => use('blob'))) }));
+  assert.equal(MAX_EXPANDED_ITEMS, 20000);
+  assert.deepEqual(at(100), []);
+  assert.ok(at(101).some((p) => /page 1: draws 20200 items once expanded/.test(p)), at(101).join('; '));
+  // And the multiplication that makes the cap necessary: four levels of forty is 2.6 million.
+  const symbols = { leaf: { items: [{ t: 'circle', cx: 0, cy: 0, r: 1, fill: '#f2b84b' }] } };
+  for (const [id, next] of [['l3', 'leaf'], ['l2', 'l3'], ['l1', 'l2']]) symbols[id] = { items: Array.from({ length: 40 }, () => use(next)) };
+  assert.ok(validateBook(book({ format: FORMAT_MAX, symbols, pages: page(use('l1')) })).some((p) => /once expanded/.test(p)));
+});
+
+test('symbols is a map of at least one symbol, or absent', () => {
+  for (const symbols of [null, [], [MARK.mark], 'mark', {}]) {
+    const problems = validateBook(book({ format: FORMAT_MAX, symbols, pages: page() }));
+    assert.ok(problems.some((p) => /^symbols is (not a map|empty)$/.test(p)), `${JSON.stringify(symbols)}: ${problems.join('; ')}`);
+  }
+});
+
+test('a ref names the book\'s own symbol or gradient, never one the prototype lends it', () => {
+  for (const ref of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    const viaUse = validateBook(book({ format: FORMAT_MAX, symbols: MARK, pages: page({ t: 'use', ref }) }));
+    assert.ok(viaUse.includes(`page 1 item 0: unknown symbol ${ref}`), `${ref}: ${viaUse.join('; ')}`);
+    const viaFill = validateBook(book({ pages: page({ t: 'rect', x: 0, y: 0, w: 1, h: 1, fill: { ref } }) }));
+    assert.ok(viaFill.includes(`page 1 item 0: unknown gradient ${ref}`), `${ref}: ${viaFill.join('; ')}`);
+    assert.throws(() => paint(book({ format: FORMAT_MAX, symbols: MARK, pages: page({ t: 'use', ref }) })), /unknown symbol/);
+    assert.throws(() => paint(book({ pages: page({ t: 'rect', x: 0, y: 0, w: 1, h: 1, fill: { ref } }) })), /unknown gradient/);
+  }
 });
 
 test('a symbol holds art, not words and not somebody\'s photograph', () => {
