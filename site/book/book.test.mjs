@@ -27,7 +27,7 @@ import { METRICS } from './metrics/index.js';
 import { SITE_QR, SITE_URL } from './qr.js';
 import { sortKey, byKey, readFamily } from './family.js';
 import { orbitPositions } from './blocks/cover.js';
-import { importClosure, bannedApiViolations, stripComments } from './qa/closure.mjs';
+import { importClosure, bannedApiViolations, staleExceptions, stripComments } from './qa/closure.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(path.join(here, p), 'utf8');
@@ -301,11 +301,14 @@ test('the painter refuses a book from a newer composer', async () => {
  * family.js reaches into the viewer's own model and layout (site/playground/model.js,
  * layout.js) for buildGraph/branchFrom/restrictedGraph/displayDate and layoutArchive, so both
  * files are genuinely part of the closure Android stages, and both contain a banned substring
- * today:
+ * today. Each exception is scoped to the one function that earns it, keyed by the file's path
+ * relative to the repo root (never a bare basename, so a same-named file elsewhere can never
+ * inherit somebody else's exception) -- a second, unrelated occurrence of the same substring
+ * anywhere else in the file is still a violation:
  *   - model.js's `new Date()` is inside `ageOf` (model.js:247). storybook-plan.md's own trap list
  *     names this: "ageOf reads the clock, so never call it from the composer." It is checked, not
- *     just believed - the second assertion below fails if any file this guard covers ever calls it.
- *     ageOf is called only from playground/main.js, the interactive viewer.
+ *     just believed - the second assertion below fails if any file this guard covers ever calls or
+ *     imports it. ageOf is called only from playground/main.js, the interactive viewer.
  *   - layout.js's `localeCompare` (layout.js:145) is `byBirth`'s tie-break when two people in the
  *     same row share a birth year or have none - and `layoutArchive` is what places people on the
  *     composer's `tree` page. That *is* reached from the composer, so this one is a genuine,
@@ -313,11 +316,13 @@ test('the painter refuses a book from a newer composer', async () => {
  *     -date siblings could differ by ICU locale between Node, Electron and an Android WebView) -
  *     out of scope for this issue to fix, since layout.js belongs to the viewer (#245 only builds
  *     the guard). Flagged here on purpose rather than silently allowed past an unmarked exception;
- *     see the QA report for the follow-up this needs.
+ *     see the QA report for the follow-up this needs. Once that follow-up removes the localeCompare
+ *     call from byBirth, `staleExceptions` below fails until this entry is deleted too.
  */
+const repoRoot = path.resolve(here, '..', '..');
 const KNOWN_EXCEPTIONS = new Map([
-  ['model.js', new Set(['new Date', 'Date.now'])],
-  ['layout.js', new Set(['localeCompare'])],
+  ['site/playground/model.js', [{ banned: 'new Date', fn: 'ageOf' }]],
+  ['site/playground/layout.js', [{ banned: 'localeCompare', fn: 'byBirth' }]],
 ]);
 
 test('the composer\'s whole staged closure runs without a DOM, a clock or a locale', () => {
@@ -329,8 +334,15 @@ test('the composer\'s whole staged closure runs without a DOM, a clock or a loca
   const site = path.resolve(here, '..');
   for (const f of files) assert.ok(f.startsWith(site), `${f} escaped site/`);
 
-  const violations = bannedApiViolations(files, { allow: KNOWN_EXCEPTIONS });
+  const violations = bannedApiViolations(files, { allow: KNOWN_EXCEPTIONS, repoRoot });
   assert.deepEqual(violations, [], violations.map((v) => `${path.relative(here, v.file)} uses ${v.banned}`).join('; '));
+
+  // A stale exception is a hole with a comment taped over it: if the function it names stops
+  // existing, or stops containing the substring it was carved out for, it must be deleted, not
+  // left in place quietly excusing nothing (or, worse, still keyed loosely enough to excuse
+  // something new).
+  const stale = staleExceptions(files, KNOWN_EXCEPTIONS, { repoRoot });
+  assert.deepEqual(stale, [], stale.map((s) => `${s.file}: ${s.reason}`).join('; '));
 
   // The behavioural half of the ageOf exception: nobody reachable from the composer may call it,
   // whatever the file that defines it is allowed to contain.
