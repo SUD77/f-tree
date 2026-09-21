@@ -8,4 +8,4 @@
   the fonts a real reference.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@font/book_display,@font/book_text,@font/book_strong" />
+    tools:keep="@font/book_display,@font/book_text,@font/book_strong,@font/book_hand" />

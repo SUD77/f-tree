@@ -139,7 +139,7 @@ class BookPdfTest {
         // hasGlyph takes one grapheme cluster at a time - consonants, and the conjuncts that make
         // Devanagari names, each of which the font has to shape into a single glyph.
         val clusters = listOf("श", "र", "म", "क", "ष", "त", "ज", "ञ", "क्ष", "त्र", "ज्ञ", "श्र")
-        for (key in listOf("book_text", "book_strong", "book_display")) {
+        for (key in listOf("book_text", "book_strong", "book_display", "book_hand")) {
             val paint = Paint().apply { typeface = printer.fonts.getValue(key) }
             for (cluster in clusters) assertTrue("$key: $cluster", paint.hasGlyph(cluster))
         }

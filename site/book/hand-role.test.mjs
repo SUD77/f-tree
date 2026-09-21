@@ -62,9 +62,20 @@ test('a Devanagari hand-role caption measures and paints at 10 pt, with the same
   assert.match(svg, /font-family="book_hand"/);
   // The composer measures wide (DEVANAGARI_MARGIN, text.js) precisely so a shaping engine that
   // comes out a little narrower never needs fitText's shrink; a Latin caption gets no such margin.
-  const latinWidth = measure(LATIN.slice(0, DEVANAGARI.length), METRICS.book_hand, HAND_SIZE);
-  const devWidth = measure(DEVANAGARI, METRICS.book_hand, HAND_SIZE);
-  assert.ok(devWidth > 0 && latinWidth > 0);
+  const m = METRICS.book_hand;
+  let units = 0;
+  for (const ch of DEVANAGARI) {
+    const adv = m.advances[ch.codePointAt(0)];
+    // Every character has its own advance: Kalam covers it, rather than falling to the default.
+    assert.ok(adv !== undefined || ch === ' ', `book_hand has no advance for U+${ch.codePointAt(0).toString(16)}`);
+    units += adv ?? m.defaultAdvance;
+  }
+  const bare = (units / m.unitsPerEm) * HAND_SIZE;
+  assert.ok(Math.abs(measure(DEVANAGARI, m, HAND_SIZE) - bare * 1.06) < 1e-9, 'the Devanagari margin is applied to the hand role');
+  const latin = LATIN.slice(0, DEVANAGARI.length);
+  let latinUnits = 0;
+  for (const ch of latin) latinUnits += m.advances[ch.codePointAt(0)] ?? m.defaultAdvance;
+  assert.ok(Math.abs(measure(latin, m, HAND_SIZE) - (latinUnits / m.unitsPerEm) * HAND_SIZE) < 1e-9, 'Latin gets no margin');
 });
 
 test('breakLines keeps a hand-role caption within its box at 10 pt, in both scripts', () => {
