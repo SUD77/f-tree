@@ -283,7 +283,7 @@ test('the painter refuses a book from a newer composer', async () => {
 });
 
 test('the composer runs without a DOM, a clock or a locale', () => {
-  for (const file of ['compose.js', 'family.js', 'text.js', 'format.js', 'template.js', 'blocks/cover.js', 'blocks/tree.js', 'blocks/numbers.js', 'blocks/generations.js', 'blocks/find.js', 'blocks/closing.js', 'blocks/art.js', 'blocks/words.js']) {
+  for (const file of ['compose.js', 'family.js', 'text.js', 'format.js', 'template.js', 'blocks/cover.js', 'blocks/tree.js', 'blocks/numbers.js', 'blocks/generations.js', 'blocks/find.js', 'blocks/closing.js', 'blocks/art.js', 'blocks/words.js', 'story/featured.js']) {
     const src = read(file).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
     for (const banned of ['new Date', 'Date.now', 'localeCompare', 'Intl.', 'document.', 'window.', 'Math.random', 'requestAnimationFrame', 'setTimeout', 'fetch(']) {
       assert.ok(!src.includes(banned), `${file} uses ${banned}`);

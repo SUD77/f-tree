@@ -12,6 +12,7 @@ import { measure, breakLines, fitSize } from './text.js';
 import { readFamily, familyFacts } from './family.js';
 import { validateTemplate } from './template.js';
 import { METRICS } from './metrics/index.js';
+import { resolveFeatured } from './story/featured.js';
 import { cover } from './blocks/cover.js';
 import { treePage } from './blocks/tree.js';
 import { numbersPage } from './blocks/numbers.js';
@@ -35,7 +36,11 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 /**
  * @param doc       the .ftree document (tree.json), exactly as either shell exports it
- * @param options   { now: 'YYYY-MM-DD', scope, title, photos: bool, livingDates: bool, words: 'en'|'hi' }
+ * @param options   { now: 'YYYY-MM-DD', scope, title, photos: bool, livingDates: bool, words: 'en'|'hi',
+ *                    featured?: personId, notes?: bool, coverOnly?: bool }
+ *                  `featured` and `notes` are generic on every template - see `ctx.featured` and
+ *                  `family.js`'s `note` field - but nothing here reads them yet: the story pages
+ *                  that will are #256-258. `coverOnly` stops this function short, below.
  * @param template  a template document, validated here (template.js)
  * @param allowance what the policy granted: { maxGenerations?, attribution? } - empty means all
  */
@@ -50,7 +55,7 @@ export function composeBook(doc, options, template, allowance = {}) {
   const family = readFamily(doc, options, allowance);
   const ctx = context(family, options, tpl, allowance, { year: Number(now[1]), month: Number(now[2]) });
   const pages = [];
-  for (const name of tpl.pages) {
+  for (const name of pageBlocks(tpl, options)) {
     for (const page of BLOCKS[name](ctx, pages.length + 1)) {
       pages.push(page);
       ctx.pageNo = pages.length + 1;
@@ -71,6 +76,21 @@ export function composeBook(doc, options, template, allowance = {}) {
     pages,
   };
   return { format: formatOf(book), ...book };
+}
+
+/**
+ * Which of the template's blocks actually get laid out.
+ *
+ * `options.coverOnly` stops after the first - which `template.js` guarantees is always the cover
+ * (`t.pages[0] !== 'cover'` fails validation) - so a caller that only wants a thumbnail never pays
+ * for the rest of the book. That matters more than it looks: the desktop recomposes every
+ * non-selected template's whole book on every debounced keystroke to draw its cover chip
+ * (`desktop/renderer/book.js`), and Android's `drawCovers()` does the same per staged template
+ * (`BookViewModel.kt`). At Heirloom's ten-odd pages that was tolerable; at the storybook's
+ * twenty-something it is not.
+ */
+export function pageBlocks(tpl, options) {
+  return options?.coverOnly ? [tpl.pages[0]] : tpl.pages;
 }
 
 /*
@@ -124,6 +144,10 @@ function context(family, options, tpl, allowance, now) {
     tpl,
     P,
     options: { photos: options.photos !== false, livingDates: options.livingDates === true, words: options.words === 'hi' ? 'hi' : 'en' },
+    // Who the story is told around (`story/featured.js`), resolved once, up front, so every block
+    // that will ask "is this the featured person?" (#256-258) asks it the same way. Cheap even when
+    // nothing reads it yet: one O(V) pass at most, never `relate()`.
+    featured: resolveFeatured(family, options),
     attribution: allowance.attribution !== false,
     now: { ...now, label: `${MONTHS[now.month - 1]} ${now.year}` },
     defs,

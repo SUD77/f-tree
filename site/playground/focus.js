@@ -97,11 +97,17 @@ export function collectFocused(graph, focusId, { up = 3, down = 3 } = {}) {
  * The most-connected person is a good guess for the same reason they are most connected: a tree is
  * usually built outwards from somebody, and the chart is most legible centred near the middle of
  * it. Ties break on id so that opening the same file twice gives the same chart.
+ *
+ * `include` narrows which ids may win, without changing how anybody's score is counted - the book's
+ * storybook (`site/book/story/featured.js`) uses it to skip people with no recorded name, since a
+ * story centred on somebody nobody can name reads as a mistake. It stays the same single O(V) pass
+ * either way, and defaults to accepting everybody so every existing caller is unaffected.
  */
-export function mostConnected(graph) {
+export function mostConnected(graph, include = () => true) {
   let best = null;
   let bestScore = -1;
   for (const id of [...graph.order].sort()) {
+    if (!include(id)) continue;
     const score = graph.parents(id).length + graph.children(id).length
       + graph.spouses(id).length + graph.siblings(id).length;
     if (score > bestScore) { best = id; bestScore = score; }

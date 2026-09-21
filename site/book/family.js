@@ -67,6 +67,56 @@ export function lifeYears(p) {
 
 const firstName = (p) => (p?.name ? p.name.split(/\s+/)[0] : null);
 
+/**
+ * A note is the family's own words, not the composer's, and it is opt-in (`options.notes`) - a
+ * Diwali book is forwarded to people nobody chose, and a note is the one place in the record that
+ * was written for someone in particular. So it is clamped, not just displayed: at most three lines,
+ * the depth a torn handwritten card can hold, and free of control characters, since a note is
+ * whatever an old import or a pasted document happened to carry and this is the one field of a
+ * person's record a painter turns into a raw string of text.
+ *
+ * `isControlCode` is spelled out with plain decimal numbers rather than a regex character class of
+ * hex escapes on purpose: a range of escapes naming exactly the control bytes it excludes is
+ * source text a well-meaning editor can "helpfully" decode into the real bytes it names, which is a
+ * corrupted file waiting to happen. \n and \r are kept, since a caller still splits lines on them.
+ * \t is also kept out of `isControlCode` and handled separately, one line down: a tab pasted from a
+ * spreadsheet or a word processor is a word separator, so deleting it outright would glue the words
+ * on either side of it together (`"two\twords"` -> `"twowords"`), which reads as more broken than
+ * the tab ever did. It becomes a single space instead.
+ *
+ * The bidi embedding, override and isolate controls (8234-8238, 8294-8297: LRE/RLE/PDF/LRO/RLO and
+ * LRI/RLI/FSI/PDI) are stripped alongside the ASCII/C1 controls, for the same reason: a note is
+ * pasted text a painter turns straight into a run of glyphs, and any of these can silently reorder
+ * everything printed after them, including - once concatenated onto a page - text the note's author
+ * never wrote. The mark controls LRM and RLM (8206, 8207) are kept: they only pick a direction for
+ * the character they sit next to, never reorder anything around them, and mixed Hindi/English text
+ * relies on them to lay out correctly.
+ *
+ * Never called for the register, which lists everyone by name alone - a note is a page's voice
+ * about the person it is beside, not a fact to file next to their name.
+ */
+const isControlCode = (code) =>
+  (code <= 31 && code !== 9 && code !== 10 && code !== 13) ||
+  (code >= 127 && code <= 159) ||
+  (code >= 8234 && code <= 8238) ||
+  (code >= 8294 && code <= 8297);
+
+export function clampNote(raw, maxLines = 3) {
+  if (typeof raw !== 'string') return null;
+  let cleaned = '';
+  for (const ch of raw) {
+    const code = ch.codePointAt(0);
+    if (code === 9) cleaned += ' ';               // a tab is a word separator, not a byte to delete
+    else if (!isControlCode(code)) cleaned += ch;
+  }
+  const lines = cleaned
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, maxLines);
+  return lines.length ? lines.join('\n') : null;
+}
+
 /** "The Sharma Family", from the surname most people in the book share. */
 export function familyTitle(people) {
   const counts = new Map();
@@ -119,6 +169,7 @@ export function readFamily(doc, options = {}, allowance = {}) {
   }
 
   const order = new Map(placed.layout.nodes.map((n, i) => [n.id, i]));
+  const wantNotes = options.notes === true;
   const people = [...graph.people.values()].map((p) => ({
     id: p.id,
     name: p.name,
@@ -132,6 +183,10 @@ export function readFamily(doc, options = {}, allowance = {}) {
     by: year(p.birthDate),
     dy: year(p.deathDate),
     order: order.get(p.id) ?? 0,
+    // Off by default (docs/storybook-plan.md): with `options.notes` unset, every shown person
+    // carries `note: null`, so a template that has not been taught to look for one cannot show it
+    // by accident. No block reads this field yet - it is here for the story pages (#256-258).
+    note: wantNotes ? clampNote(p.notes) : null,
   }));
   const byId = new Map(people.map((p) => [p.id, p]));
 

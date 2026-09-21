@@ -302,12 +302,13 @@ tasks.withType<Test>().configureEach {
     /*
      * `BookFormatTest` parses the composer's own golden book and runs the composer in node against
      * a document the app's exporter types encoded - so the whole engine is an input to it.
+     * compose.js also reaches into site/playground, so the closure comes from [bookEngine], the
+     * same walk that decides what ships into the WebView, rather than a hand-kept list that went
+     * stale once story/featured.js imported focus.js (#244).
      */
     inputs.files(
         fileTree(rootProject.file("site/book")) { include("**/*.js", "**/*.json") },
-        rootProject.file("site/playground/model.js"),
-        rootProject.file("site/playground/layout.js"),
-        rootProject.file("site/playground/dates.js"),
+        bookEngine(rootProject.file("site")),
     ).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("bookEngineInputs")
         .optional()
