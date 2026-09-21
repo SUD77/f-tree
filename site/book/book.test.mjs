@@ -390,6 +390,33 @@ test('meta: the guard catches an import of the UI-only search module, which sort
     'importing search.js must be caught: it sorts with localeCompare and is UI-only forever');
 });
 
+test('meta: a function-scoped exception does not excuse a second, unrelated call in the same file', () => {
+  const files = importClosure(path.join(here, 'qa/fixtures/scoped-exception-entry.mjs'));
+  const allow = new Map([
+    ['site/book/qa/fixtures/scoped-exception-leaf.mjs', [{ banned: 'new Date', fn: 'insideException' }]],
+  ]);
+  const violations = bannedApiViolations(files, { allow, repoRoot });
+  assert.ok(violations.some((v) => v.banned === 'new Date' && v.file.endsWith('scoped-exception-leaf.mjs')),
+    'a second new Date outside the excepted function must still be caught, not excused by a file-wide exception');
+});
+
+test('meta: an exception that no longer matches anything is reported stale, not silently accepted', () => {
+  const files = importClosure(path.join(here, 'qa/fixtures/clean-entry.mjs'));
+  const goneFn = new Map([
+    ['site/book/qa/fixtures/clean-leaf.mjs', [{ banned: 'new Date', fn: 'greet' }]],
+  ]);
+  const stale = staleExceptions(files, goneFn, { repoRoot });
+  assert.ok(stale.some((s) => s.file === 'site/book/qa/fixtures/clean-leaf.mjs' && s.banned === 'new Date'),
+    'an exception for a substring the named function no longer contains must be flagged stale');
+
+  const goneFile = new Map([
+    ['site/book/qa/fixtures/does-not-exist.mjs', [{ banned: 'new Date', fn: 'anything' }]],
+  ]);
+  const staleFile = staleExceptions(files, goneFile, { repoRoot });
+  assert.ok(staleFile.some((s) => s.reason === 'file is not in the closure'),
+    'an exception for a file the closure no longer reaches must be flagged stale too');
+});
+
 /*
  * #90: a birthday with no year (`--04-17`). The living keep only a year, so without one there is
  * nothing to print -- and never "Born null". The departed keep the day, but not as a range, which
