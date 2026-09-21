@@ -7,7 +7,9 @@
   "fonts": { "display": "book_display", "text": "book_text", "strong": "book_strong" },
   "defs": {
     "band": { "type": "linear", "x1": 0, "y1": 580, "x2": 0, "y2": 720, "stops": [[0, "#17122e", 1], [1, "#3a2352", 1]] },
-    "glow": { "type": "radial", "units": "item", "cx": 0, "cy": 0, "r": 1, "stops": [[0, "#f2b84b", 0.55], [1, "#f2b84b", 0]] }
+    "glow": { "type": "radial", "units": "item", "cx": 0, "cy": 0, "r": 1, "stops": [[0, "#f2b84b", 0.55], [1, "#f2b84b", 0]] },
+    "dusk": { "type": "linear", "x1": 0, "y1": 0, "x2": 0, "y2": 120, "stops": [[0, "#3a2352", 1], [1, "#f2b84b", 1]] },
+    "sheen": { "type": "linear", "x1": 0, "y1": 0, "x2": 120, "y2": 0, "stops": [[0, "#f2b84b", 1], [1, "#b5562a", 1]] }
   },
   "symbols": {
     "diya": {
@@ -21,6 +23,25 @@
       "items": [
         { "t": "use", "ref": "diya" },
         { "t": "use", "ref": "diya", "tf": [0.75, 0, 0, 0.75, 32, 2.4] }
+      ]
+    },
+    "toran": {
+      "items": [
+        { "t": "path", "d": "M0 0 Q60 24 120 0", "stroke": "#7a3e63", "sw": 1.5, "dash": [4, 2], "cap": "round" },
+        { "t": "circle", "cx": 20, "cy": 14, "r": 6, "fill": { "ref": "sheen" } },
+        { "t": "rect", "x": 42, "y": 11, "w": 16, "h": 22, "r": 4, "fill": "#b5562a", "stroke": "#f2b84b", "sw": 0.8 },
+        { "t": "group", "tf": [0.7071, 0.7071, -0.7071, 0.7071, 80, 20], "items": [
+          { "t": "rect", "x": -5, "y": -5, "w": 10, "h": 10, "fill": "#3a8a7a" }
+        ] },
+        { "t": "path", "d": "M104 12 L114 32 L94 32 Z M104 20 L108 28 L100 28 Z", "fill": "#7a3e63", "rule": "evenodd" }
+      ]
+    },
+    "keepsake": {
+      "items": [
+        { "t": "path", "d": "M0 0 C20 -30 50 30 80 0", "stroke": "#b5562a", "sw": 2.5, "cap": "round" },
+        { "t": "circle", "cx": 110, "cy": 0, "r": 18, "stroke": "#b9822a", "sw": 3 },
+        { "t": "circle", "cx": 160, "cy": 0, "r": 16, "fill": "#f2b84b" },
+        { "t": "rect", "x": 164, "y": -12, "w": 30, "h": 24, "fill": "#3a8a7a" }
       ]
     }
   },
@@ -65,7 +86,52 @@
         { "t": "use", "ref": "diya", "tf": [0.6, 0, 0, 0.6, 256, 775] },
         { "t": "use", "ref": "lamp-pair", "tf": [1, 0, 0, 1, 357.7, 772.3], "fill": "#17122e", "op": 0.35 },
         { "t": "use", "ref": "lamp-pair", "tf": [1, 0, 0, 1, 356, 770] },
-        { "t": "text", "x": 297.5, "y": 812, "s": "The shadow keeps the shape and loses the hairline.", "font": "text", "size": 11, "fill": "#7a3e63", "align": "middle", "w": 300 }
+        { "t": "text", "x": 297.5, "y": 812, "s": "The shadow keeps the shape, hairline and all.", "font": "text", "size": 11, "fill": "#7a3e63", "align": "middle", "w": 300 }
+      ]
+    },
+    {
+      "label": "Through a window",
+      "items": [
+        { "t": "rect", "x": 0, "y": 0, "w": 595, "h": 842, "fill": "#f6ecda" },
+        { "t": "text", "x": 297.5, "y": 104, "s": "Through a window", "font": "display", "size": 28, "fill": "#2a1a33", "align": "middle" },
+        {
+          "t": "group",
+          "tf": [1.2, 0, 0, 1.2, 70, 170],
+          "clip": "M0 0 H180 V120 H0 Z",
+          "items": [
+            { "t": "rect", "x": 0, "y": 0, "w": 180, "h": 120, "fill": { "ref": "dusk" } },
+            { "t": "use", "ref": "toran", "tf": [1, 0, 0, 1, 10, 20] },
+            { "t": "use", "ref": "toran", "tf": [1, 0, 0, 1, 120, 70] }
+          ]
+        },
+        { "t": "path", "d": "M70 170 H286 V314 H70 Z", "stroke": "#2a1a33", "sw": 2 },
+        {
+          "t": "group",
+          "clip": "M400 170 C455 170 500 215 500 270 C500 325 455 370 400 370 C345 370 300 325 300 270 C300 215 345 170 400 170 Z",
+          "op": 0.6,
+          "items": [
+            { "t": "rect", "x": 300, "y": 170, "w": 200, "h": 200, "fill": "#b5562a" },
+            { "t": "circle", "cx": 400, "cy": 270, "r": 60, "fill": "#f2b84b" },
+            { "t": "use", "ref": "toran", "tf": [1, 0, 0, 1, 340, 300] }
+          ]
+        },
+        { "t": "circle", "cx": 400, "cy": 270, "r": 100, "stroke": "#2a1a33", "sw": 2 },
+        { "t": "use", "ref": "toran", "tf": [1, 0, 0, 1, 120, 470] },
+        { "t": "use", "ref": "toran", "tf": [2, 0, 0, 2, 303.4, 454.6], "fill": "#2a1a33", "op": 0.4 },
+        { "t": "use", "ref": "toran", "tf": [2, 0, 0, 2, 300, 450] },
+        { "t": "text", "x": 297.5, "y": 640, "s": "A clip lies inside its group's transform, and under its opacity.", "font": "text", "size": 11, "fill": "#5e4a66", "align": "middle", "w": 360 }
+      ]
+    },
+    {
+      "label": "The same shape, offset",
+      "items": [
+        { "t": "rect", "x": 0, "y": 0, "w": 595, "h": 842, "fill": "#f6ecda" },
+        { "t": "text", "x": 297.5, "y": 104, "s": "The same shape, offset", "font": "display", "size": 28, "fill": "#2a1a33", "align": "middle" },
+        { "t": "text", "x": 297.5, "y": 220, "s": "The shadow alone: a line, a ring, and no darker overlap.", "font": "text", "size": 11, "fill": "#5e4a66", "align": "middle", "w": 360 },
+        { "t": "use", "ref": "keepsake", "tf": [1.5, 0, 0, 1.5, 152, 300], "fill": "#2a1a33", "op": 0.4 },
+        { "t": "text", "x": 297.5, "y": 440, "s": "The shadow under the art it falls from.", "font": "text", "size": 11, "fill": "#5e4a66", "align": "middle", "w": 360 },
+        { "t": "use", "ref": "keepsake", "tf": [1.5, 0, 0, 1.5, 154.55, 523.45], "fill": "#2a1a33", "op": 0.4 },
+        { "t": "use", "ref": "keepsake", "tf": [1.5, 0, 0, 1.5, 152, 520] }
       ]
     }
   ]

@@ -192,9 +192,11 @@ The clip's path data (and every `path`'s `d`) follows one grammar, which `valida
 
 **The conformance book.** `site/book/golden/format2-conformance.json` is a format-2 book drawn
 with everything format 2 adds: an arch clipped over a photograph with a frame stroke over the clip
-edge, one lamp drawn nine times across two pages, a `use` turned by `tf`, a `use` dimmed by `op`,
-and silhouette uses of symbols that carry strokes, so the stroke-dropping rule is provable from the
-file alone. Both painters are held to it — `format.test.mjs` paints it as SVG, and the Android
+edge, one lamp drawn many times across its pages, a `use` turned by `tf`, a `use` dimmed by `op`,
+clips on transformed and dimmed groups, and a silhouette of an open string, a ring and two
+overlapping shapes under one dimmed `use`, so the silhouette rule is provable from the file alone.
+`format.test.mjs` walks the file against a checklist of every format-2 feature, so an edit cannot
+silently drop one. Both painters are held to it — `format.test.mjs` paints it as SVG, and the Android
 tests read the same file — so it is the one place to change when format 2's meaning changes. It is
 written by hand, not generated: `UPDATE_GOLDEN=1` does not touch it.
 

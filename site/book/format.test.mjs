@@ -6,9 +6,10 @@
  *
  * golden/format2-conformance.json is the other half: a book that draws with everything format 2
  * adds, written by hand and read by both painters. #246 paints it in Kotlin against this file, so
- * what it exercises is the contract - a clipped arch over a photograph, a symbol drawn several
- * times, a use turned by `tf`, a use dimmed by `op`, and a silhouette use of a symbol that carries
- * a stroke, which is what proves the stroke is dropped.
+ * what it exercises is the contract - clips on plain, transformed and dimmed groups, symbols of
+ * every shape drawn many times, turned and dimmed, and a silhouette of an open string, a ring and
+ * two overlapping shapes, which is what proves the silhouette rule. conformanceFeatures() below
+ * checks the file still covers all of it.
  */
 
 import test from 'node:test';
@@ -189,21 +190,82 @@ test('a symbol holds art, not words and not somebody\'s photograph', () => {
     .some((p) => p === 'symbol s: no items'));
 });
 
+/*
+ * The fixture is the contract #246 is held to, so what it covers is checked here, feature by
+ * feature, by walking the file. Dropping a case from it fails this test by name.
+ */
+function conformanceFeatures(b) {
+  const seen = new Set();
+  const note = (on, name) => { if (on) seen.add(name); };
+  const bounds = (it) => (it.t === 'circle' ? [it.cx - it.r, it.cy - it.r, it.cx + it.r, it.cy + it.r]
+    : it.t === 'rect' ? [it.x, it.y, it.x + it.w, it.y + it.h] : null);
+  const overlap = (p, q) => p && q && p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3];
+  const flatten = (items) => items.flatMap((it) => (it.t === 'group' ? flatten(it.items)
+    : it.t === 'use' ? flatten(b.symbols[it.ref].items) : [it]));
+  const walk = (items, { inSymbol, inClip }) => items.forEach((it) => {
+    if (it.t === 'group') {
+      const clip = it.clip;
+      note(clip !== undefined && it.items.some((c) => c.t === 'image'), 'a clipped photograph');
+      note(clip !== undefined && it.tf, 'a clip on a group with a tf');
+      note(clip !== undefined && it.op !== undefined, 'a clip and an op on one group');
+      note(/H/.test(clip ?? ''), 'a clip using H');
+      note(/V/.test(clip ?? ''), 'a clip using V');
+      note(/C/.test(clip ?? ''), 'a clip using C');
+      note(inSymbol && it.tf, 'a symbol holding a group with a tf');
+      walk(it.items, { inSymbol, inClip: inClip || clip !== undefined });
+      return;
+    }
+    if (inSymbol) {
+      note(it.t === 'circle', 'a symbol holding a circle');
+      note(it.t === 'rect' && it.r, 'a symbol holding a rounded rect');
+      note(it.t === 'path' && it.rule === 'evenodd', 'a symbol holding an evenodd path');
+      note(it.dash, 'a symbol holding a dashed stroke');
+      note(it.fill?.ref, 'a symbol holding a gradient fill');
+      note(it.t === 'use', 'a symbol using a symbol');
+    }
+    if (it.t !== 'use') return;
+    note(inClip, 'a use inside a clipped group');
+    note(it.tf, 'a use turned by a tf');
+    note(it.fill === undefined && it.op !== undefined, 'a use dimmed by an op');
+    if (it.fill !== undefined && it.op !== undefined) {
+      const drawn = flatten(b.symbols[it.ref].items);
+      note(drawn.some((d) => d.t === 'path' && d.stroke && d.fill === undefined && !/Z\s*$/.test(d.d) && /C|Q/.test(d.d)),
+        'a dimmed silhouette of an open curved string');
+      note(drawn.some((d) => ['circle', 'rect'].includes(d.t) && d.stroke && d.fill === undefined), 'a dimmed silhouette of a ring');
+      const filled = drawn.filter((d) => d.fill !== undefined);
+      note(filled.some((d, i) => filled.some((e, j) => i < j && overlap(bounds(d), bounds(e)))), 'a dimmed silhouette of overlapping shapes');
+      note(b.symbols[it.ref].items.some((c) => c.t === 'use'), 'a silhouette through a nested use');
+    }
+  });
+  b.pages.forEach((p) => walk(p.items, { inSymbol: false, inClip: false }));
+  Object.values(b.symbols).forEach((sym) => walk(sym.items, { inSymbol: true, inClip: false }));
+  const uses = new Map();
+  const count = (items) => items.forEach((it) => {
+    if (it.t === 'use') uses.set(it.ref, (uses.get(it.ref) ?? 0) + 1);
+    if (it.t === 'group') count(it.items);
+  });
+  b.pages.forEach((p) => count(p.items));
+  note([...uses.values()].some((n) => n >= 3), 'a symbol drawn many times');
+  return seen;
+}
+
 test('the conformance book draws with everything format 2 adds', () => {
   assert.equal(CONFORMANCE.format, FORMAT_MAX);
-  assert.equal(formatOf(CONFORMANCE), FORMAT_MAX);
-  const items = CONFORMANCE.pages.flatMap((p) => p.items);
-  const uses = items.filter((it) => it.t === 'use');
-  const clipped = items.filter((it) => it.t === 'group' && it.clip !== undefined);
-  assert.ok(clipped.some((g) => g.items.some((c) => c.t === 'image')), 'no clipped photograph');
-  assert.ok(uses.filter((u) => u.ref === 'diya').length >= 3, 'a symbol is not reused');
-  assert.ok(uses.some((u) => u.tf), 'no use is turned by a tf');
-  assert.ok(uses.some((u) => u.op !== undefined && u.fill === undefined), 'no use is dimmed by an op');
-  const shadows = uses.filter((u) => u.fill !== undefined);
-  assert.ok(shadows.length, 'no silhouette use');
-  const stroked = (id, seen = []) => CONFORMANCE.symbols[id].items.some((it) =>
-    it.stroke !== undefined || (it.t === 'use' && !seen.includes(it.ref) && stroked(it.ref, [...seen, id])));
-  assert.ok(shadows.every((u) => stroked(u.ref)), 'a silhouette whose symbol has no stroke proves nothing');
+  assert.equal(formatOf(CONFORMANCE), FORMAT_MAX, 'the fixture must declare the lowest format that draws it');
+  assert.deepEqual(validateBook(CONFORMANCE), []);
+  const seen = conformanceFeatures(CONFORMANCE);
+  const wanted = [
+    'a clipped photograph', 'a clip on a group with a tf', 'a clip and an op on one group',
+    'a clip using H', 'a clip using V', 'a clip using C', 'a use inside a clipped group',
+    'a symbol holding a circle', 'a symbol holding a rounded rect', 'a symbol holding a group with a tf',
+    'a symbol holding an evenodd path', 'a symbol holding a dashed stroke', 'a symbol holding a gradient fill',
+    'a symbol using a symbol', 'a symbol drawn many times', 'a use turned by a tf', 'a use dimmed by an op',
+    'a dimmed silhouette of an open curved string', 'a dimmed silhouette of a ring',
+    'a dimmed silhouette of overlapping shapes', 'a silhouette through a nested use',
+  ];
+  assert.deepEqual(wanted.filter((f) => !seen.has(f)), [], 'the conformance book no longer covers these');
+  // The checklist itself must be able to fail: a book with nothing in it covers nothing.
+  assert.equal(conformanceFeatures({ ...CONFORMANCE, pages: [{ label: 'x', items: [] }], symbols: {} }).size, 0);
 });
 
 test('the SVG painter expands every use, so pages joined into one file cannot collide', () => {
