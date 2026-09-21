@@ -344,11 +344,18 @@ test('the composer\'s whole staged closure runs without a DOM, a clock or a loca
   const stale = staleExceptions(files, KNOWN_EXCEPTIONS, { repoRoot });
   assert.deepEqual(stale, [], stale.map((s) => `${s.file}: ${s.reason}`).join('; '));
 
-  // The behavioural half of the ageOf exception: nobody reachable from the composer may call it,
-  // whatever the file that defines it is allowed to contain.
-  const callsAgeOf = files.filter((f) => /\.m?js$/.test(f) && stripComments(readFileSync(f, 'utf8')).includes('ageOf('));
-  assert.deepEqual(callsAgeOf.filter((f) => !f.endsWith(`${path.sep}model.js`)), [],
-    'ageOf reads the clock - the composer must never call it (storybook-plan.md)');
+  // The behavioural half of the ageOf exception: nobody reachable from the composer may call or
+  // import it, whatever the file that defines it is allowed to contain. A plain `.includes('ageOf(')`
+  // both under- and over-matches: it misses `import { ageOf } from ...` (no call, but still a route
+  // by which a future edit could call it unnoticed), and it would false-positive on an unrelated
+  // identifier like `averageOf(`.
+  const touchesAgeOf = files.filter((f) => {
+    if (!/\.m?js$/.test(f)) return false;
+    const src = stripComments(readFileSync(f, 'utf8'));
+    return /\bageOf\s*\(/.test(src) || /\bimport\s*\{[^}]*\bageOf\b[^}]*\}/.test(src);
+  });
+  assert.deepEqual(touchesAgeOf.filter((f) => !f.endsWith(`${path.sep}model.js`)), [],
+    'ageOf reads the clock - the composer must never call or import it (storybook-plan.md)');
 });
 
 /*
