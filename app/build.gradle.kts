@@ -302,12 +302,21 @@ tasks.withType<Test>().configureEach {
     /*
      * `BookFormatTest` parses the composer's own golden book and runs the composer in node against
      * a document the app's exporter types encoded - so the whole engine is an input to it.
+     *
+     * Everything under site/book is covered by the fileTree above, but compose.js also reaches
+     * outside that directory through static relative imports into site/playground (Android stages
+     * that whole closure into the WebView - see site/book/CLAUDE.md). Those files have to be listed
+     * here by hand, so this list must be kept equal to compose.js's static import closure of
+     * site/playground files - check it with a small script that follows relative imports from
+     * compose.js (as `story/featured.js` -> `../../playground/focus.js` did for #244) rather than
+     * trusting this comment.
      */
     inputs.files(
         fileTree(rootProject.file("site/book")) { include("**/*.js", "**/*.json") },
         rootProject.file("site/playground/model.js"),
         rootProject.file("site/playground/layout.js"),
         rootProject.file("site/playground/dates.js"),
+        rootProject.file("site/playground/focus.js"),
     ).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("bookEngineInputs")
         .optional()
