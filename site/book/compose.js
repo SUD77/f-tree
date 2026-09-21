@@ -41,6 +41,9 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
  */
 export function composeBook(doc, options, template, allowance = {}) {
   const tpl = validateTemplate(template);
+  // A format-2 (storybook) template validates here but has no `pages` to walk. Say so, rather
+  // than fail on the loop below, until the story planner (#251) draws it.
+  if (tpl.format !== 1) throw new Error(`composeBook: "${tpl.id}" is a format-${tpl.format} storybook template, which this composer cannot draw yet`);
   const now = /^(\d{4})-(\d{2})/.exec(options?.now ?? '');
   if (!now) throw new Error('composeBook: options.now must be an ISO date - the composer never reads the clock');
 

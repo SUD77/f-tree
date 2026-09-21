@@ -15,6 +15,12 @@ import kotlinx.serialization.json.intOrNull
  * rules; the short of it is that a season is a window of days per year, both ends included, that
  * nothing here reads a clock, and that an entry this app cannot read, or whose template format is
  * newer than the composer it ships with understands, is left out rather than guessed at.
+ *
+ * An entry's `format` is only ever compared as a number here - this object never needs to know a
+ * template format's shape, only whether [TEMPLATE_FORMAT] is high enough to draw it. Template
+ * format 2 (`site/book/template.js`'s paper-cut schema, #243) is a storybook template hidden this
+ * way: it validates and ships in `catalog-cases.json` as a test row, but [TEMPLATE_FORMAT] stays 1
+ * until the composer that draws it (#244, #246) lands, so no shell offers a book it can't paint.
  */
 object BookCatalog {
 
