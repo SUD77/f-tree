@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  validateTemplate, PALETTE_KEYS, PAPERCUT_PALETTE_KEYS, FONT_KEYS, HAND_FONT_KEY,
+  validateTemplate, PALETTE_KEYS, PAPERCUT_PALETTE_KEYS, FONT_KEYS, ROLE_FONT_KEYS, HAND_FONT_KEY,
   REQUIRED_CHAPTERS,
 } from './template.js';
 
@@ -61,8 +61,9 @@ test('the paper-cut palette is exactly the 29 tokens the approved frames were re
 
 test('format 1 keeps its own 22 palette tokens, untouched by format 2', () => {
   assert.equal(PALETTE_KEYS.length, 22);
-  assert.equal(FONT_KEYS.length, 3);
-  assert.ok(!FONT_KEYS.includes(HAND_FONT_KEY), 'the hand font is not a format-1 role');
+  assert.deepEqual(ROLE_FONT_KEYS, ['book_display', 'book_text', 'book_strong']);
+  assert.ok(FONT_KEYS.includes(HAND_FONT_KEY), 'the release embeds the hand font');
+  assert.ok(!ROLE_FONT_KEYS.includes(HAND_FONT_KEY), 'the hand font is not a format-1 role');
 });
 
 test('a missing palette token is refused', () => {
@@ -160,4 +161,12 @@ test('a broken placeholder is refused, not printed with its braces', () => {
     t.cover.subtitle = line;
     assert.throws(() => validateTemplate(t), /unmatched/, line);
   }
+});
+
+test('Kalam is only ever the hand role, in either format', async () => {
+  const heirloom = JSON.parse(await import('node:fs').then((fs) => fs.readFileSync(new URL('./templates/heirloom.json', import.meta.url), 'utf8')));
+  assert.throws(() => validateTemplate({ ...heirloom, fonts: { ...heirloom.fonts, display: 'book_hand' } }), /font for "display"/);
+  const t = papercutTemplate();
+  t.fonts.text = 'book_hand';
+  assert.throws(() => validateTemplate(t), /font for "text"/);
 });

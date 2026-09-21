@@ -24,11 +24,29 @@ const FORMAT_PAPERCUT = 2;
 
 export const BLOCKS = ['cover', 'tree', 'numbers', 'generations', 'find', 'closing'];
 
-/** The font files a template may choose among - the ones the release embeds. */
-export const FONT_KEYS = ['book_display', 'book_text', 'book_strong'];
+/**
+ * The font files a template may choose among - the ones the release embeds.
+ *
+ * `book_hand` (#242) joined `book_display`/`book_text`/`book_strong` here without a format bump,
+ * because `Book.fonts` is an open map (docs/family-book.md). A format-1 template still names
+ * exactly the three roles below - see the `fonts` check further down, which does not change - and
+ * a format-2 template is the first to use `hand` (#243). `FONT_KEYS` is enumerated in four other
+ * places that cannot import this file and must be kept in step by hand: the hard-coded font map in
+ * `app/.../book/BookPrinter.kt`, `BOOK_FONT_FILES` in `desktop/main.js`, the `@font-face` rules in
+ * `preview.html`, and the tables gathered into `METRICS` in `metrics/index.js`. `font-keys.json`
+ * plus `font-keys.test.mjs` and `FontKeysTest.kt` fail the build if any of the five disagree.
+ */
+export const FONT_KEYS = ['book_display', 'book_text', 'book_strong', 'book_hand'];
 
 /** The paper-cut template's fourth role, its handwritten voice (Kalam, `book_hand.ttf`, #242). */
 export const HAND_FONT_KEY = 'book_hand';
+
+/**
+ * The faces the display, text and strong roles may use, in either format. Kalam is only ever the
+ * hand role: a format-1 template naming it would print on an app that predates #242 with that
+ * text missing, and it has no bold or display cut.
+ */
+export const ROLE_FONT_KEYS = FONT_KEYS.filter((k) => k !== HAND_FONT_KEY);
 
 export const PALETTE_KEYS = [
   'night', 'deep', 'glow', 'gold', 'goldSoft', 'star', 'mist',
@@ -112,9 +130,11 @@ export function validateTemplate(t) {
   if (typeof t.id !== 'string' || !ID.test(t.id)) fail('id must be lower-case letters, digits and hyphens');
   const name = plainText(t.name, 40, 'name');
 
+  // A format-1 template still names exactly these three roles, from ROLE_FONT_KEYS: `book_hand`
+  // is in FONT_KEYS but is never a format-1 face (#242, #243).
   const fonts = {};
   for (const role of ['display', 'text', 'strong']) {
-    if (!FONT_KEYS.includes(t.fonts?.[role])) fail(`font for "${role}" must be one of ${FONT_KEYS.join(', ')}`);
+    if (!ROLE_FONT_KEYS.includes(t.fonts?.[role])) fail(`font for "${role}" must be one of ${ROLE_FONT_KEYS.join(', ')}`);
     fonts[role] = t.fonts[role];
   }
   if (Object.keys(t.fonts).length !== 3) fail('fonts has keys other than display, text and strong');
@@ -163,7 +183,7 @@ function validatePapercutTemplate(t) {
 
   const fonts = {};
   for (const role of ['display', 'text', 'strong', 'hand']) {
-    const allowed = role === 'hand' ? [HAND_FONT_KEY] : FONT_KEYS;
+    const allowed = role === 'hand' ? [HAND_FONT_KEY] : ROLE_FONT_KEYS;
     if (!allowed.includes(t.fonts?.[role])) fail(`font for "${role}" must be one of ${allowed.join(', ')}`);
     fonts[role] = t.fonts[role];
   }

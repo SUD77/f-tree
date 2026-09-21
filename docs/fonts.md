@@ -34,13 +34,14 @@ Skia. That pipeline sets two requirements the app's own fonts don't have to meet
   in a WebView with no layout-engine access on the Android side. It needs committed advance-width
   tables it can read itself (`tools/font_metrics.mjs`, below) rather than asking the platform.
 
-Both needs point at the same font, chosen once and subset once:
+Both needs point at the same kind of font, chosen once and subset once per role:
 
 | File | Family | Weight | Used for | Why this face |
 |---|---|---|---|---|
 | `book_display.ttf` | Rozha One | Regular (static) | headings, generation numerals | The only display-weight candidate that covers Latin *and* Devanagari in one static file — see below for why static matters. |
 | `book_text.ttf` | Mukta | Light / 300 (static) | body text, captions | Same family as `book_strong.ttf`, so text and its emphasis share metrics and never visually clash; covers Latin and Devanagari in one static file. |
 | `book_strong.ttf` | Mukta | SemiBold / 600 (static) | names, emphasis | The SemiBold static instance of the same family as `book_text.ttf`. |
+| `book_hand.ttf` | Kalam | Regular (static) | the `hand` role (#242): captions, notes, quotes and kin words, 10–18 pt | The handwritten voice the Aangan design system calls for (`docs/book-design-system.md`). Google Fonts ships Kalam Light/Regular/Bold as three separate static TTFs, not one variable file, so — exactly like Rozha One and Mukta above — no `varLib.instancer` step was needed; subsetting starts directly from the upstream static Regular. It covers Latin and Devanagari in one file, the same requirement every other book font meets. |
 
 **Static, not variable, and that is a functional requirement, not a preference.** Skia's PDF
 backend renders a variable font's default instance by writing each glyph as its own miniature PDF
@@ -59,6 +60,11 @@ If a future book font *does* carry an RFN, rename name IDs 1, 4, 6 and 16 to som
 Book Display` before subsetting, and say so here — do not ship a Modified Version under a Reserved
 Font Name.
 
+**Kalam's `OFL.txt` (#242) was checked the same way.** Its copyright statement reads only
+`Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com).` — no Reserved Font Name
+follows it, so `book_hand.ttf` is an unrestricted Modified Version too, and the subset's `name`
+table keeps upstream's own strings (`Kalam` / `Regular` / `Kalam-Regular`) unchanged.
+
 ### Subsetting
 
 Upstream sources (OFL, from Google Fonts' own repository, not a mirror):
@@ -69,7 +75,14 @@ https://github.com/google/fonts/raw/main/ofl/rozhaone/OFL.txt
 https://github.com/google/fonts/raw/main/ofl/mukta/Mukta-Light.ttf
 https://github.com/google/fonts/raw/main/ofl/mukta/Mukta-SemiBold.ttf
 https://github.com/google/fonts/raw/main/ofl/mukta/OFL.txt
+https://github.com/google/fonts/raw/main/ofl/kalam/Kalam-Regular.ttf
+https://github.com/google/fonts/raw/main/ofl/kalam/OFL.txt
 ```
+
+Kalam's upstream `Kalam-Regular.ttf` fetched for #242 hashed
+`sha256:57cecb63d4608019371954274ae1d8c397764debd5b19d4a33c1efa4dc923c0b`, 427,360 bytes, no `fvar`
+table (confirmed with `fontTools.ttLib`) — a static instance, not the variable font a careless fetch
+from Google Fonts' serving API could hand back instead.
 
 Unicode ranges cover everything the book's Latin and Hindi/Devanagari text can contain, plus the
 handful of punctuation and control characters Devanagari shaping needs even when nothing else in
@@ -85,6 +98,9 @@ pyftsubset Mukta-Light.ttf --output-file=book_text.ttf --unicodes="$UNICODES" \
   --layout-features='*' --name-IDs='*' --glyph-names --notdef-outline --no-hinting
 
 pyftsubset Mukta-SemiBold.ttf --output-file=book_strong.ttf --unicodes="$UNICODES" \
+  --layout-features='*' --name-IDs='*' --glyph-names --notdef-outline --no-hinting
+
+pyftsubset Kalam-Regular.ttf --output-file=book_hand.ttf --unicodes="$UNICODES" \
   --layout-features='*' --name-IDs='*' --glyph-names --notdef-outline --no-hinting
 ```
 
@@ -128,15 +144,29 @@ specific pipeline. Dropping it took the total from roughly 1.04 MB to 0.70 MB.
 | `book_display.ttf` | 183,808 bytes (179.5 KB) |
 | `book_text.ttf` | 279,316 bytes (272.8 KB) |
 | `book_strong.ttf` | 273,260 bytes (266.9 KB) |
-| **Total** | **736,384 bytes (0.70 MB)** |
+| `book_hand.ttf` | 215,360 bytes (210.3 KB) |
+| **Total** | **951,744 bytes (0.91 MB)** |
 
-Comfortably inside the ~0.6–0.9 MB target from #203/#202.
+The three-font total was comfortably inside the ~0.6–0.9 MB target from #203/#202; `book_hand.ttf`
+(#242) takes the four-font total just past the top of that range. No further trimming was applied —
+Kalam's own glyph set for a handwriting face is what it is — and the budget was a guideline for the
+first three faces, not a hard ceiling on a fourth (`docs/family-book.md`'s promise is the PDF stays
+under 10 MB, which under 1 MB of embedded fonts leaves untouched).
 
 ### Licences
 
 `assets/licenses/rozha_one_OFL.txt` and `assets/licenses/mukta_OFL.txt` carry the upstream licence
-text (the same file covers both Mukta weights, since they come from one upstream OFL). Both are
-named in the About screen's font credits alongside Literata and JetBrains Mono.
+text (the same file covers both Mukta weights, since they come from one upstream OFL).
+`assets/licenses/kalam_OFL.txt` (#242) is Kalam's own, from a different copyright holder (Indian
+Type Foundry, versus Mukta and Rozha One's Ek Type). All three are named in the About screen's font
+credits (`about_fonts` in `strings.xml`) alongside Literata and JetBrains Mono.
+
+**The licences did not reach the desktop build until #242.** `desktop/package.json`'s
+`extraResources` copied `app/src/main/res/font/*.ttf` into the package from the day the book fonts
+were added, but never `app/src/main/assets/licenses/` — so Mukta's and Rozha One's OFL texts were
+shown to Android's About screen and shipped to nobody on desktop. Fixed as its own commit alongside
+Kalam's addition: `extraResources` now also copies `app/src/main/assets/licenses/*.txt` to
+`licenses/` in the package, which covers all three pre-existing faces as well as Kalam.
 
 ### Metrics
 

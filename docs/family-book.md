@@ -81,11 +81,14 @@ everything a painter may rely on. The composer's tests run it on every book they
 
 ## Fonts
 
-Three static files embedded in the release, all covering Latin and Devanagari in one face:
-`book_display` (Rozha One), `book_text` (Mukta Light) and `book_strong` (Mukta SemiBold). They
-live in `app/src/main/res/font/`, which the desktop package copies too. See [fonts.md](fonts.md).
-They are static rather than variable because Skia's PDF backend, used by both Chromium and
-`PdfDocument`, writes variable fonts as Type3 outlines, which can't be selected or searched.
+Four static files embedded in the release, all covering Latin and Devanagari in one face:
+`book_display` (Rozha One), `book_text` (Mukta Light), `book_strong` (Mukta SemiBold) and
+`book_hand` (Kalam Regular, #242 - the handwritten voice for captions, notes, quotes and kin
+words). They live in `app/src/main/res/font/`, which the desktop package copies too. See
+[fonts.md](fonts.md). They are static rather than variable because Skia's PDF backend, used by
+both Chromium and `PdfDocument`, writes variable fonts as Type3 outlines, which can't be selected
+or searched. `Book.fonts` is an open map, so `book_hand` needed no format bump to join the other
+three.
 
 ## Templates are data
 

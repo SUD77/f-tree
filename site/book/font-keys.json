@@ -1,0 +1,4 @@
+{
+  "_comment": "The book's font keys, shared by font-keys.test.mjs and FontKeysTest.kt. Five places name these keys and cannot import one another - see FONT_KEYS in template.js for the full list - so this file is the one thing both languages read to prove none of the five has drifted from the rest.",
+  "keys": ["book_display", "book_text", "book_strong", "book_hand"]
+}

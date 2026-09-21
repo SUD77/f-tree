@@ -12,3 +12,4 @@
 # Binary, whatever a heuristic might guess.
 *.ftree binary
 *.jks binary
+*.ttf binary
