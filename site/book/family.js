@@ -80,10 +80,22 @@ const firstName = (p) => (p?.name ? p.name.split(/\s+/)[0] : null);
  * source text a well-meaning editor can "helpfully" decode into the real bytes it names, which is a
  * corrupted file waiting to happen. \n and \r are kept, since a caller still splits lines on them.
  *
+ * The bidi embedding, override and isolate controls (8234-8238, 8294-8297: LRE/RLE/PDF/LRO/RLO and
+ * LRI/RLI/FSI/PDI) are stripped alongside the ASCII/C1 controls, for the same reason: a note is
+ * pasted text a painter turns straight into a run of glyphs, and any of these can silently reorder
+ * everything printed after them, including - once concatenated onto a page - text the note's author
+ * never wrote. The mark controls LRM and RLM (8206, 8207) are kept: they only pick a direction for
+ * the character they sit next to, never reorder anything around them, and mixed Hindi/English text
+ * relies on them to lay out correctly.
+ *
  * Never called for the register, which lists everyone by name alone - a note is a page's voice
  * about the person it is beside, not a fact to file next to their name.
  */
-const isControlCode = (code) => (code <= 31 && code !== 10 && code !== 13) || (code >= 127 && code <= 159);
+const isControlCode = (code) =>
+  (code <= 31 && code !== 10 && code !== 13) ||
+  (code >= 127 && code <= 159) ||
+  (code >= 8234 && code <= 8238) ||
+  (code >= 8294 && code <= 8297);
 
 export function clampNote(raw, maxLines = 3) {
   if (typeof raw !== 'string') return null;

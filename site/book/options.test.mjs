@@ -152,6 +152,17 @@ test('clampNote strips control characters (including tab) and keeps at most 3 no
   assert.equal(clampNote(raw), 'Line one with bell\nLine twowith tab\nLine three');
 });
 
+test('clampNote strips bidi embedding, override and isolate controls, which can reorder printed text', () => {
+  // One of each: LRE, RLE, PDF, LRO, RLO (U+202A-U+202E) and LRI, RLI, FSI, PDI (U+2066-U+2069).
+  const bidi = '\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069';
+  assert.equal(clampNote(`Namaste${bidi} ji`), 'Namaste ji');
+});
+
+test('clampNote keeps LRM and RLM - they pick a direction for one character, never reorder anything', () => {
+  const raw = 'Mixed \u200Eक\u200F and English';
+  assert.equal(clampNote(raw), raw);
+});
+
 test('clampNote returns null for whatever has no text left to show', () => {
   assert.equal(clampNote(null), null);
   assert.equal(clampNote(undefined), null);
