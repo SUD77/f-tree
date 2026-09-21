@@ -146,3 +146,10 @@ test('a font role missing, or not one of the release\'s files, is refused', () =
 test('a format this app does not know, newer than 1 or 2, is refused before any key is looked at', () => {
   assert.throws(() => validateTemplate({ format: 3, id: 'x' }), /format 3 - this app reads format 1 or 2/);
 });
+
+test('the format-1 composer refuses a storybook template by name, not with a crash', async () => {
+  const { composeBook } = await import('./compose.js');
+  const doc = { format: 1, people: [{ id: 'a', name: 'Asha' }] };
+  assert.throws(() => composeBook(doc, { now: '2026-09-21' }, papercutTemplate()),
+    /"diwali-story" is a format-2 storybook template/);
+});
