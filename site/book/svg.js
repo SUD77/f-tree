@@ -112,7 +112,7 @@ function expand(it, state) {
   state.depth--;
   // The use's opacity is one group alpha on this wrapper, never pushed down to the items: shapes
   // that overlap inside a dimmed lamp, or inside its shadow, must not darken where they meet.
-  // Android draws it the same way, through saveLayerAlpha.
+  // Android must draw it the same way, through saveLayerAlpha (#246).
   return `<g${transform(it)}${opacity(it)}>${body}</g>`;
 }
 
@@ -140,7 +140,7 @@ function item(it, state) {
     }
     case 'group': {
       const tf = transform(it);
-      const clip = it.clip === undefined ? '' : ` clip-path="url(#${clipPath(`<path d="${it.clip}"/>`, state)})"`;
+      const clip = it.clip === undefined ? '' : ` clip-path="url(#${clipPath(`<path d="${esc(it.clip)}"/>`, state)})"`;
       const body = it.items.map((c) => item(c, state)).join('');
       // A clip is in the group's own coordinates, so where there is a transform the clip goes
       // inside it, on a group of its own. That is the order a Canvas painter takes: save, concat,
