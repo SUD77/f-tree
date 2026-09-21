@@ -258,11 +258,19 @@ test('coverOnly produces just the cover, valid on its own', () => {
 });
 
 test('coverOnly does less work than a full compose, on the same family - fewer photographs asked for, not just fewer pages', () => {
-  const full = composeBook(docFixture(), { now: NOW }, HEIRLOOM);
-  const coverOnly = composeBook(docFixture(), { now: NOW, coverOnly: true }, HEIRLOOM);
+  // docFixture() carries nobody's photo by default, so without one this test's photos.length
+  // assertion would be 0 <= 0 for both composes regardless of whether coverOnly actually skips
+  // requesting photos - a vacuous check. Giving w1 a photo makes the difference observable: the
+  // cover (Heirloom's sky of stars, blocks/cover.js) never calls ctx.portrait, only tree.js and
+  // generations.js do, so a full compose must ask for the photo and a coverOnly one must not.
+  const doc = docFixture();
+  doc.people.find((p) => p.id === 'w1').photo = 'photos/w1.jpg';
+  const full = composeBook(doc, { now: NOW }, HEIRLOOM);
+  const coverOnly = composeBook(doc, { now: NOW, coverOnly: true }, HEIRLOOM);
   assert.ok(full.pages.length > 1);
   assert.equal(coverOnly.pages.length, 1);
-  assert.ok(coverOnly.photos.length <= full.photos.length);
+  assert.ok(full.photos.length > 0, 'the full compose should have asked for the photo');
+  assert.equal(coverOnly.photos.length, 0, 'the cover alone should never ask for a photo');
 });
 
 /* ---------------------------------------------------------------------------------------------
