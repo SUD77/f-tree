@@ -108,7 +108,7 @@ exactly what it meant.
 | item | fields | notes |
 |---|---|---|
 | `group` | `items [tf] [clip] [op]` | `clip` is an absolute path `d`, filled nonzero, in the group's **own** coordinates: inside `tf`, not outside it |
-| `use` | `ref [tf] [fill] [op]` | `ref` names a symbol in `book.symbols`; `tf` is an affine `[a b c d e f]`; `fill` is silhouette mode |
+| `use` | `ref [tf] [fill] [op]` | `ref` names a symbol in `book.symbols`; `tf` is an affine `[a b c d e f]`; `fill` is silhouette mode, a solid `#rrggbb`; `op` is one layer |
 
 **Symbols** are how art is drawn many times without being written many times: a lamp, a frame, a
 motif. The composer names each one and the painters keep them.
@@ -116,8 +116,8 @@ motif. The composer names each one and the painters keep them.
 - A symbol holds shapes only: `rect`, `circle`, `path`, `group` and `use`. Not `text`, because a
   symbol cannot know which font role it would be printed in, and not `image`, which belongs to one
   person.
-- A symbol may use another symbol, up to four deep, so a compiled motif can be built from smaller
-  ones. It may never reach itself. A cycle is a `validateBook` failure, not something a painter
+- A symbol may use another symbol, up to `MAX_SYMBOL_DEPTH` (four) deep, so a compiled motif can
+  be built from smaller ones. It may never reach itself. A cycle is a `validateBook` failure, not something a painter
   discovers by hanging.
 - An id is `[A-Za-z0-9][A-Za-z0-9_-]*`.
 - **A painter expands a `use` where it stands.** `svg.js` writes the symbol's items out inline and
@@ -126,17 +126,69 @@ motif. The composer names each one and the painters keep them.
   `use`'s transform and draws the symbol's items, parsing each path once into a cache keyed by the
   path data.
 
-**Silhouette mode.** A `use` with `fill` draws every item of its symbol in that one fill and drops
-every stroke, with its dash, cap and join — all the way down through a nested `use`, which inherits
-the fill. That is how the paper shadow under a cut layer, and the tint behind a faceless portrait,
-are drawn from art already on the page instead of a second copy of its geometry. The rule is
-uniform on purpose: an item that carried only a stroke is filled too, rather than quietly drawn as
-nothing, and a symbol's own gold hairline can never leak into the shadow cast from it.
+**Silhouette mode.** Ankit's rule, decided 2026-09-21. The design system's paper shadow is "the
+same shape, offset" (`docs/book-design-system.md`), so a silhouette changes the colour of a symbol
+and nothing else:
+
+- `fill` on a `use` must be a solid `#rrggbb`. A gradient ref is a `validateBook` failure.
+- Every fill **and** every stroke inside the symbol takes that colour, all the way down: through
+  its groups, through nested `use`s (whatever `fill` they carry of their own), and through
+  gradient fills, which become the solid colour.
+- Everything else is kept. A stroke keeps its `sw`, `dash`, `cap` and `join`. A stroke-only item
+  stays stroke-only (it is not filled), and a fill-only item stays fill-only (it gains no stroke).
+  An open stroked string casts a line, and a ring frame casts a ring, not a disc.
+- Opacities inside the symbol, on an item or on a group, are kept exactly as they are.
+- The `use`'s `op` applies to the silhouette as a whole, as one group alpha (below). Shapes that
+  overlap inside the shadow do not darken where they meet.
+
+**A `use`'s `op` is one layer,** exactly as a group's `op` is: the symbol is drawn at full
+strength and then composited once at `op`. `svg.js` puts the opacity on the `<g>` that wraps the
+expanded items and never on the items themselves; Android draws it inside `saveLayerAlpha`, as it
+draws a group. This holds for a plain `use` and a silhouette alike.
+
+**Coordinates inside a symbol.** A `use`'s `tf` is concatenated first, and the symbol's items are
+drawn in the coordinates that leaves. A user-space gradient that fills an item inside a symbol is
+therefore in the **symbol's** coordinates, after the `use`'s `tf` (and after any group `tf`
+inside the symbol), not in page coordinates: the same gradient moves and turns with each use.
+`units: 'item'` gradients are relative to their circle, as always.
+
+**Missing refs.** `validateBook` refuses a `use` whose `ref` is not a symbol the book carries, and
+a fill whose `ref` is not a gradient in `defs`. Both are own keys only: `ref: 'constructor'` is an
+unknown symbol, never something the object's prototype lends it. A painter may assume every ref it
+is handed resolves. `svg.js` still throws on one that does not, rather than draw a gap, and
+Android may do the same; neither draws a page around a missing piece.
+
+**Limits.** Both are constants exported by `format.js`, and `svg.js` reads the same ones.
+
+- `MAX_SYMBOL_DEPTH = 4`: a `use` on a page may reach at most four symbols deep. The symbol it
+  names counts one and every symbol that symbol uses adds one, so a chain `a → b → c → d` draws
+  and a fifth is refused, by `validateBook` and by the painter alike. A cycle is refused too.
+- `MAX_EXPANDED_ITEMS = 20000`: the most items one page may draw once every `use` is expanded,
+  counting each item, group and `use` as one. Symbols multiply (four levels of forty uses is 2.6
+  million items), and a rich storybook page comes to a few thousand, so the cap is several times
+  what any real page needs and far below what hangs a painter.
+
+**Never write empty symbols.** A book either carries a `symbols` map with at least one symbol in it
+or has no `symbols` key at all. `symbols: {}`, `null` or an array is refused: an empty map would
+declare format 2 for nothing and hide the book from an app that could draw it.
 
 **Clips.** A clip is one path, in the group's own coordinates, filled nonzero — no even-odd, no
 second path, no clip on anything but a group. A painter clips inside the group's transform: save,
-concat, clipPath, draw. Every clip edge must be covered by a frame stroke somewhere in the drawing
-chain, because Android's preview can draw a bare clip edge jagged.
+concat, clipPath, draw. A group's `op` is applied over the clipped result. Every clip edge must be
+covered by a frame stroke somewhere in the drawing chain, because Android's preview can draw a
+bare clip edge jagged.
+
+The clip's path data (and every `path`'s `d`) follows one grammar, which `validateBook` parses:
+
+- it starts with `M`;
+- the commands are absolute `M L H V C Q Z` only, separated by spaces or commas or nothing;
+- each command takes whole sets of its arguments — `M`, `L` two numbers, `H`, `V` one, `Q` four,
+  `C` six, `Z` none — and may repeat the set (`L1 1 2 2`), as SVG and Android's `PathParser` both
+  read it;
+- numbers are decimal, optionally negative, optionally with an exponent, and finite;
+- a clip must visit at least three distinct points (end and control points), so it encloses an
+  area. `M0 0`, `L10 10 Z` and `e` are refused. A `path` may be open, or empty (`""` draws
+  nothing).
 
 **The conformance book.** `site/book/golden/format2-conformance.json` is a format-2 book drawn
 with everything format 2 adds: an arch clipped over a photograph with a frame stroke over the clip
