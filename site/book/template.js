@@ -91,6 +91,9 @@ function plural(v, max, what) {
 function copyText(v, max, what) {
   const s = plainText(v, max, what);
   for (const m of s.matchAll(PLACEHOLDER)) if (!PLACEHOLDERS.has(m[1])) fail(`${what} has an unknown placeholder "{${m[1]}}"`);
+  // A brace left over once the placeholders are gone is a broken one ("{family", "{{n}}"), and
+  // would print as it is.
+  if (/[{}]/.test(s.replace(PLACEHOLDER, ''))) fail(`${what} has an unmatched "{" or "}"`);
   return s;
 }
 

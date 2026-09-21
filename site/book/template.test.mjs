@@ -153,3 +153,11 @@ test('the format-1 composer refuses a storybook template by name, not with a cra
   assert.throws(() => composeBook(doc, { now: '2026-09-21' }, papercutTemplate()),
     /"diwali-story" is a format-2 storybook template/);
 });
+
+test('a broken placeholder is refused, not printed with its braces', () => {
+  for (const line of ['from the {family', 'from the family}', '{{n}} lamps', '{n}}']) {
+    const t = papercutTemplate();
+    t.cover.subtitle = line;
+    assert.throws(() => validateTemplate(t), /unmatched/, line);
+  }
+});
