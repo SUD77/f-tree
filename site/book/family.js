@@ -79,6 +79,10 @@ const firstName = (p) => (p?.name ? p.name.split(/\s+/)[0] : null);
  * hex escapes on purpose: a range of escapes naming exactly the control bytes it excludes is
  * source text a well-meaning editor can "helpfully" decode into the real bytes it names, which is a
  * corrupted file waiting to happen. \n and \r are kept, since a caller still splits lines on them.
+ * \t is also kept out of `isControlCode` and handled separately, one line down: a tab pasted from a
+ * spreadsheet or a word processor is a word separator, so deleting it outright would glue the words
+ * on either side of it together (`"two\twords"` -> `"twowords"`), which reads as more broken than
+ * the tab ever did. It becomes a single space instead.
  *
  * The bidi embedding, override and isolate controls (8234-8238, 8294-8297: LRE/RLE/PDF/LRO/RLO and
  * LRI/RLI/FSI/PDI) are stripped alongside the ASCII/C1 controls, for the same reason: a note is
@@ -92,7 +96,7 @@ const firstName = (p) => (p?.name ? p.name.split(/\s+/)[0] : null);
  * about the person it is beside, not a fact to file next to their name.
  */
 const isControlCode = (code) =>
-  (code <= 31 && code !== 10 && code !== 13) ||
+  (code <= 31 && code !== 9 && code !== 10 && code !== 13) ||
   (code >= 127 && code <= 159) ||
   (code >= 8234 && code <= 8238) ||
   (code >= 8294 && code <= 8297);
@@ -100,7 +104,11 @@ const isControlCode = (code) =>
 export function clampNote(raw, maxLines = 3) {
   if (typeof raw !== 'string') return null;
   let cleaned = '';
-  for (const ch of raw) if (!isControlCode(ch.codePointAt(0))) cleaned += ch;
+  for (const ch of raw) {
+    const code = ch.codePointAt(0);
+    if (code === 9) cleaned += ' ';               // a tab is a word separator, not a byte to delete
+    else if (!isControlCode(code)) cleaned += ch;
+  }
   const lines = cleaned
     .split(/\r\n|\r|\n/)
     .map((l) => l.trim())

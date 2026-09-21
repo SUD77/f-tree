@@ -179,7 +179,7 @@ test('composeBook resolves ctx.featured the same way for every template - Heirlo
 
 test('clampNote strips control characters (including tab) and keeps at most 3 non-blank lines', () => {
   const raw = 'Line one\u0007 with bell\nLine two\twith tab\r\nLine three\n\nLine four should be cut\n\u0001\u0002';
-  assert.equal(clampNote(raw), 'Line one with bell\nLine twowith tab\nLine three');
+  assert.equal(clampNote(raw), 'Line one with bell\nLine two with tab\nLine three');
 });
 
 test('clampNote strips bidi embedding, override and isolate controls, which can reorder printed text', () => {
