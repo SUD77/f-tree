@@ -354,7 +354,11 @@ test('the composer\'s whole staged closure runs without a DOM, a clock or a loca
     const src = stripComments(readFileSync(f, 'utf8'));
     return /\bageOf\s*\(/.test(src) || /\bimport\s*\{[^}]*\bageOf\b[^}]*\}/.test(src);
   });
-  assert.deepEqual(touchesAgeOf.filter((f) => !f.endsWith(`${path.sep}model.js`)), [],
+  // Excluded by full repo-relative path, not a bare basename suffix -- the same rule KNOWN_EXCEPTIONS
+  // itself follows, and for the same reason: a second file that happened to also be named model.js
+  // elsewhere in the closure must not inherit this exemption.
+  const relPath = (f) => path.relative(repoRoot, f).split(path.sep).join('/');
+  assert.deepEqual(touchesAgeOf.filter((f) => relPath(f) !== 'site/playground/model.js'), [],
     'ageOf reads the clock - the composer must never call or import it (storybook-plan.md)');
 });
 

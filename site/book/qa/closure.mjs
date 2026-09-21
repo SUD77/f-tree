@@ -42,20 +42,143 @@ export function importClosure(entryFile) {
   return order;
 }
 
-/** Strips block and line comments the same way the old fixed-list test did. */
+/**
+ * Strips block and line comments the same way the old fixed-list test did -- but as a single scan
+ * that tracks comment state and string/template state *together*, rather than a bare
+ * `/\/\*[\s\S]*?\*\/|\/\/.*$/gm` match against the raw text. A bare match is fooled both ways: a
+ * comment-start token sitting inside a string or template literal (`'https://...'`, in qr.js today)
+ * is mistaken for a real comment and truncates the rest of that line; and, the other direction, a
+ * quote character sitting inside a real comment (an apostrophe in an English sentence -- svg.js has
+ * "the portrait's ring" in a `//` comment) is mistaken for the start of a string, which then
+ * swallows everything up to the next matching quote *anywhere later in the file* as if it were
+ * string content. Tracking both kinds of region in one pass, so a comment can never be misread as a
+ * string or vice versa, is what a two-stage strip-then-mask (or mask-then-strip) approach cannot do
+ * correctly on its own.
+ */
 export function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+  let out = '';
+  let i = 0;
+  const n = src.length;
+
+  function copyQuoted(quote) {
+    let s = quote;
+    i++;
+    while (i < n) {
+      if (src[i] === '\\' && i + 1 < n) { s += src[i] + src[i + 1]; i += 2; continue; }
+      if (src[i] === '\n') break; // an unterminated literal: not valid JS, bail out without consuming it
+      s += src[i];
+      if (src[i] === quote) { i++; break; }
+      i++;
+    }
+    return s;
+  }
+
+  function skipLineComment() {
+    while (i < n && src[i] !== '\n') i++;
+  }
+
+  function skipBlockComment() {
+    i += 2;
+    while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++;
+    i = Math.min(i + 2, n);
+  }
+
+  function copyTemplate() {
+    let s = '`';
+    i++;
+    while (i < n) {
+      if (src[i] === '\\' && i + 1 < n) { s += src[i] + src[i + 1]; i += 2; continue; }
+      if (src[i] === '`') { s += '`'; i++; break; }
+      if (src[i] === '$' && src[i + 1] === '{') {
+        s += '${';
+        i += 2;
+        let depth = 1;
+        while (i < n && depth > 0) {
+          if (src[i] === '/' && src[i + 1] === '/') { skipLineComment(); continue; }
+          if (src[i] === '/' && src[i + 1] === '*') { skipBlockComment(); continue; }
+          if (src[i] === '`') { s += copyTemplate(); continue; }
+          if (src[i] === '"' || src[i] === "'") { s += copyQuoted(src[i]); continue; }
+          if (src[i] === '{') depth++;
+          if (src[i] === '}') { depth--; if (depth === 0) { s += '}'; i++; break; } }
+          s += src[i]; i++;
+        }
+        continue;
+      }
+      s += src[i]; i++;
+    }
+    return s;
+  }
+
+  while (i < n) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') { skipLineComment(); continue; }
+    if (c === '/' && src[i + 1] === '*') { skipBlockComment(); continue; }
+    if (c === '"' || c === "'") { out += copyQuoted(c); continue; }
+    if (c === '`') { out += copyTemplate(); continue; }
+    out += c; i++;
+  }
+  return out;
 }
 
 /**
  * Blanks out the contents of string and template literals, keeping every character's position (so
- * offsets found in the result still index correctly into the original, comment-stripped source).
- * Used only so brace-matching in `functionSpan` cannot be thrown off by a stray `{` or `}` inside a
- * string.
+ * offsets found in the result still index correctly into the comment-stripped source callers pass
+ * in). Used only so brace-matching in `functionSpan` cannot be thrown off by a stray `{` or `}`
+ * inside a literal's own text. Callers always run this on `stripComments`'s output, never on raw
+ * source, so it does not need to understand comments itself.
+ *
+ * A `${...}` interpolation is real code, not literal text -- it is walked and copied through
+ * unmasked (recursively, so a nested template literal or a nested quoted string inside the
+ * interpolation is itself scanned the same way) so its own braces still count normally toward the
+ * enclosing function's brace depth. svg.js does this today: a template literal's interpolation
+ * itself contains a nested template literal.
  */
 function maskStrings(src) {
-  return src.replace(/`(?:\\.|\$\{[^{}]*\}|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, (m) =>
-    m[0] + 'x'.repeat(m.length - 2) + m[m.length - 1]);
+  let out = '';
+  let i = 0;
+  const n = src.length;
+
+  function maskQuoted(quote) {
+    let s = '';
+    while (i < n) {
+      if (src[i] === '\\' && i + 1 < n) { s += 'xx'; i += 2; continue; }
+      if (src[i] === quote) { s += quote; i++; break; }
+      s += 'x'; i++;
+    }
+    return s;
+  }
+
+  function maskTemplate() {
+    let s = '`';
+    i++;
+    while (i < n) {
+      if (src[i] === '\\' && i + 1 < n) { s += 'xx'; i += 2; continue; }
+      if (src[i] === '`') { s += '`'; i++; break; }
+      if (src[i] === '$' && src[i + 1] === '{') {
+        s += '${';
+        i += 2;
+        let depth = 1;
+        while (i < n && depth > 0) {
+          if (src[i] === '`') { s += maskTemplate(); continue; }
+          if (src[i] === '"' || src[i] === "'") { const q = src[i]; s += q; i++; s += maskQuoted(q); continue; }
+          if (src[i] === '{') depth++;
+          if (src[i] === '}') { depth--; if (depth === 0) { s += '}'; i++; break; } }
+          s += src[i]; i++;
+        }
+        continue;
+      }
+      s += 'x'; i++;
+    }
+    return s;
+  }
+
+  while (i < n) {
+    const c = src[i];
+    if (c === '"' || c === "'") { out += c; i++; out += maskQuoted(c); continue; }
+    if (c === '`') { out += maskTemplate(); continue; }
+    out += c; i++;
+  }
+  return out;
 }
 
 /**
