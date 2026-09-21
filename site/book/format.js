@@ -30,10 +30,13 @@
  *   book.symbols  { <id>: { items } } - art authored once and drawn many times. A symbol holds
  *                 shapes only (no text, no photographs), and may use another symbol, but never
  *                 itself: a cycle is refused here rather than hung in a painter.
- *   use.fill      silhouette mode: every item of the symbol is drawn in that one fill and every
- *                 stroke is dropped, all the way down through nested uses. That is how a paper
- *                 shadow or a tint is drawn from art that is already on the page, and it is why a
- *                 symbol's own hairline must never leak into its shadow.
+ *   use.fill      silhouette mode, a solid "#rrggbb" only: every fill and every stroke the symbol
+ *                 draws, all the way down through its groups, gradients and nested uses, takes
+ *                 that one colour. Stroke width, dash, cap and join are kept, stroke-only items
+ *                 stay unfilled, and opacities inside the symbol are kept: a paper shadow is the
+ *                 same shape, offset, so an open string casts a line and a ring casts a ring.
+ *   use.op        one group alpha over everything the use draws (a layer, as a group's op is),
+ *                 so shapes that overlap inside a dimmed symbol or its shadow never darken.
  *
  * A fill is a "#rrggbb" colour or { ref } naming a gradient in book.defs. A gradient is in user
  * space - page coordinates, after any group transform - unless it says `units: 'item'`, which only
@@ -142,8 +145,9 @@ export function group(items, { tf, clip, op } = {}) {
 }
 
 /**
- * Draws a symbol. With `fill` it is silhouette mode - one fill for everything the symbol draws,
- * every stroke dropped - which is how a paper shadow or a tint reuses art already on the page.
+ * Draws a symbol. With `fill` it is silhouette mode - that one colour for every fill and stroke
+ * the symbol draws, its shape otherwise untouched - which is how a paper shadow or a tint reuses
+ * art already on the page.
  */
 export function use(ref, { tf, fill, op } = {}) {
   const o = { t: 'use', ref };
@@ -280,6 +284,8 @@ export function validateBook(book) {
     }
     if (it.t === 'use') {
       checkTf(it.tf, at);
+      // A silhouette is one solid colour: a gradient has no single colour to give a stroke.
+      if (it.fill !== undefined && !(typeof it.fill === 'string' && COLOUR.test(it.fill))) problems.push(`${at}: a silhouette fill must be a #rrggbb colour`);
       if (!hasSymbol(it.ref)) problems.push(`${at}: unknown symbol ${it.ref}`);
     }
     for (const k of ['x', 'y', 'w', 'h', 'cx', 'cy', 'r', 'size', 'sw']) {

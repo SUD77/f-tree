@@ -220,13 +220,67 @@ test('the SVG painter expands every use, so pages joined into one file cannot co
   assert.equal(svg.split(`d="${bowl}"`).length - 1, 9);
 });
 
-test('a silhouette use keeps the shape and drops the stroke', () => {
+/*
+ * The silhouette rule, Ankit's decision of 2026-09-21: a paper shadow is the same shape, offset
+ * (docs/book-design-system.md). Every fill and every stroke takes the use's colour; everything
+ * else about the shape - stroke width, dash, cap, join, which items are filled at all, their own
+ * opacities - is kept, and the use's op dims the silhouette once, as a whole.
+ */
+const SHADOWED = {
+  art: { items: [
+    { t: 'path', d: 'M0 0 C10 -8 20 8 30 0', stroke: '#b5562a', sw: 1.5, dash: [2, 1], cap: 'round', join: 'bevel' },
+    { t: 'circle', cx: 40, cy: 0, r: 6, stroke: '#b9822a', sw: 2, op: 0.5 },
+    { t: 'rect', x: 50, y: -5, w: 10, h: 10, r: 2, fill: { ref: 'band' } },
+    { t: 'group', op: 0.7, items: [use('dot')] },
+  ] },
+  dot: { items: [{ t: 'circle', cx: 70, cy: 0, r: 3, fill: '#ffe7a6', stroke: '#f2b84b', sw: 0.5 }] },
+};
+const shadowBook = (u) => book({
+  format: FORMAT_MAX,
+  defs: { band: { type: 'linear', x1: 0, y1: 0, x2: 1, y2: 0, stops: [[0, '#17122e'], [1, '#3a2352']] } },
+  symbols: SHADOWED,
+  pages: page(u),
+});
+
+test('a silhouette recolours every fill and every stroke, and keeps the rest of the shape', () => {
+  const b = shadowBook(use('art', { fill: '#2a1a33', op: 0.4 }));
+  assert.deepEqual(validateBook(b), []);
+  const svg = paint(b);
+  const colours = [...svg.matchAll(/(?:fill|stroke|stop-color)="(#[0-9a-f]{6})"/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(colours)], ['#2a1a33'], svg);
+  assert.ok(!/url\(#/.test(svg), 'a gradient survived into the silhouette');
+  // The open string is still a dashed, round-capped, bevelled line of the same width, not a fill.
+  assert.ok(svg.includes('<path d="M0 0 C10 -8 20 8 30 0" fill="none" stroke="#2a1a33" stroke-width="1.5" stroke-dasharray="2 1" stroke-linecap="round" stroke-linejoin="bevel"/>'), svg);
+  // The ring stays a ring, and keeps its own opacity; the nested group keeps its opacity too.
+  assert.ok(svg.includes('<circle cx="40" cy="0" r="6" fill="none" stroke="#2a1a33" stroke-width="2" opacity="0.5"/>'), svg);
+  assert.ok(svg.includes('<g opacity="0.7">'), svg);
+  // A fill-only item gains no stroke, and a nested use casts in the same colour.
+  assert.ok(svg.includes('<rect x="50" y="-5" width="10" height="10" rx="2" fill="#2a1a33"/>'), svg);
+  assert.ok(svg.includes('<circle cx="70" cy="0" r="3" fill="#2a1a33" stroke="#2a1a33" stroke-width="0.5"/>'), svg);
+});
+
+test('a silhouette is a solid colour, never a gradient', () => {
+  const problems = validateBook(shadowBook(use('art', { fill: { ref: 'band' } })));
+  assert.ok(problems.includes('page 1 item 0: a silhouette fill must be a #rrggbb colour'), problems.join('; '));
+  assert.ok(validateBook(shadowBook(use('art', { fill: '#FFF' }))).length);
+});
+
+test('a use\'s op dims it once, as one layer, and never item by item', () => {
+  for (const fill of ['#2a1a33', undefined]) {
+    const svg = paint(shadowBook(use('art', { fill, op: 0.4, tf: [1, 0, 0, 1, 2, 3] })));
+    assert.ok(svg.includes('<g transform="matrix(1 0 0 1 2 3)" opacity="0.4">'), `${fill}: ${svg}`);
+    assert.equal(svg.split('opacity="0.4"').length - 1, 1, `${fill}: the use's op was pushed down to its items`);
+  }
+});
+
+test('the conformance shadows are cast by the rule', () => {
   const shadows = CONFORMANCE.pages[0].items.filter((it) => it.t === 'use' && it.fill !== undefined);
   const svg = paint({ ...CONFORMANCE, pages: [{ label: 'Shadow', items: shadows }] });
-  assert.ok(!/stroke/.test(svg), svg);
-  assert.equal(svg.split('fill="#2a1a33"').length - 1, CONFORMANCE.symbols.diya.items.length);
+  const colours = new Set([...svg.matchAll(/(?:fill|stroke)="(#[0-9a-f]{6})"/g)].map((m) => m[1]));
+  assert.deepEqual([...colours], [...new Set(shadows.map((u) => u.fill))], svg);
+  assert.ok(/stroke="#[0-9a-f]{6}" stroke-width/.test(svg), 'the symbol\'s strokes were dropped from its shadow');
 
-  // Down through a nested use as well: a compound motif casts one shadow, not a stack of drawings.
+  // Down through a nested use as well: a compound motif casts one colour, not a stack of drawings.
   const nested = book({
     format: FORMAT_MAX,
     symbols: { ...MARK, pair: { items: [use('mark'), use('mark', { tf: [1, 0, 0, 1, 12, 0] })] } },
@@ -234,9 +288,9 @@ test('a silhouette use keeps the shape and drops the stroke', () => {
   });
   assert.deepEqual(validateBook(nested), []);
   const shadow = paint(nested);
-  assert.ok(!/stroke/.test(shadow), shadow);
   assert.equal(shadow.split('fill="#17122e"').length - 1, 4);
-  assert.ok(!/#f2b84b|#ffe7a6/.test(shadow), 'the symbol\'s own colours leaked into its shadow');
+  assert.equal(shadow.split('stroke="#17122e" stroke-width="0.8"').length - 1, 2);
+  assert.ok(!/#f2b84b|#ffe7a6|#b9822a/.test(shadow), 'the symbol\'s own colours leaked into its shadow');
 });
 
 test('the painter refuses a symbol it cannot find, rather than drawing a gap', () => {

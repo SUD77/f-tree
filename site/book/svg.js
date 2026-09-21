@@ -83,15 +83,21 @@ function clipPath(shape, state) {
 }
 
 /*
- * Silhouette mode: one fill for everything the symbol draws, and no strokes at all. A shadow of a
- * lamp is the shape of the lamp, not a drawing of it, so a symbol's own gold hairline must not
- * survive into the shadow cast from it. A nested use inherits the fill, so a compound motif casts
- * one shadow rather than a stack of them.
+ * Silhouette mode (Ankit's rule, 2026-09-21): a paper shadow is the same shape as the art it falls
+ * from, offset. So every fill and every stroke the symbol draws - down through its groups, its
+ * gradient fills and any symbol it uses - takes the use's one colour, and nothing else changes:
+ * a stroke keeps its width, dash, cap and join, a stroke-only item stays unfilled (an open string
+ * casts a line, a ring casts a ring), a fill-only item stays unstroked, and an item's or group's
+ * own opacity stays as it was. The use's own `op` is applied once, to the whole silhouette, by
+ * the <g> expand() wraps it in.
  */
-function silhouette(it, fill) {
-  const { stroke, sw, dash, cap, join, ...rest } = it;
-  if (it.t === 'group') return { ...rest, items: (it.items ?? []).map((c) => silhouette(c, fill)) };
-  return { ...rest, fill };
+function silhouette(it, colour) {
+  if (it.t === 'group') return { ...it, items: (it.items ?? []).map((c) => silhouette(c, colour)) };
+  if (it.t === 'use') return { ...it, fill: colour };   // a nested use casts in the same colour
+  const o = { ...it };
+  if (o.fill !== undefined) o.fill = colour;
+  if (o.stroke !== undefined) o.stroke = colour;
+  return o;
 }
 
 function expand(it, state) {
@@ -104,6 +110,9 @@ function expand(it, state) {
   const items = it.fill === undefined ? symbol.items : symbol.items.map((c) => silhouette(c, it.fill));
   const body = items.map((c) => item(c, state)).join('');
   state.depth--;
+  // The use's opacity is one group alpha on this wrapper, never pushed down to the items: shapes
+  // that overlap inside a dimmed lamp, or inside its shadow, must not darken where they meet.
+  // Android draws it the same way, through saveLayerAlpha.
   return `<g${transform(it)}${opacity(it)}>${body}</g>`;
 }
 
