@@ -103,7 +103,37 @@ test('resolveFeatured tier 1 miss: an id cut out by the allowance is never retur
   };
   const family = readFamily(doc, {}, { maxGenerations: 2 });   // keeps gp (gen 0) and p (gen 1) only
   assert.ok(!family.byId.has('c'), 'the allowance should have cut the third generation');
-  assert.notEqual(resolveFeatured(family, { featured: 'c' }), 'c');
+  // Not merely "isn't 'c'" - pin the actual fallback so a change that quietly picks the wrong
+  // tier-3 person would still fail this test. Both survivors tie on a raw score of 1 (each is the
+  // other's only edge, since the allowance already dropped 'c'); the id-sorted tie-break picks the
+  // one that sorts first.
+  assert.equal(resolveFeatured(family, { featured: 'c' }), 'gp');
+});
+
+test('resolveFeatured: excluded by the allowance falls through past a branch scope\'s own root, all the way to tier 3 - not just "isn\'t the asked-for id"', () => {
+  // Scoped to p's branch, branchFrom keeps {p, c} (gp is p's parent, not descendant, so it is
+  // never in scope at all). The allowance then cuts to generation 0 of that scoped graph, which is
+  // p alone - so `featured: 'c'` fails tier 1 (cut by the allowance) and the book is left with only
+  // one person, who must therefore win tier 2 as the branch root. This is the case tier 1 and tier 2
+  // being merely "not wrong" could both pass while resolveFeatured actually returned undefined or
+  // threw - the previous test alone would not catch that, since it never scopes to a branch.
+  const doc = {
+    format: 'f-tree', version: 1,
+    people: [
+      { id: 'gp', name: 'Grandparent Devi', gender: 'FEMALE' },
+      { id: 'p', name: 'Parent Devi', gender: 'FEMALE' },
+      { id: 'c', name: 'Child Devi', gender: 'MALE' },
+    ],
+    relationships: [
+      { id: 'r1', type: 'PARENT', from: 'gp', to: 'p' },
+      { id: 'r2', type: 'PARENT', from: 'p', to: 'c' },
+    ],
+  };
+  const scope = { kind: 'branch', personId: 'p' };
+  const family = readFamily(doc, { scope }, { maxGenerations: 1 });
+  assert.ok(!family.byId.has('c'), 'the allowance should have cut the second generation of the branch');
+  assert.ok(!family.byId.has('gp'), 'gp is never in the branch to begin with');
+  assert.equal(resolveFeatured(family, { scope, featured: 'c' }), 'p');
 });
 
 test('resolveFeatured tier 2: the branch root, when the book is scoped to one branch and nothing was asked for explicitly', () => {
