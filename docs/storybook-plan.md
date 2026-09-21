@@ -175,8 +175,11 @@ Checked against the code by the architecture review.
   photos in arches and shows scenes through windows. Every clip edge is always covered by a frame
   stroke, because Android's preview can draw clip edges jagged.
 - **`book.symbols {id: {items}}` plus a new `use {ref, tf?, op?, fill?}` item.** A `use` with
-  `fill` is silhouette mode: every fill is replaced and strokes are dropped, which is how paper
-  shadows and tints are drawn. `svg.js` expands `use` inline so pages joined into one print file
+  `fill` (a solid `#rrggbb`) is silhouette mode: every fill and every stroke takes that colour,
+  and stroke width, dash, cap, join and inner opacities are kept, so stroke-only art stays a line.
+  That matches the design system's paper shadow, "the same shape, offset", and is how paper
+  shadows and tints are drawn. The `use`'s `op` is one layer over the whole silhouette (decided
+  by Ankit, 2026-09-21; the full rule is in `docs/family-book.md`). `svg.js` expands `use` inline so pages joined into one print file
   cannot collide on ids. Android parses each path once through a `HashMap<String, Path>` cache.
 - **The hand font needs no format bump,** because `Book.fonts` is an open map. `readBook` must
   refuse any font key the printer does not carry: `BookPainter.kt:92` skips such lines today, which

@@ -76,8 +76,129 @@ the size a portrait prints at: about 170 pixels per inch, never under 96 or over
 to send in a chat app. A photograph the painter cannot load is left out, and the portrait's ring
 still stands.
 
-**Refuse, don't approximate.** A painter refuses a `format` it does not know. `validateBook` lists
-everything a painter may rely on. The composer's tests run it on every book they make.
+**Refuse, don't approximate.** A painter refuses a `format` it does not know, before it reads
+anything else in the book. It also refuses a book that names a font key it does not carry, rather
+than drawing the page without those lines: a missing typeface used to mean a silently skipped line
+(`BookPainter.kt:92`), which is how a name could disappear from a family's book with nobody told.
+So `readBook` checks the book's `format` first, then every role in `book.fonts` against the faces
+the release embeds, and every `text` item's role against `book.fonts`. A book that fails is
+refused with a message naming the key, and the reader is told the book cannot be made. Half a
+sentence is never printed. (Android's half of that is #246; `Book.fonts` is an open map, so a new
+face never bumps the format and this check is the only thing standing between a new face and a
+quietly incomplete page.) `validateBook` lists everything a painter may rely on. The composer's
+tests run it on every book they make.
+
+## The Book, format 2
+
+**A book declares the lowest format that draws it.** `formatOf(book)` returns 2 once a book clips
+a group, carries `symbols` or uses one, and 1 for everything else. Heirloom does none of those, so
+it is still a format-1 book and not one byte of it moved when format 2 arrived. `validateBook`
+refuses a book whose declared format and drawn format disagree, either way round: a book that
+clips but says format 1 would be drawn half-right by an older painter, and one that says 2 while
+drawing with nothing new would be hidden from an app that could have drawn it perfectly.
+
+Format 2 adds one key to the book, one key to `group`, and one item. Everything format 1 has means
+exactly what it meant.
+
+```
+{ format: 2, ...,
+  symbols: { <id>: { items: [ ... ] } } }        // art authored once, drawn many times
+```
+
+| item | fields | notes |
+|---|---|---|
+| `group` | `items [tf] [clip] [op]` | `clip` is an absolute path `d`, filled nonzero, in the group's **own** coordinates: inside `tf`, not outside it |
+| `use` | `ref [tf] [fill] [op]` | `ref` names a symbol in `book.symbols`; `tf` is an affine `[a b c d e f]`; `fill` is silhouette mode, a solid `#rrggbb`; `op` is one layer |
+
+**Symbols** are how art is drawn many times without being written many times: a lamp, a frame, a
+motif. The composer names each one and the painters keep them.
+
+- A symbol holds shapes only: `rect`, `circle`, `path`, `group` and `use`. Not `text`, because a
+  symbol cannot know which font role it would be printed in, and not `image`, which belongs to one
+  person.
+- A symbol may use another symbol, up to `MAX_SYMBOL_DEPTH` (four) deep, so a compiled motif can
+  be built from smaller ones. It may never reach itself. A cycle is a `validateBook` failure, not something a painter
+  discovers by hanging.
+- An id is `[A-Za-z0-9][A-Za-z0-9_-]*`.
+- **A painter expands a `use` where it stands.** `svg.js` writes the symbol's items out inline and
+  never emits `<use href="#id">`: the desktop joins every page into one file to print it, so a
+  symbol that kept its id would meet a copy of itself on the next page. Android concatenates the
+  `use`'s transform and draws the symbol's items, parsing each path once into a cache keyed by the
+  path data.
+
+**Silhouette mode.** Ankit's rule, decided 2026-09-21. The design system's paper shadow is "the
+same shape, offset" (`docs/book-design-system.md`), so a silhouette changes the colour of a symbol
+and nothing else:
+
+- `fill` on a `use` must be a solid `#rrggbb`. A gradient ref is a `validateBook` failure.
+- Every fill **and** every stroke inside the symbol takes that colour, all the way down: through
+  its groups, through nested `use`s (whatever `fill` they carry of their own), and through
+  gradient fills, which become the solid colour.
+- Everything else is kept. A stroke keeps its `sw`, `dash`, `cap` and `join`. A stroke-only item
+  stays stroke-only (it is not filled), and a fill-only item stays fill-only (it gains no stroke).
+  An open stroked string casts a line, and a ring frame casts a ring, not a disc.
+- Opacities inside the symbol, on an item or on a group, are kept exactly as they are.
+- The `use`'s `op` applies to the silhouette as a whole, as one group alpha (below). Shapes that
+  overlap inside the shadow do not darken where they meet.
+
+**A `use`'s `op` is one layer,** exactly as a group's `op` is: the symbol is drawn at full
+strength and then composited once at `op`. `svg.js` puts the opacity on the `<g>` that wraps the
+expanded items and never on the items themselves; Android draws it inside `saveLayerAlpha`, as it
+draws a group. This holds for a plain `use` and a silhouette alike.
+
+**Coordinates inside a symbol.** A `use`'s `tf` is concatenated first, and the symbol's items are
+drawn in the coordinates that leaves. A user-space gradient that fills an item inside a symbol is
+therefore in the **symbol's** coordinates, after the `use`'s `tf` (and after any group `tf`
+inside the symbol), not in page coordinates: the same gradient moves and turns with each use.
+`units: 'item'` gradients are relative to their circle, as always.
+
+**Missing refs.** `validateBook` refuses a `use` whose `ref` is not a symbol the book carries, and
+a fill whose `ref` is not a gradient in `defs`. Both are own keys only: `ref: 'constructor'` is an
+unknown symbol, never something the object's prototype lends it. A painter may assume every ref it
+is handed resolves. `svg.js` still throws on one that does not, rather than draw a gap, and
+Android may do the same; neither draws a page around a missing piece.
+
+**Limits.** Both are constants exported by `format.js`, and `svg.js` reads the same ones.
+
+- `MAX_SYMBOL_DEPTH = 4`: a `use` on a page may reach at most four symbols deep. The symbol it
+  names counts one and every symbol that symbol uses adds one, so a chain `a → b → c → d` draws
+  and a fifth is refused, by `validateBook` and by the painter alike. A cycle is refused too.
+- `MAX_EXPANDED_ITEMS = 20000`: the most items one page may draw once every `use` is expanded,
+  counting each item, group and `use` as one. Symbols multiply (four levels of forty uses is 2.6
+  million items), and a rich storybook page comes to a few thousand, so the cap is several times
+  what any real page needs and far below what hangs a painter.
+
+**Never write empty symbols.** A book either carries a `symbols` map with at least one symbol in it
+or has no `symbols` key at all. `symbols: {}`, `null` or an array is refused: an empty map would
+declare format 2 for nothing and hide the book from an app that could draw it.
+
+**Clips.** A clip is one path, in the group's own coordinates, filled nonzero — no even-odd, no
+second path, no clip on anything but a group. A painter clips inside the group's transform: save,
+concat, clipPath, draw. A group's `op` is applied over the clipped result. Every clip edge must be
+covered by a frame stroke somewhere in the drawing chain, because Android's preview can draw a
+bare clip edge jagged.
+
+The clip's path data (and every `path`'s `d`) follows one grammar, which `validateBook` parses:
+
+- it starts with `M`;
+- the commands are absolute `M L H V C Q Z` only, separated by spaces or commas or nothing;
+- each command takes whole sets of its arguments — `M`, `L` two numbers, `H`, `V` one, `Q` four,
+  `C` six, `Z` none — and may repeat the set (`L1 1 2 2`), as SVG and Android's `PathParser` both
+  read it;
+- numbers are decimal, optionally negative, optionally with an exponent, and finite;
+- a clip must visit at least three distinct points (end and control points), so it encloses an
+  area. `M0 0`, `L10 10 Z` and `e` are refused. A `path` may be open, or empty (`""` draws
+  nothing).
+
+**The conformance book.** `site/book/golden/format2-conformance.json` is a format-2 book drawn
+with everything format 2 adds: an arch clipped over a photograph with a frame stroke over the clip
+edge, one lamp drawn many times across its pages, a `use` turned by `tf`, a `use` dimmed by `op`,
+clips on transformed and dimmed groups, and a silhouette of an open string, a ring and two
+overlapping shapes under one dimmed `use`, so the silhouette rule is provable from the file alone.
+`format.test.mjs` walks the file against a checklist of every format-2 feature, so an edit cannot
+silently drop one. Both painters are held to it — `format.test.mjs` paints it as SVG, and the Android
+tests read the same file — so it is the one place to change when format 2's meaning changes. It is
+written by hand, not generated: `UPDATE_GOLDEN=1` does not touch it.
 
 ## Fonts
 
