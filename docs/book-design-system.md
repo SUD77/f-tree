@@ -73,6 +73,14 @@ Four roles, all static faces, all covering Latin and Devanagari, all OFL:
 
 Art refers only to tokens, never to raw colour, so a template can recolour everything.
 
+There are **29 tokens**, and a format-2 template with `art: "papercut"` must define every one of
+them: art that asks for a token the template left out has nothing to draw with. The authoritative
+list is the `PALETTE` the approved frames were rendered from
+([`motifs.mjs`](../site/book/art/style-frames/motifs.mjs)); the authoring hexes are mapped to it by
+[`swatches.json`](../site/book/art/src/papercut/swatches.json), and `book_art.mjs --check` fails
+when the two disagree. Heirloom and every other format-1 template keep their own 22 palette keys,
+which are a separate, unchanged list.
+
 | group | token | hex | role |
 |---|---|---|---|
 | paper | `paper` | `#F6ECDA` | day ground |
@@ -164,8 +172,10 @@ Sizes:
 | story medallion | bust in a thin gold bezel; a couple's pair share a carved ring | 36–90 pt across |
 | register cameo | bust in a plain gold bezel, no garland | 22 pt across |
 
-**Name not known:** in a scene, an aala niche with a lit lamp and a perforated brass rim; in a
-medallion, the dashed brass perimeter with a lamp inside.
+**Name not known:** at scene size, an aala niche with a lit lamp and a perforated brass rim, which
+is how the approved frames draw it wherever there is room for a wall. In a register cameo or a
+small medallion, where an aala would not read, it is the dashed `brass` perimeter with a lamp
+inside, and the person is named by relation in `hand`.
 
 **Photographs:**
 - Mounted like a print: a cream mat inside a carved wooden ring, and a gold line drawn over the

@@ -3,11 +3,15 @@
 This is the plan behind umbrella **#239**, written for whoever builds it next, including an AI
 session. It was made on 2026-09-16, and Ankit approved the visual direction the same day.
 
-> **Status.**
+> **Status (2026-09-17).**
 > - The design gate (#240) is **passed**.
 > - Nothing of #241–#260 has been built yet. No composer, painter or shell code has changed.
 > - What exists is the design: this plan, [book-design-system.md](book-design-system.md), and the
 >   approved style frames in [`site/book/art/style-frames/`](../site/book/art/style-frames/).
+> - Wave 1 starts from here. Three contradictions between this plan and the approved frames were
+>   settled by Ankit on 2026-09-17 and are folded in below: the palette is 29 tokens, not 20;
+>   `Book.kt` belongs to #246 alone; and `swatches.json` has been regenerated from the frames'
+>   own palette, which it had drifted from.
 
 ## The idea, in one breath
 
@@ -89,8 +93,16 @@ glowing between them. The central image is the cover's: *one lamp for each of us
 ### Working rules and traps
 
 - **The composer's banned APIs** are `new Date`, `Date.now`, `localeCompare`, `Intl.`,
-  `document.`, `window.`, `Math.random`, `setTimeout` and `fetch(`. The banned-API test reads a
-  fixed file list (`site/book/book.test.mjs`), so add new files to it, or make it a glob (#245).
+  `document.`, `window.`, `Math.random`, `setTimeout` and `fetch(`. The test reads a fixed file
+  list today (`site/book/book.test.mjs`), so until #245 lands, a new composer file is unguarded
+  unless it is added to that list by hand.
+  - **#245 replaces the list with the static import closure of `compose.js`**, not a directory
+    glob, because the closure is exactly what Android's `bookEngine()` stages
+    (`app/build.gradle.kts:61`). Guarding the closure guards `story/*.js` and `art/*.js` the day
+    they appear, and it catches an accidental import of a UI module.
+- **`searchPeople` (`site/playground/search.js`) is UI-only, forever.** It sorts with
+  `localeCompare`. The book screens may call it; nothing the composer imports ever may, or the
+  book stops being deterministic and gets staged into the WebView as well.
 - **Imports.**
   - Android stages only JS reachable through **static relative imports** from `compose.js`
     (`app/build.gradle.kts`, `bookEngine()`), so no dynamic `import()`.
@@ -168,18 +180,29 @@ Checked against the code by the architecture review.
   cannot collide on ids. Android parses each path once through a `HashMap<String, Path>` cache.
 - **The hand font needs no format bump,** because `Book.fonts` is an open map. `readBook` must
   refuse any font key the printer does not carry: `BookPainter.kt:92` skips such lines today, which
-  loses text silently. `readBook` must also read `format` before the rest (`Book.kt:219`).
+  loses text silently.
+  - **#241 writes that contract down and ships the conformance fixture; #246 implements it in
+    Kotlin.** #241 is the JS half only, so the two issues do not both own `Book.kt`.
+  - Reading `format` before the rest is **already done** (`Book.kt:220`). #246 keeps a test for
+    it rather than changing it.
 
 **Template format 2** (`template.js`, Kotlin `BookCatalog`, a new row in `catalog-cases.json`).
 Heirloom stays on format 1, and a catalogue entry at format 2 is hidden from older apps:
 ```
 {format:2, id, name, fileSuffix, art:"papercut",
- fonts:{display,text,strong,hand}, palette:{…20 semantic tokens, all required},
+ fonts:{display,text,strong,hand}, palette:{…29 semantic tokens, all required},
  cover:{greeting,subtitle,line}, story:{chapters:[…]}   // must include cover, opening, register, closing
  copy:{<chapter>:{title, line|{one,other}}}}             // placeholders {featured} {featured-first} {family} {n} {year}
 ```
 `compose.js` sends format-2 templates to `storyBook(ctx)`. The format-1 `BLOCKS` loop is
 untouched.
+
+The 29 palette tokens are the `PALETTE` the approved frames were rendered from
+(`site/book/art/style-frames/motifs.mjs`), written up in
+[book-design-system.md](book-design-system.md#palette): `paper paperDeep card ink inkSoft night
+deep glow dusk gold flame brass marigold saffron sindoor rani peacock indigo leaf leafDeep stone
+clay skin silver sky wash haze dayHaze dayMid`. Format-1 templates keep their own 22
+`PALETTE_KEYS` in `template.js`, untouched, so Heirloom gains no required field.
 
 **Assets** (`site/book/art/`)
 ```
@@ -234,7 +257,10 @@ art/README.md contributor conventions
   minSize}}`. Tests assert that `shown` covers everyone in scope. A template cannot leave out the
   register.
 - **Hero portraits** may ask for up to 512 px (today's cap is 200) and stay inside the existing
-  `budgetPhotos`. `estimateBytes` gains a vector-art term.
+  `budgetPhotos`. `estimateBytes` gains a vector-art term, which belongs to **#245** because that
+  issue owns the 10 MB invariant. The term is **measured** from real paper-cut PDFs on both
+  painters, never guessed, and it estimates high rather than low. #259 re-checks the constant
+  against the finished Diwali book.
 
 **Options and shells.** The composer gains `options.featured`, `options.notes` and
 `options.coverOnly`.
@@ -264,13 +290,13 @@ gate (#240), which has passed.
 |---|---|---|---|
 | #239 | **Umbrella:** Family book storybook (Aangan) | – | Opus |
 | #240 | Design system doc + six style frames: **the approval gate, PASSED 2026-09-16** | – | Opus |
-| #241 ∥ | Book format 2 in JS: `format.js`, `validateBook`, `formatOf`, `svg.js`; Heirloom goldens unchanged | – | Opus |
-| #242 ∥ | Kalam `book_hand`: subset, metrics, FONT_KEYS, printer, desktop embed, `fonts.md`, OFL | – | Sonnet |
+| #241 ∥ | Book format 2 **in JS only**: `format.js`, `validateBook`, `formatOf`, `svg.js`, the `readBook` strictness contract in `family-book.md`, and the conformance fixture #246 reads; Heirloom goldens unchanged | – | Opus |
+| #242 ∥ | Kalam `book_hand` at 10–18 pt: subset, metrics, all five FONT_KEYS copies, printer, desktop embed, `fonts.md`, and the OFL licences the desktop package does not ship yet | – | Sonnet |
 | #243 ∥ | Template format 2 validator + catalogue JS/Kotlin + cases | – | Sonnet |
 | #244 ∥ | Composer options `featured`/`notes`/`coverOnly`, `resolveFeatured`, notes read in `family.js` | – | Sonnet |
-| #245 ∥ | QA harness: report, invariants, synthetic storybook fixture (`tools/make_sample_tree.py`), Playwright contact sheet, banned-API glob | – | Sonnet |
-| #246 | Android format 2: `Book.kt`, `BookPainter` (clip, use, path cache, strict fonts), `golden/sample-story.json` | #241 | Opus |
-| #247 | Art compiler `tools/book_art.mjs` + `draw.js` + scaffolding + CI check | #241 | Opus |
+| #245 ∥ | QA harness: report, invariants, `estimateBytes`'s measured vector-art term, synthetic storybook fixture (`tools/make_sample_tree.py`), Playwright contact sheet, banned-API guard over `compose.js`'s import closure | – | Sonnet |
+| #246 | Android format 2 **and the whole Kotlin side**: `Book.kt`, `BookPainter` (clip, use, path cache, and refusing an unknown font key with a clear error instead of `BookPainter.kt:92`'s silent skip), read against #241's conformance fixture | #241 | Opus |
+| #247 | Art compiler `tools/book_art.mjs` + `draw.js` + scaffolding + CI check, including `--check` failing when `swatches.json`'s tokens differ from `template.js`'s paper-cut palette key list | #241 | Opus |
 | #248 ∥ | Android shell: shared PersonPicker, Whose story, notes switch, words, `coverOnly` | #244 | Sonnet |
 | #249 ∥ | Desktop shell: picker, notes, words, `coverOnly`, `book-options` tests | #244 | Sonnet |
 | #250 | `kin.js` partition + synthetic-family tests (F eldest, leaf, remarriage, half and explicit siblings, 12 siblings, 3 spouses, unlinked F) | #244 | Opus |
